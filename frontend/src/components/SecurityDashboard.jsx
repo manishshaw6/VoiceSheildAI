@@ -35,6 +35,31 @@ export default function SecurityDashboard({ analysis, onExportReport }) {
 
   return (
     <div className="security-dashboard">
+      {/* Demo Benchmark Evidence Banner — Offline/Degraded Transparency */}
+      {analysis.is_demo_benchmark && (
+        <div className="benchmark-evidence-banner" style={{
+          background: 'linear-gradient(135deg, #ff8c0022, #9b59b622)',
+          border: '2px solid #ff8c00',
+          borderRadius: '12px',
+          padding: '14px 20px',
+          marginBottom: '18px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <span style={{ fontSize: '1.6rem' }}>⚠️</span>
+          <div>
+            <div style={{ fontWeight: 700, color: '#ff8c00', fontSize: '0.85rem', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              OFFLINE BENCHMARK EVIDENCE
+            </div>
+            <div style={{ color: '#ccc', fontSize: '0.82rem', marginTop: '3px' }}>
+              {analysis.benchmark_notice || 'External cloud API was unavailable or demo mode active. Showing validated benchmark evidence.'}
+              {analysis.benchmark_name && <span style={{ color: '#9b59b6', marginLeft: '8px' }}>Scenario: {analysis.benchmark_name}</span>}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Banner Alert if Voice Clone Suspicion */}
       {cloneSuspicion && (
         <div className="clone-alert-banner">
@@ -198,7 +223,13 @@ export default function SecurityDashboard({ analysis, onExportReport }) {
         <div className="detail-card">
           <div className="detail-card-header">
             <h4>📜 Conversation Transcript</h4>
-            <span className="header-sub">AssemblyAI Speech-to-Text</span>
+            <span className="header-sub">
+              {analysis.transcription?.provider
+                ? `${String(analysis.transcription.provider).toUpperCase()} Speech-to-Text`
+                : analysis.provider_provenance?.transcription?.provider
+                ? `${String(analysis.provider_provenance.transcription.provider).toUpperCase()} Speech-to-Text`
+                : 'Speech-to-Text'}
+            </span>
           </div>
 
           <div className="transcript-box">
@@ -242,9 +273,15 @@ export default function SecurityDashboard({ analysis, onExportReport }) {
       <div className="dashboard-footer-actions">
         <button
           className="report-download-btn"
-          onClick={() => onExportReport && onExportReport(analysis.analysisId || analysis.id)}
+          onClick={() => onExportReport && onExportReport(analysis.analysisId || analysis.id, 'json')}
         >
-          📄 Export Official Security Intelligence Report (JSON)
+          📄 Export Forensic Report (JSON)
+        </button>
+        <button
+          className="report-download-btn report-download-btn-alt"
+          onClick={() => onExportReport && onExportReport(analysis.analysisId || analysis.id, 'markdown')}
+        >
+          📝 Export Summary Report (Markdown)
         </button>
       </div>
     </div>

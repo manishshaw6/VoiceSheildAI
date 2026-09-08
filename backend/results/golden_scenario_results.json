@@ -1,0 +1,137 @@
+{
+  "timestamp": "2026-09-08T17:10:05.574Z",
+  "results": [
+    {
+      "scenario_id": "SCENARIO_1_GENUINE_NORMAL",
+      "name": "Genuine Owner + Normal Conversation",
+      "expected_level": "SAFE",
+      "actual_level": "SAFE",
+      "score": 5,
+      "clone_suspicion": false,
+      "dominant_signals": [
+        "VOICE_SYNTHETIC",
+        "AUDIO_QUALITY",
+        "SPEAKER_MATCH"
+      ],
+      "verdict": "PASSED",
+      "reasons": [
+        "Audio passed the quality gate.",
+        "Voice authenticity verified.",
+        "Voice matched the enrolled target speaker."
+      ]
+    },
+    {
+      "scenario_id": "SCENARIO_2_GENUINE_OTP_DURESS",
+      "name": "Genuine Owner + Coerced OTP Request",
+      "expected_level": "HIGH",
+      "actual_level": "HIGH",
+      "score": 61,
+      "clone_suspicion": false,
+      "dominant_signals": [
+        "CONTEXT_RISK",
+        "CREDENTIAL_REQUEST",
+        "OTP_REQUEST"
+      ],
+      "verdict": "PASSED",
+      "reasons": [
+        "Audio passed the quality gate.",
+        "Voice authenticity verified.",
+        "Voice matched the enrolled target speaker.",
+        "Rule detected: OTP / One-Time Password Request (one time password)",
+        "Rule detected: Password / PIN / CVV Request (password)",
+        "Rule detected: High Urgency / Coercion Tactics (immediately)",
+        "Generative scam intelligence: OTP Fraud"
+      ]
+    },
+    {
+      "scenario_id": "SCENARIO_3_DIFFERENT_HUMAN_NORMAL",
+      "name": "Different Human Speaker + Normal Conversation",
+      "expected_level": "SUSPICIOUS",
+      "actual_level": "SUSPICIOUS",
+      "score": 37,
+      "clone_suspicion": false,
+      "dominant_signals": [
+        "SPEAKER_MISMATCH",
+        "VOICE_SYNTHETIC",
+        "AUDIO_QUALITY"
+      ],
+      "verdict": "PASSED",
+      "reasons": [
+        "Audio passed the quality gate.",
+        "Voice authenticity verified.",
+        "Voice did NOT match the enrolled target speaker."
+      ]
+    },
+    {
+      "scenario_id": "SCENARIO_4_DIFFERENT_HUMAN_BANK_SCAM",
+      "name": "Different Human Speaker + Banking Scam",
+      "expected_level": "HIGH",
+      "actual_level": "HIGH",
+      "score": 75,
+      "clone_suspicion": false,
+      "dominant_signals": [
+        "CONTEXT_RISK",
+        "SPEAKER_MISMATCH",
+        "PAYMENT_FRAUD"
+      ],
+      "verdict": "PASSED",
+      "reasons": [
+        "High-risk social engineering scam from unverified/mismatched identity.",
+        "Audio passed the quality gate.",
+        "Voice authenticity verified.",
+        "Voice did NOT match the enrolled target speaker.",
+        "Rule detected: Suspicious Payment / UPI / Fund Transfer (Send money)",
+        "Rule detected: Account Block / Suspension Threat (KYC update)",
+        "Rule detected: High Urgency / Coercion Tactics (immediately)",
+        "Generative scam intelligence: Bank Impersonation | UPI / Payment Scam"
+      ]
+    },
+    {
+      "scenario_id": "SCENARIO_5_SYNTHETIC_CLONE_NORMAL",
+      "name": "AI Voice Clone + Normal Conversation",
+      "expected_level": "CRITICAL",
+      "actual_level": "CRITICAL",
+      "score": 85,
+      "clone_suspicion": true,
+      "dominant_signals": [
+        "VOICE_CLONE_PATTERN",
+        "VOICE_SYNTHETIC",
+        "CONTEXT_RISK"
+      ],
+      "verdict": "PASSED",
+      "reasons": [
+        "Voice clone pattern: strong speaker match combined with synthetic speech indicators.",
+        "Audio passed the quality gate.",
+        "Synthetic speech indicators detected with high confidence.",
+        "Voice matched the enrolled target speaker.",
+        "Rule detected: Trusted Person / Family Impersonation (new number)",
+        "Generative scam intelligence: Family Emergency Scam"
+      ]
+    },
+    {
+      "scenario_id": "SCENARIO_6_SYNTHETIC_CLONE_URGENT_THEFT",
+      "name": "AI Voice Clone + Urgent Financial Theft",
+      "expected_level": "CRITICAL",
+      "actual_level": "CRITICAL",
+      "score": 85,
+      "clone_suspicion": true,
+      "dominant_signals": [
+        "VOICE_CLONE_PATTERN",
+        "VOICE_SYNTHETIC",
+        "CONTEXT_RISK"
+      ],
+      "verdict": "PASSED",
+      "reasons": [
+        "Voice clone pattern: strong speaker match combined with synthetic speech indicators.",
+        "Audio passed the quality gate.",
+        "Synthetic speech indicators detected with high confidence.",
+        "Voice matched the enrolled target speaker.",
+        "Rule detected: OTP / One-Time Password Request (verification code)",
+        "Rule detected: Suspicious Payment / UPI / Fund Transfer (Transfer funds)",
+        "Rule detected: Government / Bank / Law Enforcement Impersonation (police)",
+        "Rule detected: High Urgency / Coercion Tactics (immediately)",
+        "Generative scam intelligence: Family Emergency / Impersonation Scam"
+      ]
+    }
+  ]
+}

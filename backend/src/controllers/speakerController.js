@@ -40,7 +40,8 @@ export async function verify(req, res, next) {
 
 export async function listProfiles(_req, res, next) {
   try {
-    const profiles = await query.all('SELECT speaker_id, name, created_at, sample_filename FROM speaker_profiles ORDER BY created_at DESC');
+    const profiles = await query.all(`SELECT speaker_id, name, created_at, updated_at, sample_filename,
+      model_version, embedding_dimension, enrollment_quality FROM speaker_profiles ORDER BY created_at DESC`);
     return res.status(200).json({ success: true, count: profiles.length, profiles });
   } catch (error) { return next(error); }
 }

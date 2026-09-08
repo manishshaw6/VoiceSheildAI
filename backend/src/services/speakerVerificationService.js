@@ -191,8 +191,8 @@ export async function verifySpeaker({ audioBuffer, targetSpeakerId = null, thres
       threshold,
       match: isMatch,
       status: isMatch ? 'MATCH' : 'MISMATCH',
-      matchProbability: Number((1 / (1 + Math.exp(-12 * (similarity - threshold)))).toFixed(4)),
-      mismatchProbability: Number((1 - (1 / (1 + Math.exp(-12 * (similarity - threshold))))).toFixed(4)),
+      matchProbability: null,
+      mismatchProbability: null,
       confidence: Number(Math.min(1, 0.6 + Math.abs(similarity - threshold)).toFixed(2))
     };
   }
@@ -230,8 +230,8 @@ export async function verifySpeaker({ audioBuffer, targetSpeakerId = null, thres
     threshold,
     match: isMatch,
     status: isMatch ? 'MATCH' : 'MISMATCH',
-    matchProbability: Number((1 / (1 + Math.exp(-12 * (highestSim - threshold)))).toFixed(4)),
-    mismatchProbability: Number((1 - (1 / (1 + Math.exp(-12 * (highestSim - threshold))))).toFixed(4)),
+    matchProbability: null,
+    mismatchProbability: null,
     confidence: Number(Math.min(1, 0.6 + Math.abs(highestSim - threshold)).toFixed(2))
   };
 }

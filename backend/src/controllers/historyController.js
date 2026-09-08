@@ -79,42 +79,68 @@ export async function getSecurityReport(req, res) {
 
     const raw = row.raw_result ? JSON.parse(row.raw_result) : {};
     const indicators = row.indicators ? JSON.parse(row.indicators) : [];
+    const policy = raw.policy || {};
+    const risk = raw.risk || {};
+    const deepfake = raw.deepfake || {};
+    const speaker = raw.speaker || {};
+    const forensic = raw.forensic || {};
+
+    const flaggedPhrases = indicators.map(ind => ({
+      type: ind.type || ind.label,
+      severity: ind.severity,
+      evidence: ind.evidence || ind.matchedTerm || null
+    })).filter(item => item.evidence);
 
     const report = {
-      title: 'VoiceShieldAI Voice Threat & Fraud Intelligence Report',
+      title: 'VoxShieldAI Forensic Voice Threat & Fraud Incident Report',
+      callId: row.id,
       analysisId: row.id,
+      timestamp: row.timestamp || raw.timestamp || new Date().toISOString(),
       generatedAt: new Date().toISOString(),
-      audioMetadata: {
-        filename: row.audio_filename,
-        durationSeconds: row.duration,
-        timestamp: row.timestamp
-      },
-      executiveSummary: {
-        overallRiskScore: row.final_score,
-        riskLevel: row.risk_level,
+      risk: {
+        score: row.final_score,
+        level: row.risk_level,
         threatCategory: row.threat_category,
-        voiceCloneSuspicion: raw.risk?.cloneSuspicion || false,
-        recommendedAction: raw.risk?.recommendedAction || 'No critical actions required.'
+        voiceCloneSuspicion: risk.cloneSuspicion || false,
+        reasonsFlagged: risk.reasons || []
       },
-      voiceAuthenticityAnalysis: {
-        provider: raw.deepfake?.provider || 'Reality Defender',
-        classification: raw.deepfake?.classification || 'UNKNOWN',
-        syntheticProbability: raw.deepfake?.fakeProbability !== null ? `${Math.round((raw.deepfake.fakeProbability || 0) * 100)}%` : 'N/A',
-        confidence: raw.deepfake?.confidence || 'N/A'
+      authenticityEvidence: {
+        provider: deepfake.provider || 'Reality Defender',
+        classification: deepfake.classification || 'UNKNOWN',
+        score: deepfake.score !== undefined ? deepfake.score : null,
+        syntheticProbability: deepfake.fakeProbability !== null && deepfake.fakeProbability !== undefined
+          ? `${Math.round((deepfake.fakeProbability || 0) * 100)}%` : 'N/A',
+        requestId: deepfake.metadata?.requestId || null
       },
-      speakerVerificationAnalysis: {
-        status: raw.speaker?.match ? 'MATCH' : raw.speaker?.enrolled ? 'MISMATCH' : 'NOT_ENROLLED',
-        enrolledSpeaker: raw.speaker?.speakerName || 'None',
-        similarity: raw.speaker?.similarity !== null ? `${Math.round((raw.speaker.similarity || 0) * 100)}%` : 'N/A'
+      speakerEvidence: {
+        status: speaker.match ? 'MATCH' : speaker.enrolled ? 'MISMATCH' : 'NOT_ENROLLED',
+        enrolledSpeaker: speaker.speakerName || 'None',
+        similarity: speaker.similarity !== null && speaker.similarity !== undefined
+          ? Number(speaker.similarity.toFixed(4)) : null,
+        similarityPercentage: speaker.similarity !== null && speaker.similarity !== undefined
+          ? `${Math.round(speaker.similarity * 100)}%` : 'N/A',
+        threshold: speaker.threshold || 0.70
       },
       conversationIntelligence: {
         scamProbability: raw.scam?.scamProbability !== undefined ? `${Math.round(raw.scam.scamProbability * 100)}%` : 'N/A',
-        category: raw.scam?.category || 'General',
+        category: raw.scam?.category || row.threat_category || 'General',
         summary: raw.scam?.summary || '',
         threatIndicatorsDetected: indicators
       },
-      transcriptExcerpt: row.transcript ? (row.transcript.length > 500 ? row.transcript.slice(0, 500) + '...' : row.transcript) : 'No transcript recorded.',
-      evidencePoints: raw.risk?.reasons || []
+      suspiciousTranscriptPhrases: flaggedPhrases,
+      transcriptExcerpt: row.transcript ? (row.transcript.length > 600 ? row.transcript.slice(0, 600) + '...' : row.transcript) : 'No transcript recorded.',
+      interventionTaken: {
+        policyActions: policy.actions || (row.final_score >= 80 ? ['BLOCK_SENSITIVE_ACTION', 'CREATE_INCIDENT'] : row.final_score >= 60 ? ['WARN', 'RECOMMEND_VERIFICATION'] : ['CONTINUE']),
+        recommendation: risk.recommendedAction || 'No critical actions required.',
+        blockSensitiveAction: policy.blockSensitiveAction || row.final_score >= 80,
+        incidentCreated: policy.createIncident || row.final_score >= 80
+      },
+      evidenceHashes: {
+        sha256: forensic.sha256 || null,
+        originalFilename: row.audio_filename,
+        durationSeconds: row.duration,
+        fileSizeBytes: forensic.sizeBytes || null
+      }
     };
 
     return res.status(200).json({

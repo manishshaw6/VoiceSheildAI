@@ -1,0 +1,237 @@
+{
+  "version": "1.0.0",
+  "demo_notice": "PRE-ANALYZED BENCHMARK EVIDENCE (OFFLINE DEMO MODE)",
+  "scenarios": [
+    {
+      "id": "SCENARIO_1_GENUINE_NORMAL",
+      "name": "Genuine Owner + Normal Conversation",
+      "description": "Enrolled owner having a benign daily conversation.",
+      "risk_level": "SAFE",
+      "score": 5,
+      "clone_suspicion": false,
+      "deepfake": {
+        "provider": "reality_defender",
+        "classification": "AUTHENTIC",
+        "fakeProbability": 0.05,
+        "score": 0.05,
+        "confidence": 0.90
+      },
+      "speaker": {
+        "enrolled": true,
+        "match": true,
+        "similarity": 0.94,
+        "speakerName": "Ayush (Owner)",
+        "provider": "ecapa_tdnn"
+      },
+      "transcription": {
+        "provider": "faster_whisper",
+        "language": "en",
+        "text": "Hello, how are you doing today? Just wanted to catch up about our plans for the weekend lunch."
+      },
+      "scam": {
+        "category": "Normal Conversation",
+        "severity": "LOW",
+        "scamProbability": 0.0
+      },
+      "indicators": [],
+      "policy_action": "CONTINUE",
+      "recommended_action": "Continue with normal security awareness.",
+      "is_demo_benchmark": true
+    },
+    {
+      "id": "SCENARIO_2_GENUINE_OTP_DURESS",
+      "name": "Genuine Owner + Coerced OTP Request",
+      "description": "Enrolled owner under social engineering or duress asking to share an OTP.",
+      "risk_level": "HIGH",
+      "score": 61,
+      "clone_suspicion": false,
+      "deepfake": {
+        "provider": "reality_defender",
+        "classification": "AUTHENTIC",
+        "fakeProbability": 0.08,
+        "score": 0.08,
+        "confidence": 0.88
+      },
+      "speaker": {
+        "enrolled": true,
+        "match": true,
+        "similarity": 0.93,
+        "speakerName": "Ayush (Owner)",
+        "provider": "ecapa_tdnn"
+      },
+      "transcription": {
+        "provider": "faster_whisper",
+        "language": "en",
+        "text": "Please tell me the one time password code you just received on your phone immediately, I need it right now."
+      },
+      "scam": {
+        "category": "OTP Fraud / Credential Theft",
+        "severity": "CRITICAL",
+        "scamProbability": 0.99
+      },
+      "indicators": [
+        { "type": "OTP_REQUEST", "severity": "CRITICAL", "label": "OTP / One-Time Password Request", "evidence": "...one time password code..." },
+        { "type": "URGENCY_COERCION", "severity": "HIGH", "label": "Urgency & Immediate Coercion", "evidence": "...immediately, I need it right now..." }
+      ],
+      "policy_action": "WARN, RECOMMEND_VERIFICATION",
+      "recommended_action": "Verify the caller through a separate trusted channel before taking sensitive action.",
+      "is_demo_benchmark": true
+    },
+    {
+      "id": "SCENARIO_3_DIFFERENT_HUMAN_NORMAL",
+      "name": "Different Human Speaker + Normal Conversation",
+      "description": "Unenrolled or mismatched human voice having a normal conversation.",
+      "risk_level": "SUSPICIOUS",
+      "score": 37,
+      "clone_suspicion": false,
+      "deepfake": {
+        "provider": "reality_defender",
+        "classification": "AUTHENTIC",
+        "fakeProbability": 0.10,
+        "score": 0.10,
+        "confidence": 0.85
+      },
+      "speaker": {
+        "enrolled": true,
+        "match": false,
+        "similarity": 0.22,
+        "speakerName": "Ayush (Owner)",
+        "provider": "ecapa_tdnn"
+      },
+      "transcription": {
+        "provider": "faster_whisper",
+        "language": "en",
+        "text": "Hi, this is Alex from the marketing department. Let us review the slide deck for tomorrow morning presentation."
+      },
+      "scam": {
+        "category": "Normal Conversation",
+        "severity": "LOW",
+        "scamProbability": 0.0
+      },
+      "indicators": [
+        { "type": "SPEAKER_MISMATCH", "severity": "MEDIUM", "label": "Identity Mismatch", "evidence": "Acoustic similarity 22% below threshold 70%" }
+      ],
+      "policy_action": "WARN",
+      "recommended_action": "Proceed cautiously and independently verify unexpected requests.",
+      "is_demo_benchmark": true
+    },
+    {
+      "id": "SCENARIO_4_DIFFERENT_HUMAN_BANK_SCAM",
+      "name": "Different Human Speaker + Banking Scam",
+      "description": "Unknown human impersonator claiming bank account suspension and asking for money transfer.",
+      "risk_level": "HIGH",
+      "score": 75,
+      "clone_suspicion": false,
+      "deepfake": {
+        "provider": "reality_defender",
+        "classification": "AUTHENTIC",
+        "fakeProbability": 0.12,
+        "score": 0.12,
+        "confidence": 0.85
+      },
+      "speaker": {
+        "enrolled": true,
+        "match": false,
+        "similarity": 0.18,
+        "speakerName": "Ayush (Owner)",
+        "provider": "ecapa_tdnn"
+      },
+      "transcription": {
+        "provider": "sarvam",
+        "language": "hi-IN",
+        "text": "Your bank account has been suspended for KYC update. Send money and transfer funds immediately to unblock your account."
+      },
+      "scam": {
+        "category": "Bank Impersonation | UPI / Payment Scam",
+        "severity": "CRITICAL",
+        "scamProbability": 0.99
+      },
+      "indicators": [
+        { "type": "ACCOUNT_SUSPENSION_THREAT", "severity": "HIGH", "label": "Account Block / Suspension Threat", "evidence": "...bank account has been suspended..." },
+        { "type": "PAYMENT_FRAUD", "severity": "HIGH", "label": "Suspicious Payment / UPI Transfer", "evidence": "...Send money and transfer funds..." },
+        { "type": "URGENCY_COERCION", "severity": "HIGH", "label": "Urgency / Pressure", "evidence": "...immediately to unblock..." }
+      ],
+      "policy_action": "WARN, RECOMMEND_VERIFICATION",
+      "recommended_action": "Do not transfer funds. Verify caller identity with your financial institution directly.",
+      "is_demo_benchmark": true
+    },
+    {
+      "id": "SCENARIO_5_SYNTHETIC_CLONE_NORMAL",
+      "name": "AI Voice Clone + Normal Conversation",
+      "description": "Deepfake synthetic voice matching enrolled owner identity, attempting trust-building before attack.",
+      "risk_level": "CRITICAL",
+      "score": 85,
+      "clone_suspicion": true,
+      "deepfake": {
+        "provider": "reality_defender",
+        "classification": "MANIPULATED",
+        "fakeProbability": 0.92,
+        "score": 0.92,
+        "confidence": 0.94
+      },
+      "speaker": {
+        "enrolled": true,
+        "match": true,
+        "similarity": 0.91,
+        "speakerName": "Ayush (Owner)",
+        "provider": "ecapa_tdnn"
+      },
+      "transcription": {
+        "provider": "faster_whisper",
+        "language": "en",
+        "text": "Hey mom, it is me. I am just calling from a new number to let you know everything is fine."
+      },
+      "scam": {
+        "category": "Family Impersonation Probe",
+        "severity": "HIGH",
+        "scamProbability": 0.85
+      },
+      "indicators": [
+        { "type": "VOICE_CLONE_PATTERN", "severity": "CRITICAL", "label": "Active Voice Clone Pattern", "evidence": "High speaker similarity (91%) combined with synthetic speech indicators (92%)" }
+      ],
+      "policy_action": "BLOCK_SENSITIVE_ACTION, REQUEST_STEP_UP_VERIFICATION, CREATE_INCIDENT",
+      "recommended_action": "CRITICAL ALERT: Potential synthetic voice clone detected. Hang up and contact your family member on their known direct number.",
+      "is_demo_benchmark": true
+    },
+    {
+      "id": "SCENARIO_6_SYNTHETIC_CLONE_URGENT_THEFT",
+      "name": "AI Voice Clone + Urgent Financial Theft",
+      "description": "Full-spectrum multimodal attack: synthetic clone of owner demanding urgent wire transfer / OTP.",
+      "risk_level": "CRITICAL",
+      "score": 85,
+      "clone_suspicion": true,
+      "deepfake": {
+        "provider": "reality_defender",
+        "classification": "MANIPULATED",
+        "fakeProbability": 0.96,
+        "score": 0.96,
+        "confidence": 0.95
+      },
+      "speaker": {
+        "enrolled": true,
+        "match": true,
+        "similarity": 0.93,
+        "speakerName": "Ayush (Owner)",
+        "provider": "ecapa_tdnn"
+      },
+      "transcription": {
+        "provider": "sarvam",
+        "language": "hi-IN",
+        "text": "Dad, I had an accident and police arrested me! Transfer funds to UPI immediately and share the verification code right now!"
+      },
+      "scam": {
+        "category": "Family Emergency / Impersonation Scam",
+        "severity": "CRITICAL",
+        "scamProbability": 1.0
+      },
+      "indicators": [
+        { "type": "VOICE_CLONE_PATTERN", "severity": "CRITICAL", "label": "Active Voice Clone Pattern", "evidence": "High speaker similarity (93%) combined with synthetic speech indicators (96%)" },
+        { "type": "PAYMENT_FRAUD", "severity": "HIGH", "label": "Urgent UPI / Fund Transfer", "evidence": "...Transfer funds to UPI immediately..." },
+        { "type": "OTP_REQUEST", "severity": "CRITICAL", "label": "Credential Theft", "evidence": "...share the verification code right now!..." }
+      ],
+      "policy_action": "BLOCK_SENSITIVE_ACTION, REQUEST_STEP_UP_VERIFICATION, CREATE_INCIDENT",
+      "recommended_action": "CRITICAL ALERT: Multi-signal synthetic voice attack. Cease all communication and report immediate impersonation incident.",
+      "is_demo_benchmark": true
+    }
+  ]
+}

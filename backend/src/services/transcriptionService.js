@@ -32,7 +32,7 @@ export async function transcribeAudio(audioInput) {
     return {
       available: false,
       text: '',
-      confidence: 0,
+      confidence: null,
       segments: [],
       error: 'ASSEMBLYAI_API_KEY is not configured.'
     };
@@ -64,7 +64,7 @@ export async function transcribeAudio(audioInput) {
           start: Number((u.start / 1000).toFixed(2)),
           end: Number((u.end / 1000).toFixed(2)),
           text: u.text,
-          confidence: u.confidence || 0.9
+          ...(u.confidence == null ? {} : { confidence: u.confidence })
         });
       });
     } else if (transcript.words && transcript.words.length > 0) {
@@ -80,7 +80,7 @@ export async function transcribeAudio(audioInput) {
             start: Number((chunkStart / 1000).toFixed(2)),
             end: Number((w.end / 1000).toFixed(2)),
             text: currentChunk.join(' '),
-            confidence: Number((w.confidence || 0.9).toFixed(2))
+            ...(w.confidence == null ? {} : { confidence: Number(w.confidence.toFixed(2)) })
           });
           currentChunk = [];
           if (i + 1 < transcript.words.length) {
@@ -93,7 +93,7 @@ export async function transcribeAudio(audioInput) {
         start: 0.0,
         end: Number(((transcript.audio_duration || 5000) / 1000).toFixed(2)),
         text: transcript.text,
-        confidence: transcript.confidence || 0.9
+        ...(transcript.confidence == null ? {} : { confidence: transcript.confidence })
       });
     }
 
@@ -104,7 +104,7 @@ export async function transcribeAudio(audioInput) {
       provider: 'assemblyai',
       language: transcript.language_code || transcript.language || null,
       text: transcript.text || '',
-      confidence: transcript.confidence ? Number(transcript.confidence.toFixed(2)) : 0.95,
+      confidence: transcript.confidence == null ? null : Number(transcript.confidence.toFixed(2)),
       duration: transcript.audio_duration ? Number((transcript.audio_duration / 1000).toFixed(2)) : null,
       segments
     };
@@ -114,7 +114,7 @@ export async function transcribeAudio(audioInput) {
       available: false,
       provider: 'assemblyai',
       text: '',
-      confidence: 0,
+      confidence: null,
       segments: [],
       error: err.message
     };
