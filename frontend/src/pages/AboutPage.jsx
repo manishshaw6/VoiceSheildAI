@@ -71,8 +71,8 @@ export default function AboutPage() {
       <div className="about-cta-bar">
         <h3>Ready to experience the next generation of voice security?</h3>
         <div className="cta-actions">
-          <Link to="/scanner" className="hero-btn-primary">Launch Forensic Threat Scanner ⚡</Link>
-          <Link to="/live" className="hero-btn-secondary">Start Live Call Interceptor 🎙️</Link>
+          <Link to="/scanner" className="hero-btn-primary">Launch Forensic Threat Scanner</Link>
+          <Link to="/live" className="hero-btn-secondary">Start Live Call Interceptor</Link>
         </div>
       </div>
     </div>
