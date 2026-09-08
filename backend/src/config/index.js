@@ -1,0 +1,149 @@
+/**
+ * VoxShield AI — Centralized Configuration
+ * All tunable values, environment validation, and APP_MODE support.
+ * No magic constants should exist outside this file and core/constants.js.
+ */
+
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { Defaults } from '../core/constants.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env from backend root
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
+// ─── APP_MODE ───────────────────────────────────────────────────────────────
+
+const APP_MODE = (process.env.APP_MODE || 'development').toLowerCase();
+const validModes = ['production', 'development', 'test', 'demo'];
+if (!validModes.includes(APP_MODE)) {
+  console.warn(`[Config] Invalid APP_MODE '${APP_MODE}', falling back to 'development'`);
+}
+
+// ─── Configuration Object ───────────────────────────────────────────────────
+
+export const config = {
+  // App mode
+  mode: APP_MODE,
+  isProduction: APP_MODE === 'production',
+  isDevelopment: APP_MODE === 'development',
+  isTest: APP_MODE === 'test',
+  isDemo: APP_MODE === 'demo',
+
+  // Server
+  port: parseInt(process.env.PORT, 10) || 5000,
+  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+
+  // Provider API keys (never log these)
+  realityDefenderApiKey: process.env.REALITY_DEFENDER_API_KEY || '',
+  assemblyAiApiKey: process.env.ASSEMBLYAI_API_KEY || '',
+  geminiApiKey: process.env.GEMINI_API_KEY || '',
+  groqApiKey: process.env.GROQ_API_KEY || '',
+
+  // Directories
+  uploadDir: path.resolve(__dirname, '../../uploads'),
+  tempDir: path.resolve(__dirname, '../../temp'),
+  dataDir: path.resolve(__dirname, '../../data'),
+  dbPath: path.resolve(__dirname, '../../data/voiceshield.db'),
+
+  // Risk weights (configurable)
+  riskWeights: {
+    deepfake: parseFloat(process.env.RISK_WEIGHT_DEEPFAKE) || Defaults.RISK_WEIGHT_DEEPFAKE,
+    scam: parseFloat(process.env.RISK_WEIGHT_SCAM) || Defaults.RISK_WEIGHT_SCAM,
+    rules: parseFloat(process.env.RISK_WEIGHT_RULES) || Defaults.RISK_WEIGHT_RULES,
+    speaker: parseFloat(process.env.RISK_WEIGHT_SPEAKER) || Defaults.RISK_WEIGHT_SPEAKER
+  },
+
+  // Audio settings
+  audio: {
+    maxUploadSizeMB: parseInt(process.env.MAX_UPLOAD_SIZE_MB, 10) || Defaults.MAX_UPLOAD_SIZE_MB,
+    minDurationSec: parseFloat(process.env.MIN_AUDIO_DURATION_SEC) || Defaults.MIN_AUDIO_DURATION_SEC,
+    maxDurationSec: parseFloat(process.env.MAX_AUDIO_DURATION_SEC) || Defaults.MAX_AUDIO_DURATION_SEC,
+    targetSampleRate: Defaults.TARGET_SAMPLE_RATE,
+    vadThreshold: parseFloat(process.env.VAD_THRESHOLD) || Defaults.VAD_THRESHOLD,
+    vadRmsThreshold: parseFloat(process.env.VAD_RMS_THRESHOLD) || Defaults.VAD_RMS_THRESHOLD,
+    chunkLengthSec: parseInt(process.env.CHUNK_LENGTH_SEC, 10) || Defaults.CHUNK_LENGTH_SEC
+  },
+
+  // Temporal risk
+  ewmaAlpha: parseFloat(process.env.EWMA_ALPHA) || Defaults.EWMA_ALPHA,
+
+  // Provider timeouts (milliseconds)
+  timeouts: {
+    realityDefender: parseInt(process.env.RD_TIMEOUT_MS, 10) || Defaults.REALITY_DEFENDER_TIMEOUT_MS,
+    assemblyAI: parseInt(process.env.ASSEMBLYAI_TIMEOUT_MS, 10) || Defaults.ASSEMBLYAI_TIMEOUT_MS,
+    llm: parseInt(process.env.LLM_TIMEOUT_MS, 10) || Defaults.LLM_TIMEOUT_MS
+  },
+
+  // Retry settings
+  retry: {
+    maxRetries: parseInt(process.env.MAX_RETRIES, 10) || Defaults.MAX_RETRIES,
+    retryDelayMs: parseInt(process.env.RETRY_DELAY_MS, 10) || Defaults.RETRY_DELAY_MS
+  },
+
+  // Speaker verification
+  speaker: {
+    matchThreshold: parseFloat(process.env.SPEAKER_MATCH_THRESHOLD) || Defaults.SPEAKER_MATCH_THRESHOLD,
+    embeddingDimensions: Defaults.SPEAKER_EMBEDDING_DIMENSIONS
+  },
+
+  // Cache
+  cache: {
+    ttlSec: parseInt(process.env.CACHE_TTL_SEC, 10) || Defaults.CACHE_TTL_SEC,
+    enabled: process.env.CACHE_ENABLED !== 'false'
+  },
+
+  // WebSocket
+  ws: {
+    analysisIntervalMs: parseInt(process.env.WS_ANALYSIS_INTERVAL_MS, 10) || Defaults.WS_ANALYSIS_INTERVAL_MS,
+    minAudioBytes: Defaults.WS_MIN_AUDIO_BYTES
+  },
+
+  rateLimit: {
+    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 60000,
+    maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 120
+  },
+
+  // Interaction thresholds
+  interactions: {
+    clonePatternSyntheticThreshold: Defaults.CLONE_PATTERN_SYNTHETIC_THRESHOLD,
+    clonePatternSpeakerThreshold: Defaults.CLONE_PATTERN_SPEAKER_THRESHOLD,
+    credentialTheftOtpThreshold: Defaults.CREDENTIAL_THEFT_OTP_THRESHOLD,
+    credentialTheftFinancialThreshold: Defaults.CREDENTIAL_THEFT_FINANCIAL_THRESHOLD,
+    socialEngineeringImpersonationThreshold: Defaults.SOCIAL_ENGINEERING_IMPERSONATION_THRESHOLD,
+    socialEngineeringUrgencyThreshold: Defaults.SOCIAL_ENGINEERING_URGENCY_THRESHOLD
+  },
+
+  // Logging
+  logLevel: process.env.LOG_LEVEL || (APP_MODE === 'production' ? 'info' : 'debug'),
+
+  // Demo mode
+  enableDemoMode: process.env.ENABLE_DEMO_MODE === 'true' || APP_MODE === 'demo'
+};
+
+// ─── Startup Validation ─────────────────────────────────────────────────────
+
+export function validateConfig() {
+  const warnings = [];
+
+  if (!config.realityDefenderApiKey) {
+    warnings.push('REALITY_DEFENDER_API_KEY is not configured. Deepfake detection will be unavailable.');
+  }
+  if (!config.assemblyAiApiKey) {
+    warnings.push('ASSEMBLYAI_API_KEY is not configured. Speech-to-text will be unavailable.');
+  }
+  if (!config.geminiApiKey && !config.groqApiKey) {
+    warnings.push('Neither GEMINI_API_KEY nor GROQ_API_KEY is configured. LLM scam analysis will be unavailable.');
+  }
+
+  // Validate weight sum is approximately 1.0
+  const weightSum = Object.values(config.riskWeights).reduce((s, w) => s + w, 0);
+  if (Math.abs(weightSum - 1.0) > 0.01) {
+    warnings.push(`Risk weights sum to ${weightSum.toFixed(2)}, expected ~1.0. Weights will be normalized.`);
+  }
+
+  return warnings;
+}

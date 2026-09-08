@@ -1,58 +1,56 @@
-import './App.css'
-import SplineHero from './components/SplineHero'
+import React from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import './App.css';
+import Navbar from './components/Navbar';
+import Footer from './components/Footer';
+import HomePage from './pages/HomePage';
+import ScannerPage from './pages/ScannerPage';
+import LiveShieldPage from './pages/LiveShieldPage';
+import SpeakerGuardPage from './pages/SpeakerGuardPage';
+import AuditVaultPage from './pages/AuditVaultPage';
+import AboutPage from './pages/AboutPage';
 
 function App() {
+  const handleExportReport = async (analysisId) => {
+    try {
+      const res = await fetch(`/api/analysis/${analysisId}/report`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Report export failed');
+
+      const blob = new Blob([JSON.stringify(data.report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `VoiceShieldAI_Report_${analysisId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Could not export report: ' + err.message);
+    }
+  };
+
   return (
-    <div className="page-shell">
-      <header className="site-header">
-        <a className="brand" href="#top">
-          VOXSHIELD
-        </a>
-        <nav className="site-nav" aria-label="Primary">
-          <a href="#features">Features</a>
-          <a href="#about">About</a>
-          <a href="#contact">Contact</a>
-        </nav>
-      </header>
+    <BrowserRouter>
+      <div className="page-shell-pro">
+        <Navbar />
 
-      <main id="top">
-        <SplineHero />
+        <main className="main-content-pro">
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/scanner" element={<ScannerPage onExportReport={handleExportReport} />} />
+            <Route path="/live" element={<LiveShieldPage />} />
+            <Route path="/speaker-guard" element={<SpeakerGuardPage />} />
+            <Route path="/history" element={<AuditVaultPage onExportReport={handleExportReport} />} />
+            <Route path="/about" element={<AboutPage />} />
+          </Routes>
+        </main>
 
-        <section className="content-section" id="features">
-          <div className="section-copy">
-            <p className="section-label">Features</p>
-            <h2>Built to keep the landing page structure intact.</h2>
-            <p>
-              The Spline scene lives only in the hero area, so the rest of the page
-              can continue to hold your product messaging, feature blocks, and calls to action.
-            </p>
-          </div>
-        </section>
-
-        <section className="content-section" id="about">
-          <div className="section-copy">
-            <p className="section-label">About</p>
-            <h2>Clean integration, minimal surface area.</h2>
-            <p>
-              This setup uses the official React Spline package with your local
-              <code>/Hero.splinecode</code> file, avoiding iframes and external URLs.
-            </p>
-          </div>
-        </section>
-
-        <section className="content-section" id="contact">
-          <div className="section-copy">
-            <p className="section-label">Contact</p>
-            <h2>Ready for your existing content.</h2>
-            <p>
-              Replace these supporting sections with your current landing-page blocks if
-              you already have them in another branch or file.
-            </p>
-          </div>
-        </section>
-      </main>
-    </div>
-  )
+        <Footer />
+      </div>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;
