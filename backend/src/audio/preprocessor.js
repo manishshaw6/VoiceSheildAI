@@ -4,37 +4,74 @@
  * Keeps original evidence intact; never overwrites forensic source audio.
  */
 
+import { spawnSync } from 'child_process';
 import { createLogger } from '../core/logger.js';
 
 const logger = createLogger({ component: 'audio_preprocessor' });
 
 /**
+ * Uses ffmpeg to decode non-WAV audio buffers (e.g. MP3, WEBM, M4A, OGG) to 16kHz mono PCM WAV.
+ */
+export function decodeAudioWithFfmpeg(buffer) {
+  if (!buffer || buffer.length === 0) return null;
+  try {
+    const res = spawnSync('ffmpeg', ['-i', 'pipe:0', '-ar', '16000', '-ac', '1', '-f', 'wav', 'pipe:1'], {
+      input: buffer,
+      maxBuffer: 50 * 1024 * 1024,
+      windowsHide: true
+    });
+    if (res.status === 0 && res.stdout && res.stdout.length > 44 && res.stdout.toString('utf8', 0, 4) === 'RIFF') {
+      return res.stdout;
+    }
+  } catch (err) {
+    logger.warn('audio.ffmpeg_decode_failed', { error: err.message });
+  }
+  return null;
+}
+
+/**
+ * Ensures audio buffer is PCM WAV, decoding via ffmpeg if necessary.
+ */
+export function ensurePcmWav(buffer) {
+  if (!buffer || buffer.length < 44) return buffer;
+  if (buffer.toString('utf8', 0, 4) === 'RIFF') return buffer;
+  const decoded = decodeAudioWithFfmpeg(buffer);
+  return decoded || buffer;
+}
+
+/**
  * Extracts PCM Float32 samples from a WAV buffer.
- * For non-WAV formats, returns null (requires external decoder).
+ * For non-WAV formats (MP3, M4A, WEBM), decodes to WAV first.
  *
  * @param {Buffer} buffer - Audio file buffer
  * @returns {{ samples: Float32Array, sampleRate: number, channels: number } | null}
  */
 export function decodeWavBuffer(buffer) {
   if (!buffer || buffer.length < 44) return null;
-  if (buffer.toString('utf8', 0, 4) !== 'RIFF') return null;
+
+  let activeBuffer = buffer;
+  if (buffer.toString('utf8', 0, 4) !== 'RIFF') {
+    const decoded = decodeAudioWithFfmpeg(buffer);
+    if (!decoded) return null;
+    activeBuffer = decoded;
+  }
 
   try {
-    const channels = buffer.readUInt16LE(22);
-    const sampleRate = buffer.readUInt32LE(24);
-    const bitsPerSample = buffer.readUInt16LE(34);
+    const channels = activeBuffer.readUInt16LE(22);
+    const sampleRate = activeBuffer.readUInt32LE(24);
+    const bitsPerSample = activeBuffer.readUInt16LE(34);
 
     // Find data chunk
     let dataOffset = 44;
-    let dataSize = buffer.length - 44;
+    let dataSize = activeBuffer.length - 44;
     let offset = 12;
 
-    while (offset < buffer.length - 8) {
-      const chunkId = buffer.toString('utf8', offset, offset + 4);
-      const chunkSize = buffer.readUInt32LE(offset + 4);
+    while (offset < activeBuffer.length - 8) {
+      const chunkId = activeBuffer.toString('utf8', offset, offset + 4);
+      const chunkSize = activeBuffer.readUInt32LE(offset + 4);
       if (chunkId === 'data') {
         dataOffset = offset + 8;
-        dataSize = Math.min(chunkSize, buffer.length - dataOffset);
+        dataSize = Math.min(chunkSize, activeBuffer.length - dataOffset);
         break;
       }
       offset += 8 + chunkSize;
@@ -46,13 +83,13 @@ export function decodeWavBuffer(buffer) {
 
     for (let i = 0; i < totalSamples; i++) {
       const bytePos = dataOffset + i * bytesPerSample;
-      if (bytePos + bytesPerSample <= buffer.length) {
+      if (bytePos + bytesPerSample <= activeBuffer.length) {
         if (bitsPerSample === 16) {
-          samples[i] = buffer.readInt16LE(bytePos) / 32768.0;
+          samples[i] = activeBuffer.readInt16LE(bytePos) / 32768.0;
         } else if (bitsPerSample === 8) {
-          samples[i] = (buffer.readUInt8(bytePos) - 128) / 128.0;
+          samples[i] = (activeBuffer.readUInt8(bytePos) - 128) / 128.0;
         } else if (bitsPerSample === 32) {
-          samples[i] = buffer.readFloatLE(bytePos);
+          samples[i] = activeBuffer.readFloatLE(bytePos);
         }
       }
     }

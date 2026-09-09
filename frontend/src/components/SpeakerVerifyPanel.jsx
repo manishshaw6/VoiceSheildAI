@@ -32,15 +32,20 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Enrollment failed');
+      if (!res.ok) {
+        const msg = typeof data.error === 'object'
+          ? (data.error?.message || data.error?.code || 'Enrollment rejected by server')
+          : (data.error || data.message || 'Enrollment failed');
+        throw new Error(msg);
+      }
 
-      setEnrollStatus(`✅ Successfully enrolled ${data.name} (${data.speakerId}) with 80-dim acoustic profile!`);
+      setEnrollStatus(`Enrolled authorized identity: ${data.name || speakerName} (@${data.speakerId || speakerId})`);
       setSpeakerId('');
       setSpeakerName('');
       setEnrollFile(null);
       if (onRefreshProfiles) onRefreshProfiles();
     } catch (err) {
-      setEnrollStatus(`❌ Enrollment error: ${err.message}`);
+      setEnrollStatus(`Enrollment error: ${err.message}`);
     }
   };
 
@@ -68,7 +73,12 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Verification failed');
+      if (!res.ok) {
+        const msg = typeof data.error === 'object'
+          ? (data.error?.message || data.error?.code || 'Verification rejected')
+          : (data.error || data.message || 'Verification failed');
+        throw new Error(msg);
+      }
       setVerifyResult(data);
     } catch (err) {
       setVerifyError(err.message);
@@ -92,7 +102,7 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
         {/* Left: Enrollment Form */}
         <div className="speaker-card">
           <div className="card-header-with-icon">
-            <span className="icon-badge">👤+</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(0, 210, 255, 0.15)', color: '#00d2ff', fontWeight: 800, fontSize: '0.75rem', letterSpacing: '0.5px' }}>BIO</span>
             <h4>Enroll Authorized Identity</h4>
           </div>
           <p className="card-desc">Record or upload a clean 5-10s reference audio sample to build an acoustic biometric embedding.</p>
@@ -126,7 +136,7 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
               <label>Reference Audio Sample:</label>
               <input
                 type="file"
-                accept=".wav,.mp3,.m4a,.webm,.ogg"
+                accept=".wav,.mp3,.mpeg,.mpg,.mpga,.m4a,.webm,.ogg,audio/*,video/mpeg,video/webm"
                 onChange={(e) => setEnrollFile(e.target.files[0])}
                 className="file-input"
                 required
@@ -163,7 +173,7 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
         {/* Right: Verification Form */}
         <div className="speaker-card">
           <div className="card-header-with-icon">
-            <span className="icon-badge">🔍</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(0, 229, 163, 0.15)', color: '#00e5a3', fontWeight: 800, fontSize: '0.75rem', letterSpacing: '0.5px' }}>VER</span>
             <h4>Verify Suspect Audio</h4>
           </div>
           <p className="card-desc">Compare incoming suspect audio against enrolled identities to detect voice mismatch or impersonation.</p>
@@ -189,7 +199,7 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
               <label>Suspect Audio Recording:</label>
               <input
                 type="file"
-                accept=".wav,.mp3,.m4a,.webm,.ogg"
+                accept=".wav,.mp3,.mpeg,.mpg,.mpga,.m4a,.webm,.ogg,audio/*,video/mpeg,video/webm"
                 onChange={(e) => setVerifyFile(e.target.files[0])}
                 className="file-input"
                 required
@@ -207,7 +217,7 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
             verifyResult.status === 'NO_TARGET_SPEAKER' || verifyResult.decision === 'NO_COMPARISON_REQUESTED' ? (
               <div className="verification-result-box" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)' }}>
                 <div className="result-status-title" style={{ color: '#ccc' }}>
-                  ℹ️ NO ENROLLED TARGET IDENTITIES SELECTED
+                  NO ENROLLED TARGET IDENTITIES SELECTED
                 </div>
                 <p style={{ color: '#aaa', fontSize: '0.85rem', marginTop: '6px' }}>
                   Please select an enrolled speaker identity from the dropdown above or register a reference profile first.
@@ -217,8 +227,8 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
               <div className={`verification-result-box ${verifyResult.match ? 'match-ok' : 'mismatch-alert'}`}>
                 <div className="result-status-title">
                   {verifyResult.match
-                    ? `✅ ${verifyResult.decision || 'VERIFIED SPEAKER MATCH'}`
-                    : `❌ ${verifyResult.decision || 'SPEAKER IDENTITY MISMATCH'}`}
+                    ? (verifyResult.decision || 'VERIFIED SPEAKER MATCH')
+                    : (verifyResult.decision || 'SPEAKER IDENTITY MISMATCH')}
                 </div>
                 <div className="result-metric-grid">
                   <div>
@@ -239,7 +249,7 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
                   </div>
                 </div>
                 <div style={{ marginTop: '10px', fontSize: '0.78rem', color: '#888', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '6px' }}>
-                  💡 Cosine similarity of 192-dimensional ECAPA-TDNN acoustic embeddings benchmarked against decision threshold {Math.round((verifyResult.threshold || 0.7) * 100)}%.
+                  Cosine similarity of 192-dimensional ECAPA-TDNN acoustic embeddings benchmarked against decision threshold {Math.round((verifyResult.threshold || 0.7) * 100)}%.
                 </div>
               </div>
             )

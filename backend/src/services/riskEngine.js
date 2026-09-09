@@ -110,32 +110,71 @@ export function calculateFusedRisk({ evidence = null, deepfakeResult = null, sca
   let cloneSuspicion = false;
   const synthetic = signals.VOICE_SYNTHETIC?.score;
   const similarity = speakerResult?.similarity ?? signals.SPEAKER_MATCH?.score;
+
+  // 1. Enrolled Voice Clone Pattern: Voice matches enrolled target identity but has synthetic speech artifacts
   if (synthetic != null && similarity != null &&
-      synthetic >= config.interactions.clonePatternSyntheticThreshold &&
-      similarity >= config.interactions.clonePatternSpeakerThreshold) {
+      synthetic >= 0.70 &&
+      similarity >= 0.70) {
     cloneSuspicion = true;
-    const cloneDelta = Math.max(20, Math.round(30 * synthetic * similarity));
+    const cloneDelta = Math.max(25, Math.round(35 * synthetic * similarity));
     interactionDeltas.cloneDelta = cloneDelta;
-    score = Math.max(80, Math.min(100, score + cloneDelta));
+    score = Math.max(88, Math.min(100, score + cloneDelta));
     components.VOICE_CLONE_PATTERN = 100;
     interactionDeltas.push({
       pattern: 'VOICE_CLONE_PATTERN',
-      label: 'High enrolled-speaker similarity combined with synthetic evidence',
+      label: 'High enrolled-speaker similarity combined with synthetic speech indicators',
       points: cloneDelta,
       evidence: `Similarity ${Math.round(similarity * 100)}% + Synthetic ${Math.round(synthetic * 100)}%`
     });
     evidenceContributions.push({
       category: 'VOICE_CLONE_PATTERN',
-      label: 'High enrolled-speaker similarity combined with synthetic evidence',
+      label: 'Enrolled speaker impersonation via synthetic voice cloning',
       points: cloneDelta,
       scorePercent: 100,
       confidencePercent: 95
     });
-    reasons.unshift('Voice clone pattern: strong speaker match combined with synthetic speech indicators.');
+    reasons.unshift('Critical voice clone pattern: high target speaker acoustic similarity combined with synthetic speech indicators.');
   }
 
   const otpScore = Math.max(signals.OTP_REQUEST?.score ?? 0, signals.CREDENTIAL_REQUEST?.score ?? 0);
   const finScore = Math.max(signals.FINANCIAL_REQUEST?.score ?? 0, signals.PAYMENT_FRAUD?.score ?? 0);
+
+  // 2. Synthetic Speech Elevation:
+  if (synthetic != null && synthetic >= 0.70) {
+    const hasFraudContext = (signals.CONTEXT_RISK?.score >= 0.40) ||
+      (signals.RULE_CONTEXT?.score >= 0.35) ||
+      (otpScore >= 0.40) ||
+      (finScore >= 0.40) ||
+      (signals.IMPERSONATION?.score >= 0.50);
+
+    // If fraudulent context is present alongside synthetic voice, escalate to critical threat (85-98)
+    // If context is benign or conversational, calibrate to natural suspicious/elevated awareness (55-68)
+    const targetFloor = hasFraudContext ? (synthetic >= 0.85 ? 88 : 80) : (synthetic >= 0.85 ? 68 : 55);
+
+    if (score < targetFloor) {
+      const synBoost = targetFloor - score;
+      score = targetFloor;
+      interactionDeltas.push({
+        pattern: 'SYNTHETIC_VOICE_ELEVATION',
+        label: hasFraudContext ? 'Synthetic speech combined with scam intent' : 'Acoustic synthetic speech detection',
+        points: synBoost,
+        evidence: `Synthetic Probability: ${Math.round(synthetic * 100)}%`
+      });
+      evidenceContributions.push({
+        category: 'VOICE_SYNTHETIC',
+        label: hasFraudContext ? 'Synthetic voice with deceptive context' : 'Acoustic synthetic speech anomaly',
+        points: synBoost,
+        scorePercent: Math.round(synthetic * 100),
+        confidencePercent: 90
+      });
+    }
+    if (!reasons.some(r => r.includes('synthetic speech') || r.includes('Synthetic speech') || r.includes('Synthetic voice'))) {
+      reasons.unshift(hasFraudContext
+        ? `Critical threat: AI synthetic voice (${Math.round(synthetic * 100)}% probability) coupled with deceptive intent.`
+        : `Synthetic voice detected (${Math.round(synthetic * 100)}% probability). Potential AI-generated speech.`);
+    }
+  }
+
   if (otpScore >= config.interactions.credentialTheftOtpThreshold &&
       finScore >= config.interactions.credentialTheftFinancialThreshold) {
     const credDelta = 15;

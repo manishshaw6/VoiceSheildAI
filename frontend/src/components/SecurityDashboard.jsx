@@ -1,15 +1,29 @@
 import React, { useState } from 'react';
+import { generateCyberCrimePdfReport } from '../services/pdfReportGenerator';
 
 export default function SecurityDashboard({ analysis, onExportReport }) {
   const [activeGuidanceTab, setActiveGuidanceTab] = useState('all');
   const [showComplaintModal, setShowComplaintModal] = useState(false);
   const [copiedToast, setCopiedToast] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'forensics' | 'guidance'
+
+  const handleDownloadPdf = () => {
+    try {
+      setDownloadingPdf(true);
+      generateCyberCrimePdfReport(analysis);
+    } catch (err) {
+      console.error('PDF Generation error:', err);
+      alert('Failed to generate PDF: ' + err.message);
+    } finally {
+      setTimeout(() => setDownloadingPdf(false), 1200);
+    }
+  };
 
   if (!analysis) {
     return (
       <div className="dashboard-placeholder">
-        <div className="placeholder-icon">🛡️</div>
+        <div className="placeholder-icon" style={{ fontSize: '2rem', color: '#00d2ff', opacity: 0.8 }}>VOX</div>
         <h3>No Analysis Selected</h3>
         <p>Upload an audio file or record a voice snippet to trigger VoiceShieldAI's multi-signal voice forensics & threat intelligence pipeline.</p>
       </div>
@@ -103,7 +117,7 @@ Please review this draft, verify all information, and file an official complaint
           alignItems: 'center',
           gap: '12px'
         }}>
-          <span style={{ fontSize: '1.6rem' }}>⚠️</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255, 140, 0, 0.25)', color: '#ff8c00', fontWeight: 900, fontSize: '0.9rem' }}>!</span>
           <div>
             <div style={{ fontWeight: 700, color: '#ff8c00', fontSize: '0.85rem', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
               OFFLINE BENCHMARK EVIDENCE MODE
@@ -128,7 +142,7 @@ Please review this draft, verify all information, and file an official complaint
           alignItems: 'center',
           gap: '16px'
         }}>
-          <div style={{ fontSize: '2rem' }}>🚨</div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255, 59, 92, 0.3)', color: '#ff3b5c', fontWeight: 900, fontSize: '1.1rem' }}>!</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 800, color: '#ff3b5c', fontSize: '0.95rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
               CRITICAL THREAT: VOICE CLONE IMPERSONATION DETECTED
@@ -144,54 +158,78 @@ Please review this draft, verify all information, and file an official complaint
       )}
 
       {/* Navigation Tabs for progressive disclosure */}
-      <div className="dashboard-subtabs" style={{ display: 'flex', gap: '8px', marginBottom: '18px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px' }}>
+      <div className="dashboard-subtabs" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '18px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            className={`subtab-btn ${activeTab === 'overview' ? 'active' : ''}`}
+            onClick={() => setActiveTab('overview')}
+            style={{
+              background: activeTab === 'overview' ? 'rgba(0, 210, 255, 0.15)' : 'transparent',
+              border: activeTab === 'overview' ? '1px solid #00d2ff' : '1px solid transparent',
+              color: activeTab === 'overview' ? '#00d2ff' : 'rgba(255,255,255,0.6)',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 700,
+              fontSize: '0.85rem'
+            }}
+          >
+            Multi-Signal Overview
+          </button>
+          <button
+            className={`subtab-btn ${activeTab === 'forensics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('forensics')}
+            style={{
+              background: activeTab === 'forensics' ? 'rgba(0, 210, 255, 0.15)' : 'transparent',
+              border: activeTab === 'forensics' ? '1px solid #00d2ff' : '1px solid transparent',
+              color: activeTab === 'forensics' ? '#00d2ff' : 'rgba(255,255,255,0.6)',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 700,
+              fontSize: '0.85rem'
+            }}
+          >
+            Voice Forensics & Evidence Math
+          </button>
+          <button
+            className={`subtab-btn ${activeTab === 'guidance' ? 'active' : ''}`}
+            onClick={() => setActiveTab('guidance')}
+            style={{
+              background: activeTab === 'guidance' ? 'rgba(0, 210, 255, 0.15)' : 'transparent',
+              border: activeTab === 'guidance' ? '1px solid #00d2ff' : '1px solid transparent',
+              color: activeTab === 'guidance' ? '#00d2ff' : 'rgba(255,255,255,0.6)',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 700,
+              fontSize: '0.85rem'
+            }}
+          >
+            Incident Guidance & Reporting (1930)
+          </button>
+        </div>
+
         <button
-          className={`subtab-btn ${activeTab === 'overview' ? 'active' : ''}`}
-          onClick={() => setActiveTab('overview')}
+          onClick={handleDownloadPdf}
           style={{
-            background: activeTab === 'overview' ? 'rgba(0, 210, 255, 0.15)' : 'transparent',
-            border: activeTab === 'overview' ? '1px solid #00d2ff' : '1px solid transparent',
-            color: activeTab === 'overview' ? '#00d2ff' : 'rgba(255,255,255,0.6)',
-            padding: '8px 16px',
+            background: 'linear-gradient(135deg, #0b1d3a, #1e3a8a)',
+            color: '#fff',
+            border: '1px solid #3b82f6',
+            padding: '8px 18px',
             borderRadius: '8px',
             cursor: 'pointer',
-            fontWeight: 700,
-            fontSize: '0.85rem'
+            fontWeight: 800,
+            fontSize: '0.84rem',
+            boxShadow: '0 4px 14px rgba(11, 29, 58, 0.6)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            letterSpacing: '0.02em'
           }}
+          title="Generate and download official National Cyber Crime Reporting Portal & Police FIR Dossier (PDF)"
         >
-          📊 Multi-Signal Overview
-        </button>
-        <button
-          className={`subtab-btn ${activeTab === 'forensics' ? 'active' : ''}`}
-          onClick={() => setActiveTab('forensics')}
-          style={{
-            background: activeTab === 'forensics' ? 'rgba(0, 210, 255, 0.15)' : 'transparent',
-            border: activeTab === 'forensics' ? '1px solid #00d2ff' : '1px solid transparent',
-            color: activeTab === 'forensics' ? '#00d2ff' : 'rgba(255,255,255,0.6)',
-            padding: '8px 16px',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 700,
-            fontSize: '0.85rem'
-          }}
-        >
-          🔬 Voice Forensics & Evidence Math
-        </button>
-        <button
-          className={`subtab-btn ${activeTab === 'guidance' ? 'active' : ''}`}
-          onClick={() => setActiveTab('guidance')}
-          style={{
-            background: activeTab === 'guidance' ? 'rgba(0, 210, 255, 0.15)' : 'transparent',
-            border: activeTab === 'guidance' ? '1px solid #00d2ff' : '1px solid transparent',
-            color: activeTab === 'guidance' ? '#00d2ff' : 'rgba(255,255,255,0.6)',
-            padding: '8px 16px',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 700,
-            fontSize: '0.85rem'
-          }}
-        >
-          🇮🇳 Incident Guidance & Reporting (1930)
+          {downloadingPdf ? 'Generating Official Dossier...' : 'Download Official NCRP / Police FIR Report (PDF)'}
         </button>
       </div>
 
@@ -307,7 +345,15 @@ Please review this draft, verify all information, and file an official complaint
       {/* Defensive Protocol / Actionable Recommendation */}
       <div className="recommendation-card" style={{ borderLeftColor: levelColor, marginBottom: '20px' }}>
         <div className="rec-header">
-          <span className="rec-icon">🛡️</span>
+          <span className="rec-icon" style={{
+            fontSize: '0.75rem',
+            fontWeight: 800,
+            padding: '2px 8px',
+            borderRadius: '4px',
+            border: `1px solid ${levelColor}`,
+            color: levelColor,
+            background: `${levelColor}15`
+          }}>PROTOCOL</span>
           <span className="rec-title">DEFENSIVE PROTOCOL & ACTIONABLE RECOMMENDATION</span>
         </div>
         <p className="rec-body">
@@ -324,7 +370,7 @@ Please review this draft, verify all information, and file an official complaint
           {!isThreat && convIntel?.benign_summary ? (
             <div className="detail-card" style={{ marginBottom: '20px' }}>
               <div className="detail-card-header">
-                <h4>📋 Post-Call Interaction Summary (Benign Call)</h4>
+                <h4>Post-Call Interaction Summary (Benign Call)</h4>
                 <span className="header-sub">Structured Meeting & Conversation Digest</span>
               </div>
               <p style={{ color: '#eff4ff', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '14px' }}>
@@ -354,7 +400,7 @@ Please review this draft, verify all information, and file an official complaint
           ) : isThreat && convIntel ? (
             <div className="detail-card" style={{ marginBottom: '20px', borderLeft: '4px solid #ff3b5c' }}>
               <div className="detail-card-header">
-                <h4 style={{ color: '#ff3b5c' }}>🚨 Cyber-Fraud Security Incident Brief</h4>
+                <h4 style={{ color: '#ff3b5c' }}>Cyber-Fraud Security Incident Brief</h4>
                 <span className="header-sub">Threat Extraction & Victim Exposure Analysis</span>
               </div>
               <p style={{ color: '#eff4ff', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '14px' }}>
@@ -393,32 +439,32 @@ Please review this draft, verify all information, and file an official complaint
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {convIntel.sensitive_entities.otp_requested && (
                       <span style={{ background: '#ff3b5c33', color: '#ff3b5c', border: '1px solid #ff3b5c', padding: '3px 8px', borderRadius: '4px', fontSize: '0.78rem', fontWeight: 700 }}>
-                        ⚠️ OTP Requested
+                        OTP Requested
                       </span>
                     )}
                     {convIntel.sensitive_entities.passwords_requested && (
                       <span style={{ background: '#ff3b5c33', color: '#ff3b5c', border: '1px solid #ff3b5c', padding: '3px 8px', borderRadius: '4px', fontSize: '0.78rem', fontWeight: 700 }}>
-                        ⚠️ Password Requested
+                        Password Requested
                       </span>
                     )}
                     {convIntel.sensitive_entities.card_details_requested && (
                       <span style={{ background: '#ff3b5c33', color: '#ff3b5c', border: '1px solid #ff3b5c', padding: '3px 8px', borderRadius: '4px', fontSize: '0.78rem', fontWeight: 700 }}>
-                        ⚠️ Card Details Requested
+                        Card Details Requested
                       </span>
                     )}
                     {convIntel.sensitive_entities.bank_account_reference && (
                       <span style={{ background: '#ff8c0033', color: '#ff8c00', border: '1px solid #ff8c00', padding: '3px 8px', borderRadius: '4px', fontSize: '0.78rem' }}>
-                        🏦 Bank: {convIntel.sensitive_entities.bank_account_reference}
+                        Bank: {convIntel.sensitive_entities.bank_account_reference}
                       </span>
                     )}
                     {convIntel.sensitive_entities.upi_reference && (
                       <span style={{ background: '#ff8c0033', color: '#ff8c00', border: '1px solid #ff8c00', padding: '3px 8px', borderRadius: '4px', fontSize: '0.78rem' }}>
-                        📱 UPI: {convIntel.sensitive_entities.upi_reference}
+                        UPI: {convIntel.sensitive_entities.upi_reference}
                       </span>
                     )}
                     {convIntel.sensitive_entities.payment_amounts?.map((amt, i) => (
                       <span key={i} style={{ background: '#ffd70033', color: '#ffd700', border: '1px solid #ffd700', padding: '3px 8px', borderRadius: '4px', fontSize: '0.78rem' }}>
-                        💰 Demanded: {amt}
+                        Demanded: {amt}
                       </span>
                     ))}
                   </div>
@@ -432,7 +478,7 @@ Please review this draft, verify all information, and file an official complaint
             {/* Left: Threat Signals & Social Engineering Levers */}
             <div className="detail-card">
               <div className="detail-card-header">
-                <h4>🚨 Detected Threat Signals ({indicators.length})</h4>
+                <h4>Detected Threat Signals ({indicators.length})</h4>
                 <span className="header-sub">Deterministic Rules + Context Models</span>
               </div>
 
@@ -486,7 +532,7 @@ Please review this draft, verify all information, and file an official complaint
             {/* Right: Transcript & Timeline Progression */}
             <div className="detail-card">
               <div className="detail-card-header">
-                <h4>📜 Conversation Transcript & Evidence</h4>
+                <h4>Conversation Transcript & Evidence</h4>
                 <span className="header-sub">
                   {analysis.transcription?.provider
                     ? `${String(analysis.transcription.provider).toUpperCase()} Speech-to-Text`
@@ -531,7 +577,7 @@ Please review this draft, verify all information, and file an official complaint
       {activeTab === 'forensics' && (
         <div className="detail-card" style={{ marginBottom: '20px' }}>
           <div className="detail-card-header">
-            <h4>🔬 Why VoxShield Flagged This — Itemized Evidence Contribution Math</h4>
+            <h4>Itemized Evidence Contribution Math</h4>
             <span className="header-sub">Deterministic Fusion Weights & Score Contributions</span>
           </div>
 
@@ -549,7 +595,7 @@ Please review this draft, verify all information, and file an official complaint
               marginBottom: '18px'
             }}>
               <div style={{ color: '#ff3b5c', fontWeight: 800, fontSize: '0.88rem', textTransform: 'uppercase', marginBottom: '6px' }}>
-                ⚡ Non-Linear Multi-Signal Interactions Triggered:
+                Non-Linear Multi-Signal Interactions Triggered:
               </div>
               {risk.interactionDeltas.map((delta, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
@@ -623,7 +669,7 @@ Please review this draft, verify all information, and file an official complaint
       {activeTab === 'guidance' && (
         <div className="detail-card" style={{ marginBottom: '20px' }}>
           <div className="detail-card-header">
-            <h4>🇮🇳 Actionable Incident Guidance & Law Enforcement Reporting</h4>
+            <h4>Actionable Incident Guidance & Law Enforcement Reporting</h4>
             <span className="header-sub">Indian Cybercrime Coordination Centre (I4C) & DoT Protocol</span>
           </div>
 
@@ -638,14 +684,14 @@ Please review this draft, verify all information, and file an official complaint
             color: '#ffd700',
             lineHeight: 1.5
           }}>
-            <strong>⚠️ NOT LEGAL ADVICE:</strong> This guidance and draft complaint are generated for informational assistance to support official reporting. Verify all facts before submitting to law enforcement or financial institutions.
+            <strong>NOTICE (NOT LEGAL ADVICE):</strong> This guidance and draft complaint are generated for informational assistance to support official reporting. Verify all facts before submitting to law enforcement or financial institutions.
           </div>
 
           {/* Official Helplines Row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '20px' }}>
             <div style={{ background: 'rgba(0, 229, 163, 0.1)', border: '1px solid #00e5a3', borderRadius: '10px', padding: '16px' }}>
               <div style={{ fontSize: '0.8rem', color: '#00e5a3', fontWeight: 800, textTransform: 'uppercase' }}>
-                📞 National Cybercrime Helpline
+                National Cybercrime Helpline
               </div>
               <div style={{ fontSize: '2rem', fontWeight: 900, color: '#fff', marginTop: '4px' }}>
                 1930
@@ -657,7 +703,7 @@ Please review this draft, verify all information, and file an official complaint
 
             <div style={{ background: 'rgba(0, 210, 255, 0.1)', border: '1px solid #00d2ff', borderRadius: '10px', padding: '16px' }}>
               <div style={{ fontSize: '0.8rem', color: '#00d2ff', fontWeight: 800, textTransform: 'uppercase' }}>
-                🌐 National Cybercrime Portal
+                National Cybercrime Portal
               </div>
               <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', marginTop: '8px' }}>
                 <a href="https://cybercrime.gov.in" target="_blank" rel="noreferrer" style={{ color: '#00d2ff', textDecoration: 'none' }}>
@@ -671,7 +717,7 @@ Please review this draft, verify all information, and file an official complaint
 
             <div style={{ background: 'rgba(155, 89, 182, 0.1)', border: '1px solid #9b59b6', borderRadius: '10px', padding: '16px' }}>
               <div style={{ fontSize: '0.8rem', color: '#9b59b6', fontWeight: 800, textTransform: 'uppercase' }}>
-                📱 Chakshu Portal (DoT)
+                Chakshu Portal (DoT)
               </div>
               <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', marginTop: '8px' }}>
                 <a href="https://sancharsaathi.gov.in/sancharsaathi/chakshu" target="_blank" rel="noreferrer" style={{ color: '#9b59b6', textDecoration: 'none' }}>
@@ -702,10 +748,10 @@ Please review this draft, verify all information, and file an official complaint
                 }}
               >
                 {tabKey === 'all' && 'All Actions'}
-                {tabKey === 'doNow' && '⚡ DO NOW'}
-                {tabKey === 'within30Mins' && '⏱ WITHIN 30 MINS'}
-                {tabKey === 'today' && '📅 TODAY'}
-                {tabKey === 'ifMoneyOrCredentialsShared' && '💳 MONEY/CREDENTIALS'}
+                {tabKey === 'doNow' && 'DO NOW'}
+                {tabKey === 'within30Mins' && 'WITHIN 30 MINS'}
+                {tabKey === 'today' && 'TODAY'}
+                {tabKey === 'ifMoneyOrCredentialsShared' && 'FINANCIAL / CREDENTIALS'}
               </button>
             ))}
           </div>
@@ -713,14 +759,14 @@ Please review this draft, verify all information, and file an official complaint
           {/* Immediate Action Items */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
             {(incidentGuidance?.immediateActions ? [
-              ...(activeGuidanceTab === 'all' || activeGuidanceTab === 'doNow' ? (incidentGuidance.immediateActions.doNow || []).map(a => ({ text: a, tag: '⚡ DO NOW', color: '#ff3b5c' })) : []),
-              ...(activeGuidanceTab === 'all' || activeGuidanceTab === 'within30Mins' ? (incidentGuidance.immediateActions.within30Mins || []).map(a => ({ text: a, tag: '⏱ 30 MINS', color: '#ff8c00' })) : []),
-              ...(activeGuidanceTab === 'all' || activeGuidanceTab === 'today' ? (incidentGuidance.immediateActions.today || []).map(a => ({ text: a, tag: '📅 TODAY', color: '#00d2ff' })) : []),
-              ...(activeGuidanceTab === 'all' || activeGuidanceTab === 'ifMoneyOrCredentialsShared' ? (incidentGuidance.immediateActions.ifMoneyOrCredentialsShared || []).map(a => ({ text: a, tag: '💳 FINANCIAL', color: '#ffd700' })) : [])
+              ...(activeGuidanceTab === 'all' || activeGuidanceTab === 'doNow' ? (incidentGuidance.immediateActions.doNow || []).map(a => ({ text: a, tag: 'DO NOW', color: '#ff3b5c' })) : []),
+              ...(activeGuidanceTab === 'all' || activeGuidanceTab === 'within30Mins' ? (incidentGuidance.immediateActions.within30Mins || []).map(a => ({ text: a, tag: '30 MINS', color: '#ff8c00' })) : []),
+              ...(activeGuidanceTab === 'all' || activeGuidanceTab === 'today' ? (incidentGuidance.immediateActions.today || []).map(a => ({ text: a, tag: 'TODAY', color: '#00d2ff' })) : []),
+              ...(activeGuidanceTab === 'all' || activeGuidanceTab === 'ifMoneyOrCredentialsShared' ? (incidentGuidance.immediateActions.ifMoneyOrCredentialsShared || []).map(a => ({ text: a, tag: 'FINANCIAL', color: '#ffd700' })) : [])
             ] : [
-              { text: 'Terminate the call immediately. Do not disclose OTPs or passwords.', tag: '⚡ DO NOW', color: '#ff3b5c' },
-              { text: 'Call 1930 to alert the National Cybercrime Reporting Portal if money was transferred.', tag: '⏱ 30 MINS', color: '#ff8c00' },
-              { text: 'File a formal complaint with audio hash at cybercrime.gov.in.', tag: '📅 TODAY', color: '#00d2ff' }
+              { text: 'Terminate the call immediately. Do not disclose OTPs or passwords.', tag: 'DO NOW', color: '#ff3b5c' },
+              { text: 'Call 1930 to alert the National Cybercrime Reporting Portal if money was transferred.', tag: '30 MINS', color: '#ff8c00' },
+              { text: 'File a formal complaint with audio hash at cybercrime.gov.in.', tag: 'TODAY', color: '#00d2ff' }
             ]).map((item, idx) => (
               <div key={idx} style={{
                 background: 'rgba(255,255,255,0.03)',
@@ -748,8 +794,28 @@ Please review this draft, verify all information, and file an official complaint
             ))}
           </div>
 
-          {/* Generate Complaint Draft Button */}
-          <div style={{ textAlign: 'center', marginTop: '10px' }}>
+          {/* Generate Complaint Draft & PDF Buttons */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap', marginTop: '10px' }}>
+            <button
+              onClick={handleDownloadPdf}
+              style={{
+                background: 'linear-gradient(135deg, #0b1d3a, #1e3a8a)',
+                color: '#fff',
+                border: '1px solid #3b82f6',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                fontSize: '0.95rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 4px 16px rgba(11, 29, 58, 0.6)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                letterSpacing: '0.02em'
+              }}
+            >
+              {downloadingPdf ? 'Generating Official Dossier...' : 'Download Official NCRP / Police FIR Report (PDF)'}
+            </button>
             <button
               onClick={() => setShowComplaintModal(true)}
               style={{
@@ -764,7 +830,7 @@ Please review this draft, verify all information, and file an official complaint
                 boxShadow: '0 4px 16px rgba(0, 210, 255, 0.4)'
               }}
             >
-              📝 View & Copy Official Incident Complaint Draft
+              View & Copy Official Incident Complaint Draft
             </button>
           </div>
         </div>
@@ -804,7 +870,7 @@ Please review this draft, verify all information, and file an official complaint
               alignItems: 'center'
             }}>
               <div style={{ fontWeight: 800, color: '#00d2ff', fontSize: '1.1rem' }}>
-                📄 Official Incident Complaint Draft (cybercrime.gov.in / 1930)
+                Official Incident Complaint Draft (cybercrime.gov.in / 1930)
               </div>
               <button
                 onClick={() => setShowComplaintModal(false)}
@@ -830,7 +896,7 @@ Please review this draft, verify all information, and file an official complaint
                 fontSize: '0.8rem',
                 marginBottom: '12px'
               }}>
-                ⚠️ <strong>DRAFT FOR USER REVIEW — NOT LEGAL ADVICE.</strong> Verify accuracy before submitting to NCRP or your bank.
+                <strong>DRAFT FOR USER REVIEW — NOT LEGAL ADVICE.</strong> Verify accuracy before submitting to NCRP or your bank.
               </div>
 
               <pre style={{
@@ -852,8 +918,28 @@ Please review this draft, verify all information, and file an official complaint
               borderTop: '1px solid rgba(255,255,255,0.1)',
               display: 'flex',
               justifyContent: 'flex-end',
-              gap: '12px'
+              gap: '12px',
+              flexWrap: 'wrap'
             }}>
+              <button
+                onClick={handleDownloadPdf}
+                style={{
+                  background: 'linear-gradient(135deg, #0f172a, #1e3a8a)',
+                  color: '#fbbf24',
+                  border: '1px solid #3b82f6',
+                  padding: '10px 18px',
+                  borderRadius: '6px',
+                  fontWeight: 800,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 14px rgba(30, 58, 138, 0.5)'
+                }}
+              >
+                {downloadingPdf ? 'Generating Dossier...' : 'Download Official NCRP / Police FIR Report (PDF)'}
+              </button>
               <button
                 onClick={() => copyToClipboard(effectiveComplaintDraft)}
                 style={{
@@ -867,7 +953,7 @@ Please review this draft, verify all information, and file an official complaint
                   cursor: 'pointer'
                 }}
               >
-                {copiedToast ? '✅ Copied to Clipboard!' : '📋 Copy Draft to Clipboard'}
+                {copiedToast ? 'Copied to Clipboard' : 'Copy Draft to Clipboard'}
               </button>
               <button
                 onClick={() => setShowComplaintModal(false)}
@@ -893,15 +979,28 @@ Please review this draft, verify all information, and file an official complaint
       <div className="dashboard-footer-actions">
         <button
           className="report-download-btn"
+          style={{
+            background: 'linear-gradient(135deg, #0f172a, #1e3a8a)',
+            color: '#fbbf24',
+            fontWeight: 800,
+            border: '1px solid #3b82f6',
+            boxShadow: '0 4px 14px rgba(30, 58, 138, 0.4)'
+          }}
+          onClick={handleDownloadPdf}
+        >
+          {downloadingPdf ? 'Generating Dossier...' : 'Download Official NCRP / Police FIR Report (PDF)'}
+        </button>
+        <button
+          className="report-download-btn"
           onClick={() => onExportReport && onExportReport(analysis.analysisId || analysis.id, 'json')}
         >
-          📄 Export Forensic Report (JSON)
+          Export Forensic Report (JSON)
         </button>
         <button
           className="report-download-btn report-download-btn-alt"
           onClick={() => onExportReport && onExportReport(analysis.analysisId || analysis.id, 'markdown')}
         >
-          📝 Export Summary Report (Markdown)
+          Export Summary Report (Markdown)
         </button>
       </div>
     </div>

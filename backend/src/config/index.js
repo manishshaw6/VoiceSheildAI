@@ -97,7 +97,7 @@ export const config = {
     primaryStt: (process.env.PRIMARY_STT || 'faster_whisper').toLowerCase(),
     primarySpeakerProvider: (process.env.PRIMARY_SPEAKER_PROVIDER || 'ecapa').toLowerCase(),
     enableAssemblyAiFallback: process.env.ENABLE_ASSEMBLYAI_FALLBACK === 'true',
-    enableFingerprintFallback: process.env.ENABLE_FINGERPRINT_FALLBACK === 'true'
+    enableFingerprintFallback: process.env.ENABLE_FINGERPRINT_FALLBACK !== 'false'
   },
 
   sarvam: {

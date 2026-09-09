@@ -13,6 +13,7 @@ export default function AudioAnalyzer({ onAnalysisComplete, onAnalysisReset, sel
   const [speakerId, setSpeakerId] = useState(selectedSpeakerId || '');
   const [recordingStream, setRecordingStream] = useState(null);
   const [showMicWorkspace, setShowMicWorkspace] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -22,13 +23,14 @@ export default function AudioAnalyzer({ onAnalysisComplete, onAnalysisReset, sel
     if (selectedSpeakerId) setSpeakerId(selectedSpeakerId);
   }, [selectedSpeakerId]);
 
-  const handleFileChange = (e) => {
-    const selected = e.target.files[0];
+  const processSelectedFile = (selected) => {
     if (!selected) return;
 
     const validExtensions = ['.wav', '.mp3', '.m4a', '.webm', '.ogg'];
     const hasValidExt = validExtensions.some(ext => selected.name.toLowerCase().endsWith(ext));
-    if (!hasValidExt) {
+    const isAudioMime = selected.type && (selected.type.startsWith('audio/') || selected.type === 'application/octet-stream');
+
+    if (!hasValidExt && !isAudioMime) {
       setErrorMessage('Unsupported file format. Please upload WAV, MP3, M4A, WEBM, or OGG.');
       return;
     }
@@ -44,6 +46,32 @@ export default function AudioAnalyzer({ onAnalysisComplete, onAnalysisReset, sel
     setAudioUrl(URL.createObjectURL(selected));
     setRecordingState('idle');
     if (onAnalysisReset) onAnalysisReset();
+  };
+
+  const handleFileChange = (e) => {
+    const selected = e.target.files[0];
+    processSelectedFile(selected);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer?.files && e.dataTransfer.files[0]) {
+      processSelectedFile(e.dataTransfer.files[0]);
+    }
   };
 
   const startRecording = async () => {
@@ -136,6 +164,7 @@ export default function AudioAnalyzer({ onAnalysisComplete, onAnalysisReset, sel
       const data = await response.json();
       setRecordingState('completed');
       setCurrentStep('Analysis complete!');
+      setShowMicWorkspace(false);
       if (onAnalysisComplete) {
         onAnalysisComplete(data);
       }
@@ -176,25 +205,37 @@ export default function AudioAnalyzer({ onAnalysisComplete, onAnalysisReset, sel
       </div>
 
       {activeMode === 'upload' && (
-        <div className="upload-dropzone">
+        <div
+          className={`upload-dropzone ${isDragging ? 'dropzone-dragging' : ''}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          style={isDragging ? { borderColor: '#00e5a3', background: 'rgba(0, 229, 163, 0.1)', transform: 'scale(1.01)' } : {}}
+        >
           <input
             type="file"
             id="audio-file-input"
-            accept=".wav,.mp3,.m4a,.webm,.ogg"
+            accept=".wav,.mp3,.mpeg,.mpg,.mpga,.m4a,.webm,.ogg,audio/*,video/mpeg,video/webm"
             onChange={handleFileChange}
             className="file-hidden-input"
           />
-          <label htmlFor="audio-file-input" className="dropzone-label">
-            <div className="upload-icon-large">⚡</div>
+          <label htmlFor="audio-file-input" className="dropzone-label" style={{ cursor: 'pointer' }}>
+            <div className="upload-icon-large" style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+            </div>
             <div className="dropzone-title">
-              {file ? file.name : 'Drag & drop audio file or Click to Browse'}
+              {file ? `Selected: ${file.name}` : isDragging ? 'Release to upload audio file' : 'Drag & drop MP3 / WAV audio here or Click to Browse'}
             </div>
             <div className="dropzone-hint">
-              Supported formats: WAV, MP3, M4A, WEBM, OGG (Max: 25MB)
+              Supported formats: MP3, WAV, M4A, WEBM, OGG, MPEG (Max: 25MB)
             </div>
             {file && (
               <div className="file-size-tag">
-                {(file.size / (1024 * 1024)).toFixed(2)} MB
+                {(file.size / (1024 * 1024)).toFixed(2)} MB · Click or drag to replace
               </div>
             )}
           </label>
@@ -219,7 +260,11 @@ export default function AudioAnalyzer({ onAnalysisComplete, onAnalysisReset, sel
                 className={`mic-action-btn ${isRecording ? 'recording' : ''}`}
                 onClick={isRecording ? stopRecording : startRecording}
               >
-                {isRecording ? '⏹️' : '🎙️'}
+                {isRecording ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2" /></svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                )}
               </button>
             </div>
             <div className="recording-timer">

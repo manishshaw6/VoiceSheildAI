@@ -12,6 +12,8 @@ import { InMemorySessionManager } from '../sessions/sessionManager.js';
 import { CallState, DomainEvent } from '../core/constants.js';
 import eventBus from '../events/eventBus.js';
 import { createLogger } from '../core/logger.js';
+import { orchestrateAnalysis } from '../services/analysisOrchestrator.js';
+import { ensurePcmWav } from '../audio/preprocessor.js';
 
 const logger = createLogger({ component: 'live_analysis' });
 const sessions = new InMemorySessionManager({ ewmaAlpha: config.ewmaAlpha });
@@ -19,16 +21,19 @@ const sessions = new InMemorySessionManager({ ewmaAlpha: config.ewmaAlpha });
 function liveRisk(session) {
   const rules = analyzeThreatRules(session.transcript);
   const deepfake = session.deepfake || null;
-  const risk = calculateFusedRisk({ deepfakeResult: deepfake, threatRulesResult: rules });
+  const speaker = session.speakerResult || null;
+  const risk = calculateFusedRisk({ deepfakeResult: deepfake, threatRulesResult: rules, speakerResult: speaker });
   const elapsedSec = Number(((Date.now() - new Date(session.startedAt).getTime()) / 1000).toFixed(1));
   const temporal = sessions.updateRisk(session.callId, risk.score, elapsedSec);
 
-  // Fast threat escalation: When high-severity fraud keywords are detected in the live call,
+  // Fast threat escalation: When high-severity fraud keywords or voice clone patterns are detected,
   // ensure risk surges immediately without lag
   const hasCriticalIndicators = rules.indicators.some(i =>
     ['OTP_REQUEST', 'CREDENTIAL_REQUEST', 'REMOTE_ACCESS', 'PAYMENT_FRAUD'].includes(i.type) || i.weight >= 40
   );
-  if (hasCriticalIndicators || rules.score >= 40) {
+  const hasVoiceThreat = (deepfake?.score != null && deepfake.score >= 0.70) || risk.cloneSuspicion;
+
+  if (hasCriticalIndicators || hasVoiceThreat || rules.score >= 40) {
     const rawElevated = Math.max(risk.score, rules.score);
     temporal.currentRisk = Math.max(temporal.currentRisk, rawElevated);
     temporal.peakRisk = Math.max(temporal.peakRisk, temporal.currentRisk);
@@ -45,6 +50,7 @@ export function setupLiveAnalysisWebSocket(wss) {
     const callId = `call_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
     const session = sessions.create(callId, { connectionId: crypto.randomUUID() });
     session.deepfake = null;
+    session.speakerResult = null;
     session.isAnalyzing = false;
     session.isFinished = false;
     const send = (type, data) => {
@@ -65,10 +71,19 @@ export function setupLiveAnalysisWebSocket(wss) {
         if (session.state === CallState.RECEIVING_AUDIO || session.state === CallState.MONITORING)
           sessions.transition(callId, CallState.ANALYZING);
         const fullBuffer = Buffer.concat(session.audioChunks);
-        if (fullBuffer.length >= config.ws.minAudioBytes && !session.deepfake) {
-          tempPath = path.join(config.tempDir, `live_${crypto.randomUUID()}.webm`);
-          await fs.writeFile(tempPath, fullBuffer);
-          session.deepfake = await getIntelligenceProvider('deepfake').analyze(tempPath);
+        if (fullBuffer.length >= config.ws.minAudioBytes) {
+          if (!session.deepfake) {
+            tempPath = path.join(config.tempDir, `live_${crypto.randomUUID()}.webm`);
+            await fs.writeFile(tempPath, fullBuffer);
+            session.deepfake = await getIntelligenceProvider('deepfake').analyze(tempPath);
+          }
+          if (session.speakerProfile && !session.speakerResult) {
+            session.speakerResult = await getIntelligenceProvider('speaker').verify({
+              audioBuffer: ensurePcmWav(fullBuffer),
+              targetSpeakerId: session.speakerProfile,
+              threshold: config.speaker.matchThreshold
+            });
+          }
         }
         const update = liveRisk(session);
         if (session.state === CallState.ANALYZING) sessions.transition(callId,
@@ -127,15 +142,60 @@ export function setupLiveAnalysisWebSocket(wss) {
         if (session.state === CallState.ANALYZING) sessions.transition(callId, CallState.MONITORING);
         sessions.transition(callId, CallState.ENDED);
       }
+
+      let finalAnalysis = null;
+      const fullBuffer = Buffer.concat(session.audioChunks);
+      if (fullBuffer.length >= 1024) {
+        const tempPath = path.join(config.tempDir, `live_post_${callId}.webm`);
+        try {
+          await fs.writeFile(tempPath, fullBuffer);
+          finalAnalysis = await orchestrateAnalysis({
+            analysisId: callId,
+            requestId: `req_${callId}`,
+            filePath: tempPath,
+            audioBuffer: fullBuffer,
+            originalName: `live_call_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`,
+            targetSpeakerId: session.speakerProfile || null
+          });
+        } catch (err) {
+          logger.error('live.post_orchestration_failed', { call_id: callId, error: err.message });
+        } finally {
+          await fs.unlink(tempPath).catch(() => {});
+        }
+      }
+
+      const storedScore = finalAnalysis?.risk?.score ?? update.risk.score;
+      const storedLevel = finalAnalysis?.risk?.level ?? update.risk.level;
+      const storedTranscript = finalAnalysis?.transcription?.text || session.transcript || '';
+      const storedDeepfake = finalAnalysis?.deepfake?.score != null
+        ? Math.round(finalAnalysis.deepfake.score * 100)
+        : (session.deepfake?.score == null ? null : Math.round(session.deepfake.score * 100));
+      const storedScam = finalAnalysis?.context?.overallContextRisk != null
+        ? Math.round(finalAnalysis.context.overallContextRisk * 100)
+        : update.rules.score;
+      const storedSpeaker = finalAnalysis?.speaker?.similarity != null
+        ? Math.round(finalAnalysis.speaker.similarity * 100)
+        : null;
+      const storedCategory = finalAnalysis?.context?.category || update.rules.indicators[0]?.label || 'Live Call';
+      const storedIndicators = JSON.stringify(finalAnalysis?.indicators || update.rules.indicators);
+      const storedRaw = JSON.stringify(finalAnalysis || { risk: update.risk, temporalRisk: update.temporal });
+
       await query.run(`INSERT INTO analyses (id, audio_filename, duration, transcript, deepfake_score,
-        scam_score, final_score, risk_level, threat_category, indicators, raw_result)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [callId, 'live_recording.webm', update.elapsedSec,
-        session.transcript, session.deepfake?.score == null ? null : Math.round(session.deepfake.score * 100),
-        update.rules.score, update.risk.score, update.risk.level, update.rules.indicators[0]?.label || 'Live Call',
-        JSON.stringify(update.rules.indicators), JSON.stringify({ risk: update.risk, temporalRisk: update.temporal })]);
-      send('session_complete', { sessionId: callId, duration: update.elapsedSec, finalScore: update.risk.score,
-        finalLevel: update.risk.level, indicators: update.rules.indicators, temporalRisk: update.temporal });
-      eventBus.emit(DomainEvent.CALL_ENDED, { callId, data: { risk: update.risk } });
+        scam_score, speaker_score, final_score, risk_level, threat_category, indicators, raw_result)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [callId, 'live_recording.webm', finalAnalysis?.duration || update.elapsedSec,
+        storedTranscript, storedDeepfake, storedScam, storedSpeaker, storedScore, storedLevel, storedCategory,
+        storedIndicators, storedRaw]);
+
+      send('session_complete', {
+        sessionId: callId,
+        duration: finalAnalysis?.duration || update.elapsedSec,
+        finalScore: storedScore,
+        finalLevel: storedLevel,
+        indicators: finalAnalysis?.indicators || update.rules.indicators,
+        temporalRisk: update.temporal,
+        analysis: finalAnalysis
+      });
+      eventBus.emit(DomainEvent.CALL_ENDED, { callId, data: { risk: finalAnalysis?.risk || update.risk } });
     }
 
     ws.on('close', () => {

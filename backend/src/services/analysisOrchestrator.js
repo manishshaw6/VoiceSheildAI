@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { assessAudioQuality } from '../audio/qualityGate.js';
-import { preprocessWav } from '../audio/preprocessor.js';
+import { preprocessWav, ensurePcmWav } from '../audio/preprocessor.js';
 import { voiceActivityDetector } from '../audio/vadService.js';
 import { createForensicRecord } from '../audio/hashService.js';
 import { getIntelligenceProvider } from '../integrations/providers.js';
@@ -112,7 +112,7 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
   const [deepfake, transcription, speaker] = await Promise.all([
     deepfakeProvider.analyze(filePath).then(value => { telemetry.deepfakeMs = elapsed(stageStarts.deepfake); return value; }),
     transcriptionProvider.transcribe(filePath, { languageHint }).then(value => { telemetry.whisperMs = elapsed(stageStarts.stt); telemetry.sttMs = telemetry.whisperMs; return value; }),
-    speakerProvider.verify({ audioBuffer, targetSpeakerId, threshold: config.speaker.matchThreshold })
+    speakerProvider.verify({ audioBuffer: ensurePcmWav(audioBuffer), targetSpeakerId, threshold: config.speaker.matchThreshold })
       .then(value => { telemetry.speakerMs = elapsed(stageStarts.speaker); return value; })
   ]);
 
@@ -132,7 +132,7 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
     category: speaker.match ? EvidenceCategory.SPEAKER_MATCH : EvidenceCategory.SPEAKER_MISMATCH,
     source: speaker.provider || 'speaker_verification', score: speaker.match ? speaker.similarity : 1 - speaker.similarity,
     confidence: speaker.confidence ?? 0.8, reliability: 0.85, quality: audioQuality.qualityScore,
-    weight: speaker.match ? 0 : config.riskWeights.speaker, severity: speaker.match ? Severity.LOW : Severity.HIGH,
+    weight: config.riskWeights.speaker, severity: speaker.match ? Severity.LOW : Severity.HIGH,
     explanation: speaker.match ? 'The voice matched the enrolled speaker.' : 'The voice did not match the enrolled speaker.' }));
 
   const fusionStart = performance.now();

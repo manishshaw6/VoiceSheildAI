@@ -10,9 +10,10 @@ import LiveShieldPage from './pages/LiveShieldPage';
 import SpeakerGuardPage from './pages/SpeakerGuardPage';
 import AuditVaultPage from './pages/AuditVaultPage';
 import AboutPage from './pages/AboutPage';
+import { generateCyberCrimePdfReport } from './services/pdfReportGenerator';
 
 function App() {
-  const handleExportReport = async (analysisId, format = 'json') => {
+  const handleExportReport = async (analysisId, format = 'pdf') => {
     try {
       const res = await fetch(`/api/analysis/${analysisId}/report`);
       const data = await res.json();
@@ -20,7 +21,9 @@ function App() {
 
       const report = data.report;
 
-      if (format === 'markdown') {
+      if (format === 'pdf') {
+        generateCyberCrimePdfReport(report);
+      } else if (format === 'markdown') {
         const md = generateMarkdownReport(report);
         const blob = new Blob([md], { type: 'text/markdown' });
         downloadBlob(blob, `VoxShieldAI_Report_${analysisId}.md`);
@@ -61,7 +64,7 @@ function App() {
       `| Risk Score | ${r.risk?.score ?? 'N/A'} / 100 |`,
       `| Risk Level | ${r.risk?.level ?? 'N/A'} |`,
       `| Threat Category | ${r.risk?.threatCategory ?? 'N/A'} |`,
-      `| Voice Clone Suspicion | ${r.risk?.voiceCloneSuspicion ? '⚠️ YES' : 'No'} |`,
+      `| Voice Clone Suspicion | ${r.risk?.voiceCloneSuspicion ? 'YES (HIGH RISK)' : 'No'} |`,
       '',
       '## Voice Authenticity Evidence',
       '',
@@ -133,7 +136,7 @@ function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/scanner" element={<ScannerPage onExportReport={handleExportReport} />} />
-            <Route path="/live" element={<LiveShieldPage />} />
+            <Route path="/live" element={<LiveShieldPage onExportReport={handleExportReport} />} />
             <Route path="/speaker-guard" element={<SpeakerGuardPage />} />
             <Route path="/history" element={<AuditVaultPage onExportReport={handleExportReport} />} />
             <Route path="/about" element={<AboutPage />} />

@@ -311,7 +311,36 @@ export async function analyzeConversationIntelligence(transcriptText, { segments
 
   const promptContent = `${INTELLIGENCE_SYSTEM_PROMPT}\n\nTRANSCRIPT TO ANALYZE:\n"""${transcriptText}"""\n\nOPTIONAL SEGMENTS:\n${JSON.stringify(segments.slice(0, 30))}`;
 
-  // 1. Try Gemini
+  // 1. Try Groq first with verified ultra-fast models
+  const groq = getGroqClient();
+  if (groq) {
+    const candidateGroqModels = ['openai/gpt-oss-20b', 'groq/compound-mini', 'qwen/qwen3.6-27b'];
+    for (const model of candidateGroqModels) {
+      try {
+        console.log(`[ConvIntelligence] Invoking Groq model (${model})...`);
+        const completion = await withTimeout(() => groq.chat.completions.create({
+          messages: [
+            { role: 'system', content: INTELLIGENCE_SYSTEM_PROMPT },
+            { role: 'user', content: `TRANSCRIPT TO ANALYZE:\n"""${transcriptText}"""\n\nOPTIONAL SEGMENTS:\n${JSON.stringify(segments.slice(0, 30))}` }
+          ],
+          model,
+          response_format: { type: 'json_object' },
+          max_tokens: 1800
+        }), config.timeouts.llm, `Groq conversation analysis (${model})`);
+
+        const text = completion.choices[0]?.message?.content || '{}';
+        const parsed = parseAndRepairJson(text);
+        const validated = validateAndNormalizeIntelligence(parsed);
+        validated.provider = `groq (${model})`;
+        console.log(`[ConvIntelligence] Groq success with ${model}: ${validated.threat_assessment.threat_category} (Score: ${validated.threat_assessment.threat_score})`);
+        return validated;
+      } catch (err) {
+        console.warn(`[ConvIntelligence] Groq model ${model} error:`, err.message);
+      }
+    }
+  }
+
+  // 2. Try Gemini fallback
   const gemini = getGeminiClient();
   if (gemini) {
     try {
@@ -327,32 +356,7 @@ export async function analyzeConversationIntelligence(transcriptText, { segments
       console.log(`[ConvIntelligence] Gemini success: ${validated.threat_assessment.threat_category} (Score: ${validated.threat_assessment.threat_score})`);
       return validated;
     } catch (err) {
-      console.warn('[ConvIntelligence] Gemini analysis error, falling back to Groq:', err.message);
-    }
-  }
-
-  // 2. Try Groq Fallback
-  const groq = getGroqClient();
-  if (groq) {
-    try {
-      console.log('[ConvIntelligence] Invoking Groq fallback model...');
-      const completion = await withTimeout(() => groq.chat.completions.create({
-        messages: [
-          { role: 'system', content: INTELLIGENCE_SYSTEM_PROMPT },
-          { role: 'user', content: `TRANSCRIPT TO ANALYZE:\n"""${transcriptText}"""\n\nOPTIONAL SEGMENTS:\n${JSON.stringify(segments.slice(0, 30))}` }
-        ],
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 950
-      }), config.timeouts.llm, 'Groq conversation analysis');
-
-      const text = completion.choices[0]?.message?.content || '{}';
-      const parsed = parseAndRepairJson(text);
-      const validated = validateAndNormalizeIntelligence(parsed);
-      validated.provider = 'groq';
-      console.log(`[ConvIntelligence] Groq success: ${validated.threat_assessment.threat_category} (Score: ${validated.threat_assessment.threat_score})`);
-      return validated;
-    } catch (err) {
-      console.error('[ConvIntelligence] Groq fallback error:', err.message);
+      console.warn('[ConvIntelligence] Gemini analysis error:', err.message);
     }
   }
 

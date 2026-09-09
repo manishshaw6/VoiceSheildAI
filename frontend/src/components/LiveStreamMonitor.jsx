@@ -23,6 +23,7 @@ export default function LiveStreamMonitor({
   const [wsStatus, setWsStatus] = useState('Disconnected');
   const [liveAudioStream, setLiveAudioStream] = useState(null);
   const [isLiveWorkspaceOpen, setIsLiveWorkspaceOpen] = useState(false);
+  const [isTerminating, setIsTerminating] = useState(false);
 
   const wsRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -197,8 +198,13 @@ export default function LiveStreamMonitor({
           }
 
           if (data.type === 'session_complete') {
-            stopLiveMonitor(false);
-
+            setIsTerminating(false);
+            setIsStreaming(false);
+            setIsConnected(false);
+            setIsLiveWorkspaceOpen(false);
+            if (wsRef.current) {
+              try { wsRef.current.close(); } catch (_) {}
+            }
             if (onSessionComplete) {
               onSessionComplete(data);
             }
@@ -215,6 +221,7 @@ export default function LiveStreamMonitor({
       socket.onclose = () => {
         setIsConnected(false);
         setIsStreaming(false);
+        setIsTerminating(false);
         setLiveAudioStream(null);
         setWsStatus('Disconnected');
 
@@ -223,7 +230,7 @@ export default function LiveStreamMonitor({
 
       socket.onerror = (err) => {
         console.error('WebSocket error:', err);
-
+        setIsTerminating(false);
         setWsStatus('Connection Error');
       };
 
@@ -233,33 +240,23 @@ export default function LiveStreamMonitor({
         err
       );
 
+      setIsTerminating(false);
       setWsStatus('Connection Error');
     }
   };
 
   const stopLiveMonitor = (notifyBackend = true) => {
-    if (
-      notifyBackend &&
-      wsRef.current &&
-      wsRef.current.readyState === WebSocket.OPEN
-    ) {
-      wsRef.current.send(
-        JSON.stringify({
-          type: 'stop'
-        })
-      );
-    }
-
+    // 1. Stop local microphone hardware immediately
     if (
       mediaRecorderRef.current &&
       mediaRecorderRef.current.state !== 'inactive'
     ) {
-      mediaRecorderRef.current.stop();
-
-      mediaRecorderRef.current.stream
-        .getTracks()
-        .forEach((track) => track.stop());
-
+      try {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream
+          .getTracks()
+          .forEach((track) => track.stop());
+      } catch (_) {}
       setLiveAudioStream(null);
     }
 
@@ -271,16 +268,32 @@ export default function LiveStreamMonitor({
 
     clearInterval(timerRef.current);
 
-    setIsStreaming(false);
-    setIsConnected(false);
-    setIsLiveWorkspaceOpen(false);
+    if (notifyBackend && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      setIsTerminating(true);
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'stop'
+        })
+      );
 
-    if (wsRef.current) {
+      // Safety timeout: if backend takes longer than 20s, force cleanup
       setTimeout(() => {
-        if (wsRef.current) {
+        setIsTerminating(false);
+        setIsStreaming(false);
+        setIsConnected(false);
+        setIsLiveWorkspaceOpen(false);
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           wsRef.current.close();
         }
-      }, 300);
+      }, 20000);
+    } else {
+      setIsTerminating(false);
+      setIsStreaming(false);
+      setIsConnected(false);
+      setIsLiveWorkspaceOpen(false);
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch (_) {}
+      }
     }
   };
 
@@ -380,8 +393,8 @@ export default function LiveStreamMonitor({
       {cloneWarning && (
         <div className="clone-alert-banner">
 
-          <span className="clone-alert-icon">
-            ⚠️
+          <span className="clone-alert-icon" style={{ fontWeight: 800, fontSize: '0.85rem' }}>
+            [!]
           </span>
 
           <span>
@@ -447,8 +460,9 @@ export default function LiveStreamMonitor({
           <button
             className="stop-stream-btn"
             onClick={() => stopLiveMonitor(true)}
+            disabled={isTerminating}
           >
-            Terminate & Save Call Session
+            {isTerminating ? '⏳ Finalizing Voice Forensics...' : '⏹️ Terminate & Save Call Session'}
           </button>
 
         )}
@@ -539,9 +553,7 @@ export default function LiveStreamMonitor({
                   ).toLowerCase()}`}
                 >
 
-                  <span className="sig-icon">
-                    🚨
-                  </span>
+                  <span className="sig-dot" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'currentColor', marginRight: 6 }} />
 
                   <span className="sig-name">
                     {sig.label || sig.type}
@@ -789,10 +801,9 @@ export default function LiveStreamMonitor({
                 onClick={() =>
                   stopLiveMonitor(true)
                 }
+                disabled={isTerminating}
               >
-
-                End and save session
-
+                {isTerminating ? '⏳ Finalizing...' : 'End and save session'}
               </button>
 
             </footer>
