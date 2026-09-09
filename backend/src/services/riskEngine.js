@@ -55,8 +55,13 @@ export function calculateFusedRisk({ evidence = null, deepfakeResult = null, sca
         reasons.push(`Fraud intent identified: ${scamResult.category}`);
     }
     if (threatRulesResult && Array.isArray(threatRulesResult.indicators)) {
+      for (const ind of threatRulesResult.indicators) {
+        const cat = ind.type;
+        const normScore = Math.min(1, ind.weight / 50);
+        addSignal(signals, cat, normScore, 0.95, 0.95, Math.max(0.40, ind.weight / 100), quality);
+      }
       addSignal(signals, 'RULE_CONTEXT', (threatRulesResult.score || 0) / 100,
-        0.95, 0.95, config.riskWeights.rules, quality);
+        0.95, 0.95, Math.max(0.40, config.riskWeights.rules), quality);
       reasons.push(...threatRulesResult.indicators.map(item => `Pattern detected: ${item.label}`));
     }
     if (speakerResult?.enrolled && speakerResult.similarity != null) {
@@ -169,6 +174,30 @@ export function calculateFusedRisk({ evidence = null, deepfakeResult = null, sca
       confidencePercent: 90
     });
     reasons.push('Social-engineering interaction: impersonation and urgency occurred together.');
+  }
+
+  // OTP + Urgency coercion interaction
+  if (otpScore >= 0.5 && urgScore >= 0.5) {
+    const otpUrgDelta = 20;
+    score = Math.min(100, score + otpUrgDelta);
+    interactionDeltas.push({
+      pattern: 'OTP_URGENCY_COERCION',
+      label: 'High-pressure OTP credential extraction',
+      points: otpUrgDelta
+    });
+    evidenceContributions.push({
+      category: 'OTP_URGENCY_COERCION',
+      label: 'High-pressure OTP extraction under urgency coercion',
+      points: otpUrgDelta,
+      scorePercent: 95,
+      confidencePercent: 95
+    });
+    reasons.push('High-pressure credential theft: OTP demand made under urgency coercion.');
+  }
+
+  // High-severity deterministic fraud patterns floor
+  if (threatRulesResult && threatRulesResult.score >= 50) {
+    score = Math.max(score, Math.min(100, Math.round(threatRulesResult.score)));
   }
 
   // Active Fraud Intent Floor: Severe financial scam intent from an unverified/mismatched identity

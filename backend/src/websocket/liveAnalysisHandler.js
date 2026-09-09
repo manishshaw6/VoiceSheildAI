@@ -22,6 +22,18 @@ function liveRisk(session) {
   const risk = calculateFusedRisk({ deepfakeResult: deepfake, threatRulesResult: rules });
   const elapsedSec = Number(((Date.now() - new Date(session.startedAt).getTime()) / 1000).toFixed(1));
   const temporal = sessions.updateRisk(session.callId, risk.score, elapsedSec);
+
+  // Fast threat escalation: When high-severity fraud keywords are detected in the live call,
+  // ensure risk surges immediately without lag
+  const hasCriticalIndicators = rules.indicators.some(i =>
+    ['OTP_REQUEST', 'CREDENTIAL_REQUEST', 'REMOTE_ACCESS', 'PAYMENT_FRAUD'].includes(i.type) || i.weight >= 40
+  );
+  if (hasCriticalIndicators || rules.score >= 40) {
+    const rawElevated = Math.max(risk.score, rules.score);
+    temporal.currentRisk = Math.max(temporal.currentRisk, rawElevated);
+    temporal.peakRisk = Math.max(temporal.peakRisk, temporal.currentRisk);
+  }
+
   risk.score = temporal.currentRisk;
   risk.level = temporal.currentRisk >= 80 ? 'CRITICAL' : temporal.currentRisk >= 60 ? 'HIGH' : temporal.currentRisk >= 30 ? 'SUSPICIOUS' : 'SAFE';
   risk.trend = temporal.trend;
