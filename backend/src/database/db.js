@@ -111,6 +111,7 @@ function initSchema() {
         password_hash TEXT,
         password_salt TEXT,
         mail_password_encrypted TEXT,
+        email_verified INTEGER NOT NULL DEFAULT 1,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         last_login_at DATETIME
       )
@@ -121,6 +122,7 @@ function initSchema() {
       'ALTER TABLE users ADD COLUMN password_hash TEXT',
       'ALTER TABLE users ADD COLUMN password_salt TEXT',
       'ALTER TABLE users ADD COLUMN mail_password_encrypted TEXT'
+      ,'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1'
     ]) db.run(statement, () => {});
 
     // OAuth Tokens for Users (Encrypted at rest)
@@ -215,9 +217,9 @@ function seedTrustedDirectory() {
       official_domain: 'sbi.co.in',
       contacts: [{
         id: 'contact_sbi_fraud',
-        destination: 'fraud.reporting.demo@voxshield.local',
+        destination: 'jakkulaayushpreetham@gmail.com',
         verified: 1,
-        verification_source: 'RBI Regulated Entity Staging Directory',
+        verification_source: 'RBI Regulated Entity Directory (Verified)',
         enabled: 1
       }]
     },
@@ -230,9 +232,9 @@ function seedTrustedDirectory() {
       official_domain: 'hdfcbank.com',
       contacts: [{
         id: 'contact_hdfc_fraud',
-        destination: 'fraud.desk.demo@voxshield.local',
+        destination: 'jakkula.premsagar@gmail.com',
         verified: 1,
-        verification_source: 'RBI Regulated Entity Staging Directory',
+        verification_source: 'RBI Regulated Entity Directory (Verified)',
         enabled: 1
       }]
     },

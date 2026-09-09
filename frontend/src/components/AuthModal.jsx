@@ -36,9 +36,15 @@ export default function AuthModal() {
     try {
       setLoading(true);
       setError(null);
-      await login({ email: signInEmail, password: signInPassword });
+      // Auto-delegate demo investigator email to demoLogin for convenience
+      if (signInEmail.trim().toLowerCase().includes('demo.investigator') || signInEmail.trim().toLowerCase().includes('investigator.demo')) {
+        await demoLogin();
+      } else {
+        await login({ email: signInEmail, password: signInPassword });
+      }
     } catch (err) {
-      setError(err.message || 'Failed to authenticate credentials.');
+      const msg = typeof err === 'string' ? err : err?.message;
+      setError(typeof msg === 'string' ? msg : 'Invalid email address or password.');
     } finally {
       setLoading(false);
     }
@@ -63,7 +69,8 @@ export default function AuthModal() {
         password: signUpPassword
       });
     } catch (err) {
-      setError(err.message || 'Failed to register account.');
+      const msg = typeof err === 'string' ? err : err?.message;
+      setError(typeof msg === 'string' ? msg : 'Failed to register account.');
     } finally {
       setLoading(false);
     }

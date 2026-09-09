@@ -161,7 +161,8 @@ export const config = {
   // Operational notification relay (for system alerts, NOT user fraud complaints)
   sendgrid: {
     apiKey: process.env.SENDGRID_API_KEY || '',
-    fromEmail: process.env.SENDGRID_FROM_EMAIL || 'alerts@voxshield.ai'
+    fromEmail: process.env.SENDGRID_FROM_EMAIL || '',
+    fromName: process.env.SENDGRID_FROM_NAME || 'VoxShield Fraud Intelligence'
   },
 
   // Controlled developer test recipient for development/staging validation
@@ -181,6 +182,9 @@ export function validateConfig() {
   }
   if (!config.geminiApiKey && !config.groqApiKey) {
     warnings.push('Neither GEMINI_API_KEY nor GROQ_API_KEY is configured. LLM scam analysis will be unavailable.');
+  }
+  if (!config.sendgrid.apiKey || !config.sendgrid.fromEmail) {
+    warnings.push('SENDGRID_API_KEY and SENDGRID_FROM_EMAIL are not configured. Incident email delivery is unavailable.');
   }
 
   // Validate weight sum is approximately 1.0

@@ -81,11 +81,11 @@ export function calculateFusedRisk({ evidence = null, deepfakeResult = null, sca
     weighted += signal.score * appliedWeight;
     effectiveWeight += appliedWeight;
     confidenceSum += signal.confidence * signal.weight;
-    components[name] = Math.round(signal.score * 100);
+    components[name] = Number((signal.score * 100).toFixed(2));
     weightsUsed[name] = Number(appliedWeight.toFixed(4));
   }
 
-  const baseScore = effectiveWeight ? Math.round((weighted / effectiveWeight) * 100) : 0;
+  const baseScore = effectiveWeight ? Number(((weighted / effectiveWeight) * 100).toFixed(2)) : 0;
   let score = baseScore;
   const evidenceContributions = [];
   const interactionDeltas = [];
@@ -94,14 +94,14 @@ export function calculateFusedRisk({ evidence = null, deepfakeResult = null, sca
     if (effectiveWeight > 0 && signal.score > 0) {
       const evidenceFactor = signal.confidence * signal.reliability * signal.quality;
       const appliedWeight = signal.weight * evidenceFactor;
-      const points = Math.round((signal.score * appliedWeight / effectiveWeight) * 100);
+      const points = Number(((signal.score * appliedWeight / effectiveWeight) * 100).toFixed(2));
       if (points > 0) {
         evidenceContributions.push({
           category: name,
           label: formatSignalLabel(name),
           points,
-          scorePercent: Math.round(signal.score * 100),
-          confidencePercent: Math.round(signal.confidence * 100)
+          scorePercent: Number((signal.score * 100).toFixed(2)),
+          confidencePercent: Number((signal.confidence * 100).toFixed(2))
         });
       }
     }

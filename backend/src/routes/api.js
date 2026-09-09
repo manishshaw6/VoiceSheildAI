@@ -5,7 +5,7 @@
 import { Router } from 'express';
 import { uploadAudio } from '../middleware/uploadMiddleware.js';
 import { getHealth, getReadiness, getProviderStatus, getPreflight } from '../controllers/healthController.js';
-import { analyzeAudio } from '../controllers/audioController.js';
+import { analyzeAudio, getAnalysisForensics } from '../controllers/audioController.js';
 import { enroll, verify, listProfiles } from '../controllers/speakerController.js';
 import { getHistory, getHistoryById, deleteHistory, getSecurityReport } from '../controllers/historyController.js';
 import { getIncident, getAuditTrail } from '../controllers/securityController.js';
@@ -49,6 +49,7 @@ router.delete('/history/:id', deleteHistory);
 
 // Security Reports (Legacy & Native)
 router.get('/analysis/:id/report', getSecurityReport);
+router.get('/analysis/:id/forensics', getAnalysisForensics);
 router.get('/incidents/:id', getIncident);
 router.get('/audit', getAuditTrail);
 

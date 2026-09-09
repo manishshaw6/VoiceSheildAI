@@ -6,9 +6,11 @@ from fastapi import FastAPI, File, UploadFile
 
 from services.whisper_service import WhisperService
 from services.speaker_service import SpeakerService
+from services.forensic_service import ForensicService
 
 whisper = WhisperService()
 ecapa = SpeakerService()
+forensics = ForensicService()
 
 @asynccontextmanager
 async def lifespan(_app):
@@ -52,3 +54,18 @@ async def speaker_embedding(audio: UploadFile = File(...)):
         try: return await asyncio.wait_for(asyncio.to_thread(ecapa.embedding, path), timeout=settings.inference_timeout_seconds)
         except asyncio.TimeoutError: return {'available': False, 'provider': 'speechbrain_ecapa_tdnn', 'reason': 'provider_timeout'}
     finally: path.unlink(missing_ok=True)
+
+@app.post('/internal/forensics/extract')
+async def extract_forensics(audio: UploadFile = File(...)):
+    path = await persist_upload(audio)
+    try:
+        from config import settings
+        try:
+            res = await asyncio.wait_for(asyncio.to_thread(forensics.extract, path), timeout=settings.inference_timeout_seconds)
+            return {'available': True, 'provider': 'voxshield_forensic_dsp', **res}
+        except asyncio.TimeoutError:
+            return {'available': False, 'provider': 'voxshield_forensic_dsp', 'reason': 'provider_timeout'}
+        except Exception as e:
+            return {'available': False, 'provider': 'voxshield_forensic_dsp', 'reason': str(e)}
+    finally: path.unlink(missing_ok=True)
+

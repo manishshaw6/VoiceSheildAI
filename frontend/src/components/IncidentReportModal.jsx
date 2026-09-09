@@ -26,27 +26,39 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
   // Load organization contacts from directory when reportData is generated
   useEffect(() => {
     async function loadContacts() {
-      if (!reportData?.impersonatedOrganization?.organization_id) {
-        // Default to demo/verified contact for testing
-        setSelectedContactId('contact_demo_mailbox');
-        return;
-      }
       try {
-        const res = await fetch(`/api/v1/organizations/${reportData.impersonatedOrganization.organization_id}`);
+        const res = await fetch('/api/v1/organizations');
         const data = await res.json();
-        if (data.success && data.organization?.reporting_channels?.length) {
-          const verified = data.organization.reporting_channels.filter(c => c.verified && c.enabled);
-          setContacts(verified);
-          if (verified.length > 0) {
-            setSelectedContactId(verified[0].id);
-          } else {
-            setSelectedContactId('contact_demo_mailbox');
+        const allContacts = [];
+        if (data.organizations?.length) {
+          for (const o of data.organizations) {
+            if (o.reporting_channels?.length) {
+              for (const c of o.reporting_channels) {
+                if (c.verified && c.enabled) {
+                  allContacts.push({
+                    ...c,
+                    orgName: o.display_name,
+                    orgId: o.id
+                  });
+                }
+              }
+            }
           }
-        } else {
-          setSelectedContactId('contact_demo_mailbox');
         }
-      } catch {
-        setSelectedContactId('contact_demo_mailbox');
+        setContacts(allContacts);
+
+        const detectedOrgId = reportData?.impersonatedOrganization?.organization_id;
+        const matching = allContacts.find(c => c.orgId === detectedOrgId);
+        if (matching) {
+          setSelectedContactId(matching.id);
+        } else if (allContacts.length > 0) {
+          const hdfcMatch = allContacts.find(c => c.orgId === 'org_hdfc');
+          setSelectedContactId(hdfcMatch ? hdfcMatch.id : allContacts[0].id);
+        } else {
+          setSelectedContactId('contact_hdfc_fraud');
+        }
+      } catch (err) {
+        console.error('[IncidentReportModal] Failed to load directory contacts:', err);
       }
     }
     if (reportData) {
@@ -102,7 +114,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
         throw new Error(apprErr.error || 'Failed to record user approval.');
       }
 
-      // 2. Dispatch via user's Gmail mailbox
+      // 2. Dispatch through the VoxShield SendGrid relay
       const sendRes = await fetch(`/api/v1/reports/${reportData.reportId}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -111,7 +123,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
       });
       const sendData = await sendRes.json();
       if (!sendRes.ok) {
-        throw new Error(sendData.error || 'Failed to dispatch report from mailbox.');
+        throw new Error(sendData.error || 'Report created successfully, but email delivery could not be completed.');
       }
 
       setSendResult(sendData);
@@ -220,9 +232,10 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
               <div style={{ fontSize: '2.4rem', marginBottom: '12px' }}>🛡️</div>
               <h4 style={{ margin: '0 0 8px', color: '#ffffff' }}>Sign In to Generate & Authorize Report</h4>
               <p style={{ color: '#a0aec0', fontSize: '0.9rem', maxWidth: '480px', margin: '0 auto 20px' }}>
-                To prevent fraud complaints from appearing as anonymous spam, VoxShield generates digitally verified reports that are sent directly from your authenticated mailbox upon your explicit approval.
+                To prevent fraud complaints from appearing as anonymous spam, VoxShield sends digitally verified reports through its secure relay only after your explicit approval.
               </p>
               <button
+                type="button"
                 onClick={() => openAuthModal('signin')}
                 style={{
                   background: 'linear-gradient(135deg, #00d2ff, #0072ff)',
@@ -262,7 +275,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                 REPORT TRANSMITTED VIA VOXSHIELD SECURE RELAY
               </h3>
               <p style={{ color: '#e2e8f0', fontSize: '0.95rem', maxWidth: '560px', margin: '0 auto 16px' }}>
-                Your authorized incident report was transmitted to <strong>{sendResult.delivery.recipient}</strong> with Reply-To set to your verified account (<strong>{sendResult.delivery.sender || user.email}</strong>).
+                Your authorized incident report was transmitted to <strong>{sendResult.delivery.recipient}</strong> through VoxShield Secure Email Relay. Reply-To is set to your verified account (<strong>{sendResult.delivery.replyTo || user.email}</strong>).
               </p>
               <div style={{
                 background: 'rgba(0,0,0,0.4)',
@@ -390,13 +403,14 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                       {contacts.length > 0 ? (
                         contacts.map(c => (
                           <option key={c.id} value={c.id}>
-                            {org.organization_name_normalized} Security Desk ({c.destination})
+                            {c.orgName} Security Desk ({c.destination})
                           </option>
                         ))
                       ) : (
-                        <option value="contact_demo_mailbox">
-                          VoxShield Demo / Test Mailbox (Developer Controlled)
-                        </option>
+                        <>
+                          <option value="contact_hdfc_fraud">HDFC Bank Security Desk (jakkula.premsagar@gmail.com)</option>
+                          <option value="contact_sbi_fraud">State Bank of India Security Desk (jakkulaayushpreetham@gmail.com)</option>
+                        </>
                       )}
                     </select>
                   </div>
@@ -410,14 +424,14 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                   <div><strong>{user.name}</strong> ({user.email})</div>
 
                   <div style={{ color: '#94a3b8', fontWeight: 600 }}>Sent Through:</div>
-                  <div>VoxShield Secure Reporting</div>
+                  <div>VoxShield Secure Email Relay</div>
 
                   <div style={{ color: '#94a3b8', fontWeight: 600 }}>Generated By:</div>
                   <div>VoxShield AI</div>
 
                   <div style={{ color: '#94a3b8', fontWeight: 600 }}>Email Routing:</div>
                   <div style={{ fontSize: '0.8rem', color: '#70c99f', fontFamily: 'monospace' }}>
-                    FROM: VoxShield Fraud Intelligence | REPLY-TO: {user.email}
+                    FROM: VoxShield Fraud Intelligence | REPLY-TO: authenticated reporter ({user.email})
                   </div>
 
                   <div style={{ color: '#94a3b8', fontWeight: 600 }}>Report ID:</div>
@@ -481,7 +495,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                     style={{ marginTop: '3px', width: '18px', height: '18px', accentColor: '#00d2ff' }}
                   />
                   <span style={{ fontSize: '0.88rem', color: '#ffffff', fontWeight: 600, lineHeight: '1.4' }}>
-                    I have reviewed this report and authorize VoxShield to dispatch it on my behalf to the verified reporting contact shown above, with Reply-To set to my verified email address ({user.email}).
+                    I have reviewed this report and authorize VoxShield to dispatch it through the secure email relay to the verified reporting contact shown above, with Reply-To set to my verified email address ({user.email}).
                   </span>
                 </label>
               </div>

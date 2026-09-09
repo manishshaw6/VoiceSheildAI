@@ -19,10 +19,24 @@ export async function searchOrganizations(searchTerm = '') {
     }
   });
 
-  return filtered.map(org => ({
-    ...org,
-    aliases: JSON.parse(org.aliases || '[]')
-  }));
+  const result = [];
+  for (const org of filtered) {
+    const contacts = await query.all(
+      'SELECT id, channel_type, destination, verified, verification_source, verified_at, enabled FROM organization_contacts WHERE organization_id = ?',
+      [org.id]
+    );
+    result.push({
+      ...org,
+      aliases: JSON.parse(org.aliases || '[]'),
+      reporting_channels: contacts.map(c => ({
+        ...c,
+        verified: Boolean(c.verified),
+        enabled: Boolean(c.enabled)
+      }))
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -62,7 +76,7 @@ export async function resolveVerifiedReportingContact(contactId) {
             o.display_name AS organization_name, o.official_domain
      FROM organization_contacts c
      JOIN organizations o ON o.id = c.organization_id
-     WHERE c.id = ?`,
+    WHERE c.id = ? AND c.channel_type = 'email'`,
     [contactId]
   );
 
@@ -76,6 +90,10 @@ export async function resolveVerifiedReportingContact(contactId) {
 
   if (!contact.verified) {
     throw new ApiError('CONTACT_UNVERIFIED', `The reporting channel for ${contact.organization_name} has not been verified. External delivery blocked.`, 403);
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.destination)) {
+    throw new ApiError('CONTACT_INVALID', 'The verified reporting contact has an invalid email address.', 422);
   }
 
   return {

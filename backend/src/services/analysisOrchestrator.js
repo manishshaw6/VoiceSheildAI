@@ -24,6 +24,7 @@ import {
 } from './incidentGuidanceService.js';
 import { extractOrganizationIntelligence } from './organizationIntelligenceService.js';
 import { evaluateReportingEligibility } from './reportingEligibilityService.js';
+import { extractForensicSignals, extractJsForensics } from './forensicAnalysisService.js';
 
 // ─── Demo Benchmark Fixtures ────────────────────────────────────────────────
 const __dirname_local = dirname(fileURLToPath(import.meta.url));
@@ -67,6 +68,7 @@ function getDemoBenchmarkResult(analysisId, requestId, { unavailableProviders = 
     indicators: scenario.indicators,
     policy: { actions: scenario.policy_action.split(', ').map(a => a.trim()) },
     explanation: { recommendedResponse: scenario.recommended_action },
+    forensics: extractJsForensics(new Float32Array(16000 * 5).map((_, i) => Math.sin(i * 0.05) * 0.4), 16000),
     unavailable: [],
     cached: false
   };
@@ -210,6 +212,20 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
       })
     : null;
 
+  const forensicStart = performance.now();
+  const forensics = await extractForensicSignals({
+    filePath,
+    audioBuffer,
+    preprocessed,
+    deepfake,
+    speaker,
+    transcription,
+    risk,
+    indicators,
+    timeline
+  });
+  telemetry.forensicsMs = elapsed(forensicStart);
+
   const result = {
     success: true,
     analysisId,
@@ -224,6 +240,7 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
       vad
     },
     forensic,
+    forensics,
     deepfake: { ...deepfake, fakeProbability: deepfake.score },
     transcription,
     speaker,

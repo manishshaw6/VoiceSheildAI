@@ -288,7 +288,7 @@ export async function getUserFromSession(sessionId) {
   }
 
   const user = await query.get(
-    'SELECT id, email, name, picture, mail_password_encrypted, created_at, last_login_at FROM users WHERE id = ?',
+    'SELECT id, email, name, picture, email_verified, mail_password_encrypted, created_at, last_login_at FROM users WHERE id = ?',
     [session.user_id]
   );
 
@@ -307,6 +307,7 @@ export async function getUserFromSession(sessionId) {
     email: user.email,
     name: user.name,
     picture: user.picture,
+    emailVerified: Boolean(user.email_verified),
     created_at: user.created_at,
     last_login_at: user.last_login_at,
     hasMailPermission

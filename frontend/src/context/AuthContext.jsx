@@ -44,6 +44,14 @@ export function AuthProvider({ children }) {
     setAuthModalOpen(false);
   };
 
+  const getErrorMessage = (data, fallback) => {
+    if (!data) return fallback;
+    if (typeof data.error === 'string') return data.error;
+    if (data.error && typeof data.error.message === 'string') return data.error.message;
+    if (typeof data.message === 'string') return data.message;
+    return fallback;
+  };
+
   const login = async ({ email, password }) => {
     const res = await fetch('/api/v1/auth/login', {
       method: 'POST',
@@ -51,9 +59,9 @@ export function AuthProvider({ children }) {
       credentials: 'include',
       body: JSON.stringify({ email, password })
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(data.error || 'Failed to sign in.');
+      throw new Error(getErrorMessage(data, 'Failed to sign in. Please verify your credentials.'));
     }
     await fetchAuthStatus();
     setAuthModalOpen(false);
@@ -67,9 +75,9 @@ export function AuthProvider({ children }) {
       credentials: 'include',
       body: JSON.stringify({ name, email, password })
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(data.error || 'Failed to create account.');
+      throw new Error(getErrorMessage(data, 'Failed to create account.'));
     }
     await fetchAuthStatus();
     setAuthModalOpen(false);
@@ -82,9 +90,9 @@ export function AuthProvider({ children }) {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include'
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(data.error || 'Demo login is unavailable in this environment.');
+      throw new Error(getErrorMessage(data, 'Demo login is unavailable in this environment.'));
     }
     await fetchAuthStatus();
     setAuthModalOpen(false);

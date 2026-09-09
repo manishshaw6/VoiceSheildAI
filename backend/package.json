@@ -17,6 +17,7 @@
   "dependencies": {
     "@google/genai": "^2.21.0",
     "@realitydefender/realitydefender": "^0.1.19",
+    "@sendgrid/mail": "^8.1.6",
     "assemblyai": "^4.37.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",

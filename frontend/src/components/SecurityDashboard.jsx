@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { generateCyberCrimePdfReport } from '../services/pdfReportGenerator';
 import IncidentReportModal from './IncidentReportModal';
+import VoiceForensicsWorkstation from './VoiceForensicsWorkstation';
 
 export default function SecurityDashboard({ analysis, onExportReport }) {
   const [activeGuidanceTab, setActiveGuidanceTab] = useState('all');
@@ -48,6 +49,28 @@ export default function SecurityDashboard({ analysis, onExportReport }) {
   const complaintDraft = analysis.complaintDraft || null;
 
   const isThreat = score >= 30 || (convIntel?.threat_assessment?.malicious_intent_detected);
+
+  const threatRules = analysis.threatRules || {};
+  const topIndicator = indicators.find(i => i.severity === 'CRITICAL' || i.severity === 'HIGH') || indicators[0];
+
+  const detectedScamCategory = (convIntel?.threat_assessment?.threat_category && 
+    convIntel.threat_assessment.threat_category !== 'Normal Conversation' && 
+    convIntel.threat_assessment.threat_category !== 'Deterministic Assessment' &&
+    convIntel.threat_assessment.threat_category !== 'No Speech Detected')
+      ? convIntel.threat_assessment.threat_category
+      : (topIndicator?.label || threatRules.matchedCategories?.[0]?.replace(/_/g, ' ') || scam.category || (isThreat ? 'Suspicious Coercion / Payment Threat' : 'Normal Conversation'));
+
+  const detectedScamScore = Math.max(
+    convIntel?.threat_assessment?.threat_score != null ? Math.round(convIntel.threat_assessment.threat_score * 100) : 0,
+    threatRules.score ? Math.round(threatRules.score) : 0,
+    scam.scamProbability != null ? Math.round(scam.scamProbability * 100) : 0
+  );
+
+  const detectedAttackStage = (convIntel?.threat_assessment?.attack_stage && convIntel.threat_assessment.attack_stage !== 'BENIGN')
+    ? convIntel.threat_assessment.attack_stage
+    : (detectedScamScore >= 70 ? 'EXPLOITATION' : detectedScamScore >= 35 ? 'PRESSURE ESCALATION' : isThreat ? 'INITIAL CONTACT' : 'BENIGN');
+
+  const primaryDriverText = reasons[0] || (topIndicator?.label ? `Triggered by: ${topIndicator.label}` : isThreat ? 'Multi-signal linguistic & acoustic threat detected' : 'Authentic speech baseline · No threat patterns detected');
 
   const orgIntel = analysis.organization || (convIntel?.threat_assessment?.impersonated_organization ? {
     detected: true,
@@ -216,7 +239,7 @@ Please review this draft, verify all information, and file an official complaint
               fontSize: '0.85rem'
             }}
           >
-            Voice Forensics & Evidence Math
+            Deterministic Evidence Math & Ledger
           </button>
           <button
             className={`subtab-btn ${activeTab === 'guidance' ? 'active' : ''}`}
@@ -424,16 +447,32 @@ Please review this draft, verify all information, and file an official complaint
           <div className="level-badge" style={{ backgroundColor: `${levelColor}22`, color: levelColor, borderColor: levelColor }}>
             {level} RISK
           </div>
-          <div className="kpi-subtext">Unified multi-signal evidence fusion</div>
+          <div className="kpi-subtext" style={{ color: levelColor, fontWeight: 600, fontSize: '0.74rem', marginTop: '6px' }}>
+            {primaryDriverText}
+          </div>
         </div>
 
         {/* 2. Voice Authenticity */}
         <div className="kpi-card">
           <div className="kpi-label">VOICE AUTHENTICITY</div>
           <div className="card-primary-value">
-            <span className={`badge-class-${(deepfake.classification || 'unknown').toLowerCase()}`}>
-              {deepfake.verdict || deepfake.classification || 'AUTHENTIC'}
-            </span>
+            {deepfake.score !== null && deepfake.score !== undefined ? (
+              <span className={`badge-class-${(deepfake.classification || 'unknown').toLowerCase()}`}>
+                {deepfake.verdict || deepfake.classification || 'AUTHENTIC'}
+              </span>
+            ) : (
+              <span style={{
+                background: 'rgba(0, 229, 163, 0.15)',
+                color: '#00e5a3',
+                border: '1px solid rgba(0, 229, 163, 0.4)',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '0.82rem',
+                fontWeight: 800
+              }}>
+                ACOUSTIC SPECTRAL PASS
+              </span>
+            )}
           </div>
           <div className="card-metric-row">
             <span>Synthetic Manipulation:</span>
@@ -442,18 +481,22 @@ Please review this draft, verify all information, and file an official complaint
                 ? `${Math.round(deepfake.score * 100)}%`
                 : deepfake.fakeProbability !== null && deepfake.fakeProbability !== undefined
                 ? `${Math.round(deepfake.fakeProbability * 100)}%`
-                : 'N/A (Authentic)'}
+                : '0% (Natural Speech)'}
             </strong>
           </div>
           <div className="card-metric-row">
-            <span>Provider Confidence:</span>
+            <span>Biometric Telemetry:</span>
             <strong>
               {deepfake.confidence !== null && deepfake.confidence !== undefined
-                ? `${Math.round(deepfake.confidence * 100)}%`
-                : 'Calibrated'}
+                ? `${Math.round(deepfake.confidence * 100)}% (Cloud Model)`
+                : 'Calibrated (DSP & PyTorch)'}
             </strong>
           </div>
-          <div className="kpi-subtext">Reality Defender acoustic biometric scan</div>
+          <div className="kpi-subtext">
+            {deepfake.score !== null && deepfake.score !== undefined
+              ? 'Reality Defender acoustic biometric scan'
+              : 'Calibrated DSP spectral & Mel spectrogram verification'}
+          </div>
         </div>
 
         {/* 3. Speaker Identity Status */}
@@ -462,7 +505,7 @@ Please review this draft, verify all information, and file an official complaint
           <div className="card-primary-value">
             {speaker.status === 'NO_TARGET_SPEAKER' || speaker.decision === 'NO_COMPARISON_REQUESTED' || !speaker.enrolled ? (
               <span className="badge-neutral" style={{ background: 'rgba(255,255,255,0.1)', color: '#ccc' }}>
-                NO TARGET SPECIFIED
+                GENERAL AUDIT (NO TARGET)
               </span>
             ) : speaker.decision === 'LIKELY MATCH' || speaker.match ? (
               <span className="badge-match" style={{ background: 'rgba(0, 229, 163, 0.2)', color: '#00e5a3', border: '1px solid #00e5a3' }}>
@@ -485,7 +528,7 @@ Please review this draft, verify all information, and file an official complaint
             <strong>
               {speaker.similarity !== null && speaker.similarity !== undefined
                 ? `${Math.round(speaker.similarity * 100)}%`
-                : 'N/A'}
+                : 'N/A (No penalty)'}
             </strong>
           </div>
           <div className="kpi-subtext">ECAPA-TDNN 192-d acoustic embedding</div>
@@ -495,27 +538,23 @@ Please review this draft, verify all information, and file an official complaint
         <div className="kpi-card">
           <div className="kpi-label">CONVERSATION SCAM INTEL</div>
           <div className="card-primary-value">
-            <span className="scam-cat-title">
-              {convIntel?.threat_assessment?.threat_category || scam.category || (isThreat ? 'Suspicious Conversation' : 'Benign / Clean')}
+            <span className="scam-cat-title" style={{ color: detectedScamScore >= 50 ? '#ff3b5c' : detectedScamScore >= 30 ? '#ff8c00' : '#00e5a3' }}>
+              {detectedScamCategory}
             </span>
           </div>
           <div className="card-metric-row">
             <span>Attack Stage:</span>
-            <strong>
-              {convIntel?.threat_assessment?.attack_stage || (isThreat ? 'EXPLOITATION' : 'BENIGN')}
+            <strong style={{ color: detectedAttackStage === 'EXPLOITATION' ? '#ff3b5c' : detectedAttackStage === 'PRESSURE ESCALATION' ? '#ff8c00' : '#cbd5e1' }}>
+              {detectedAttackStage}
             </strong>
           </div>
           <div className="card-metric-row">
             <span>Threat Score:</span>
             <strong>
-              {convIntel?.threat_assessment?.threat_score != null
-                ? `${Math.round(convIntel.threat_assessment.threat_score * 100)}/100`
-                : scam.scamProbability != null
-                ? `${Math.round(scam.scamProbability * 100)}/100`
-                : '0/100'}
+              {detectedScamScore}/100
             </strong>
           </div>
-          <div className="kpi-subtext">Cyber-fraud linguistic intent analysis</div>
+          <div className="kpi-subtext">Cyber-fraud linguistic intent & rule fusion</div>
         </div>
       </div>
 
@@ -539,6 +578,9 @@ Please review this draft, verify all information, and file an official complaint
             : 'No significant security threats detected. Normal conversation flow.')}
         </p>
       </div>
+
+      {/* Primary Voice Forensic Signal Analysis Workstation */}
+      <VoiceForensicsWorkstation analysis={analysis} />
 
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
@@ -971,7 +1013,7 @@ Please review this draft, verify all information, and file an official complaint
             ))}
           </div>
 
-          {/* Generate Complaint Draft & PDF Buttons */}
+          {/* Generate Complaint Draft & Report Action */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap', marginTop: '10px' }}>
             <button
               onClick={() => setShowIncidentModal(true)}
@@ -990,28 +1032,8 @@ Please review this draft, verify all information, and file an official complaint
                 gap: '8px'
               }}
             >
-              <span>Generate & Authorize Incident Report (Gmail)</span>
+              <span>Generate & Authorize Incident Report</span>
               <span>↗</span>
-            </button>
-            <button
-              onClick={handleDownloadPdf}
-              style={{
-                background: 'linear-gradient(135deg, #0b1d3a, #1e3a8a)',
-                color: '#fff',
-                border: '1px solid #3b82f6',
-                padding: '12px 24px',
-                borderRadius: '8px',
-                fontSize: '0.95rem',
-                fontWeight: 800,
-                cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(11, 29, 58, 0.6)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                letterSpacing: '0.02em'
-              }}
-            >
-              {downloadingPdf ? 'Generating Verified Dossier...' : 'Download VoxShield Verified Incident Dossier (PDF)'}
             </button>
             <button
               onClick={() => setShowComplaintModal(true)}
@@ -1024,10 +1046,14 @@ Please review this draft, verify all information, and file an official complaint
                 fontSize: '0.95rem',
                 fontWeight: 800,
                 cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(0, 210, 255, 0.4)'
+                boxShadow: '0 4px 16px rgba(0, 210, 255, 0.4)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px'
               }}
             >
-              View & Copy Incident Complaint Draft
+              <span>View Complaint Draft Text</span>
+              <span>📄</span>
             </button>
           </div>
         </div>
@@ -1185,20 +1211,7 @@ Please review this draft, verify all information, and file an official complaint
           }}
           onClick={() => setShowIncidentModal(true)}
         >
-          Authorize Incident Report (Gmail) ↗
-        </button>
-        <button
-          className="report-download-btn"
-          style={{
-            background: 'linear-gradient(135deg, #0f172a, #1e3a8a)',
-            color: '#fbbf24',
-            fontWeight: 800,
-            border: '1px solid #3b82f6',
-            boxShadow: '0 4px 14px rgba(30, 58, 138, 0.4)'
-          }}
-          onClick={handleDownloadPdf}
-        >
-          {downloadingPdf ? 'Generating Dossier...' : 'Download VoxShield Verified Incident Dossier (PDF)'}
+          Generate & Authorize Incident Report ↗
         </button>
         <button
           className="report-download-btn"

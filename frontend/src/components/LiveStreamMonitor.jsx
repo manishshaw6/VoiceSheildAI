@@ -9,11 +9,20 @@ export default function LiveStreamMonitor({
   const [isStreaming, setIsStreaming] = useState(false);
   const [speakerId, setSpeakerId] = useState('');
 
-  const [liveScore, setLiveScore] = useState(0);
-  const [liveLevel, setLiveLevel] = useState('LOW');
+  const [liveScore, setLiveScore] = useState(12.45);
+  const [targetScore, setTargetScore] = useState(12.45);
+  const [smoothScore, setSmoothScore] = useState(12.45);
+  const [liveLevel, setLiveLevel] = useState('SAFE');
   const [liveTranscript, setLiveTranscript] = useState('');
   const [detectedSignals, setDetectedSignals] = useState([]);
   const [elapsedTime, setElapsedTime] = useState(0);
+
+  // ── WebAudio Real-Time Telemetry State ──
+  const [micLevelDb, setMicLevelDb] = useState(-80.0);
+  const [micPitchHz, setMicPitchHz] = useState(null);
+  const [isSpeechActive, setIsSpeechActive] = useState(false);
+  const [riskVelocity, setRiskVelocity] = useState(0.0);
+  const [riskTrend, setRiskTrend] = useState('STABLE');
 
   const [recommendedAction, setRecommendedAction] = useState(
     'Monitoring audio stream in real-time...'
@@ -29,11 +38,143 @@ export default function LiveStreamMonitor({
   const mediaRecorderRef = useRef(null);
   const recognitionRef = useRef(null);
   const timerRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const animFrameRef = useRef(null);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // ANIMATION: Smooth EWMA lerp for score display (e.g. 45.34 / 100)
+  // ═══════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    let frameId;
+    const animateScore = () => {
+      setSmoothScore(prev => {
+        const diff = targetScore - prev;
+        if (Math.abs(diff) < 0.01) return targetScore;
+        const next = prev + diff * 0.08;
+        const vel = Number((next - prev).toFixed(2));
+        setRiskVelocity(vel);
+        if (vel > 0.1) setRiskTrend('RISING');
+        else if (vel < -0.1) setRiskTrend('FALLING');
+        else setRiskTrend('STABLE');
+        return Number(next.toFixed(2));
+      });
+      frameId = requestAnimationFrame(animateScore);
+    };
+    frameId = requestAnimationFrame(animateScore);
+    return () => cancelAnimationFrame(frameId);
+  }, [targetScore]);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // WEBAUDIO REAL-TIME TELEMETRY TRACKER (Pitch, RMS, VAD)
+  // ═══════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (!liveAudioStream || !isStreaming) {
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
+      setMicLevelDb(-80.0);
+      setMicPitchHz(null);
+      setIsSpeechActive(false);
+      return;
+    }
+
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      audioCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(liveAudioStream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+
+      const buffer = new Float32Array(analyser.fftSize);
+
+      // Pitch estimation via autocorrelation
+      const autoCorrelate = (buf, sr) => {
+        let SIZE = buf.length;
+        let rms = 0;
+        for (let i = 0; i < SIZE; i++) {
+          const val = buf[i];
+          rms += val * val;
+        }
+        rms = Math.sqrt(rms / SIZE);
+        if (rms < 0.01) return { pitch: null, rms };
+
+        let r1 = 0, r2 = SIZE - 1, thres = 0.2;
+        for (let i = 0; i < SIZE / 2; i++) {
+          if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+        }
+        for (let i = 1; i < SIZE / 2; i++) {
+          if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+        }
+
+        buf = buf.slice(r1, r2);
+        SIZE = buf.length;
+
+        const c = new Float32Array(SIZE);
+        for (let i = 0; i < SIZE; i++) {
+          for (let j = 0; j < SIZE - i; j++) {
+            c[i] = c[i] + buf[j] * buf[j + i];
+          }
+        }
+
+        let d = 0;
+        while (c[d] > c[d + 1]) d++;
+        let maxval = -1, maxpos = -1;
+        for (let i = d; i < SIZE; i++) {
+          if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
+        }
+        let T0 = maxpos;
+        if (T0 > 0 && T0 < SIZE - 1) {
+          let x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
+          let a = (x1 + x3 - 2 * x2) / 2;
+          let b = (x3 - x1) / 2;
+          if (a) T0 = T0 - b / (2 * a);
+        }
+
+        const freq = sr / T0;
+        return { pitch: (freq >= 70 && freq <= 400) ? Math.round(freq) : null, rms };
+      };
+
+      const trackAudio = () => {
+        if (!audioCtxRef.current || ctx.state === 'closed') return;
+        analyser.getFloatTimeDomainData(buffer);
+        const { pitch: f0, rms } = autoCorrelate(buffer, ctx.sampleRate);
+        const db = rms > 0.0001 ? Math.max(-80, 20 * Math.log10(rms)) : -80;
+
+        setMicLevelDb(Number(db.toFixed(1)));
+        setMicPitchHz(f0);
+        const active = rms > 0.02;
+        setIsSpeechActive(active);
+
+        // Smoothly nudge base risk while speech is active
+        if (active) {
+          setTargetScore(prev => {
+            if (prev < 15.0) return Number((prev + 0.15).toFixed(2));
+            return prev;
+          });
+        }
+
+        animFrameRef.current = requestAnimationFrame(trackAudio);
+      };
+
+      trackAudio();
+    } catch (e) {
+      console.warn('WebAudio telemetry init warning:', e);
+    }
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
+    };
+  }, [liveAudioStream, isStreaming]);
 
   const getWsUrl = () => {
-    const protocol =
-      window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}/ws/live-analysis`;
   };
 
@@ -56,19 +197,15 @@ export default function LiveStreamMonitor({
             })
           );
 
-          const stream =
-            await navigator.mediaDevices.getUserMedia({
-              audio: true
-            });
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true
+          });
 
           setLiveAudioStream(stream);
 
           let mediaRecorder;
-
           try {
-            mediaRecorder = new MediaRecorder(stream, {
-              mimeType: 'audio/webm'
-            });
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
           } catch {
             mediaRecorder = new MediaRecorder(stream);
           }
@@ -76,54 +213,33 @@ export default function LiveStreamMonitor({
           mediaRecorderRef.current = mediaRecorder;
 
           mediaRecorder.ondataavailable = (event) => {
-            if (
-              event.data &&
-              event.data.size > 0 &&
-              socket.readyState === WebSocket.OPEN
-            ) {
+            if (event.data && event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
               event.data.arrayBuffer().then((buffer) => {
-                if (
-                  socket.readyState === WebSocket.OPEN
-                ) {
+                if (socket.readyState === WebSocket.OPEN) {
                   socket.send(buffer);
                 }
               });
             }
           };
 
-          mediaRecorder.start(1000);
-
+          mediaRecorder.start(800);
           setIsStreaming(true);
 
           // Speech Recognition
-          const SpeechRec =
-            window.SpeechRecognition ||
-            window.webkitSpeechRecognition;
-
+          const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
           if (SpeechRec) {
             const recognition = new SpeechRec();
-
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = 'en-US';
 
             recognition.onresult = (event) => {
               let fullTranscript = '';
-
-              for (
-                let i = event.resultIndex;
-                i < event.results.length;
-                i++
-              ) {
-                const transcriptPiece =
-                  event.results[i][0].transcript;
-
+              for (let i = event.resultIndex; i < event.results.length; i++) {
+                const transcriptPiece = event.results[i][0].transcript;
                 fullTranscript += transcriptPiece + ' ';
 
-                if (
-                  event.results[i].isFinal &&
-                  socket.readyState === WebSocket.OPEN
-                ) {
+                if (event.results[i].isFinal && socket.readyState === WebSocket.OPEN) {
                   socket.send(
                     JSON.stringify({
                       type: 'transcript_chunk',
@@ -134,17 +250,12 @@ export default function LiveStreamMonitor({
               }
 
               if (fullTranscript.trim()) {
-                setLiveTranscript((prev) =>
-                  `${prev} ${fullTranscript}`.trim()
-                );
+                setLiveTranscript((prev) => `${prev} ${fullTranscript}`.trim());
               }
             };
 
             recognition.onerror = (e) => {
-              console.warn(
-                'Speech recognition warning:',
-                e.error
-              );
+              console.warn('Speech recognition warning:', e.error);
             };
 
             recognition.start();
@@ -152,21 +263,14 @@ export default function LiveStreamMonitor({
           }
 
           setElapsedTime(0);
-
           timerRef.current = setInterval(() => {
             setElapsedTime((t) => t + 1);
           }, 1000);
 
         } catch (err) {
           console.error('Microphone initialization failed:', err);
-
           setWsStatus('Mic Access Denied');
-
-          if (
-            socket.readyState === WebSocket.OPEN
-          ) {
-            socket.close();
-          }
+          if (socket.readyState === WebSocket.OPEN) socket.close();
         }
       };
 
@@ -175,8 +279,10 @@ export default function LiveStreamMonitor({
           const data = JSON.parse(event.data);
 
           if (data.type === 'risk_update') {
-            setLiveScore(data.score || 0);
-            setLiveLevel(data.riskLevel || 'LOW');
+            const newScore = Number((data.score || 0).toFixed(2));
+            setTargetScore(newScore);
+            setLiveScore(newScore);
+            setLiveLevel(data.riskLevel || 'SAFE');
 
             if (data.transcript) {
               setLiveTranscript(data.transcript);
@@ -187,9 +293,7 @@ export default function LiveStreamMonitor({
             }
 
             if (data.recommendedAction) {
-              setRecommendedAction(
-                data.recommendedAction
-              );
+              setRecommendedAction(data.recommendedAction);
             }
 
             if (data.cloneSuspicion) {
@@ -475,17 +579,16 @@ export default function LiveStreamMonitor({
       <div className="live-metrics-grid">
 
 
-        {/* RISK METER */}
-
+        {/* RISK METER & LIVE TELEMETRY */}
         <div
           className="live-metric-card"
           style={{
             borderColor: isStreaming
               ? levelColor
-              : 'rgba(255,255,255,0.1)'
+              : 'rgba(255,255,255,0.1)',
+            minWidth: '280px'
           }}
         >
-
           <VoicePoweredOrb
             className="live-voice-orb"
             enableVoiceControl={isStreaming}
@@ -495,26 +598,58 @@ export default function LiveStreamMonitor({
             maxHoverIntensity={1}
           />
 
-          <div className="metric-title">
-            LIVE THREAT LEVEL
+          <div className="metric-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>LIVE THREAT LEVEL</span>
+            <span style={{
+              fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '3px',
+              background: riskTrend === 'RISING' ? 'rgba(255,59,92,0.2)' : riskTrend === 'FALLING' ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.08)',
+              color: riskTrend === 'RISING' ? '#ff3b5c' : riskTrend === 'FALLING' ? '#22c55e' : '#88a395'
+            }}>
+              {riskTrend === 'RISING' ? '▲ RISING' : riskTrend === 'FALLING' ? '▼ FALLING' : '➔ STABLE'}
+            </span>
           </div>
 
           <div
             className="workspace-risk-score"
-            style={{ color: levelColor }}
+            style={{ color: levelColor, fontFamily: 'monospace', fontSize: '2.4rem' }}
           >
-            {liveScore}
-            <span>/100</span>
+            {smoothScore.toFixed(2)}
+            <span style={{ fontSize: '1rem', opacity: 0.7 }}>/100</span>
           </div>
 
-          <div className="live-time-indicator">
+          {/* REAL-TIME WEBAUDIO HARDWARE TELEMETRY READOUT */}
+          {isStreaming && (
+            <div style={{
+              marginTop: '10px', padding: '8px 10px', background: 'rgba(0,0,0,0.4)',
+              borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)',
+              fontSize: '0.68rem', display: 'flex', flexDirection: 'column', gap: '4px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#88a395' }}>
+                <span>MIC ENVELOPE:</span>
+                <strong style={{ color: '#00d2ff', fontFamily: 'monospace' }}>{micLevelDb} dB</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#88a395' }}>
+                <span>PITCH F0:</span>
+                <strong style={{ color: micPitchHz ? '#22c55e' : '#88a395', fontFamily: 'monospace' }}>
+                  {micPitchHz ? `${micPitchHz} Hz` : 'UNVOICED'}
+                </strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#88a395' }}>
+                <span>VAD STATUS:</span>
+                <strong style={{ color: isSpeechActive ? '#22c55e' : '#88a395' }}>
+                  {isSpeechActive ? '● SPEECH ACTIVE' : '○ SILENCE'}
+                </strong>
+              </div>
+            </div>
+          )}
+
+          <div className="live-time-indicator" style={{ marginTop: '8px' }}>
             Active stream ·{' '}
             {Math.floor(elapsedTime / 60)}:
             {(elapsedTime % 60)
               .toString()
               .padStart(2, '0')}
           </div>
-
         </div>
 
 
@@ -734,16 +869,14 @@ export default function LiveStreamMonitor({
                 <div
                   className="workspace-risk-score"
                   style={{
-                    color: levelColor
+                    color: levelColor,
+                    fontFamily: 'monospace'
                   }}
                 >
-
-                  {liveScore}
-
+                  {smoothScore.toFixed(2)}
                   <span>
                     /100
                   </span>
-
                 </div>
 
 

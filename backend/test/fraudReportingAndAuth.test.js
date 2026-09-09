@@ -43,6 +43,19 @@ import {
 } from '../src/services/incidentReportService.js';
 import { getUserMailProvider } from '../src/services/mail/index.js';
 import { encryptToken, decryptToken } from '../src/core/encryptionService.js';
+import { config } from '../src/config/index.js';
+import { setSendGridClient } from '../src/services/sendgridMailService.js';
+
+const sentMessages = [];
+config.sendgrid.apiKey = 'test-sendgrid-key';
+config.sendgrid.fromEmail = 'sender@voxshield.test';
+setSendGridClient({
+  setApiKey() { },
+  async send(message) {
+    sentMessages.push(message);
+    return [{ headers: { 'x-message-id': `test-message-${sentMessages.length}` } }];
+  }
+});
 
 function uniqueEmail(prefix = 'user') {
   return `${prefix}_${crypto.randomBytes(6).toString('hex')}@test.voxshield.local`;
@@ -436,7 +449,7 @@ test('29. Send without approval or with false consent is rejected', async () => 
   );
 });
 
-test('30. Successful authorized report dispatch via UserMailProvider (Simulated/Dev)', async () => {
+test('30. Successful authorized report dispatch via SendGrid (mocked)', async () => {
   const user = { id: `usr_send_ok_${crypto.randomBytes(4).toString('hex')}`, email: uniqueEmail('sender'), name: 'Authorized Sender' };
   await query.run('INSERT OR REPLACE INTO users (id, email, name) VALUES (?, ?, ?)', [user.id, user.email, user.name]);
 
@@ -462,12 +475,17 @@ test('30. Successful authorized report dispatch via UserMailProvider (Simulated/
   assert.equal(result.success, true);
   assert.equal(result.status, 'SENT');
   assert.ok(result.delivery.messageId);
-  assert.equal(result.delivery.sender, user.email);
+  assert.equal(result.delivery.sender, 'sender@voxshield.test');
+  assert.equal(result.delivery.replyTo, user.email);
+  assert.equal(sentMessages.at(-1).from.email, 'sender@voxshield.test');
+  assert.equal(sentMessages.at(-1).replyTo.email, user.email);
+  assert.equal(sentMessages.at(-1).attachments[0].type, 'application/pdf');
 });
 
-test('31. Mail failure handled truthfully when mail permission missing', async () => {
+test('31. Unverified reporter email is blocked before delivery', async () => {
   const user = { id: `usr_no_perm_${crypto.randomBytes(4).toString('hex')}`, email: uniqueEmail('noperm'), name: 'No Perm' };
   await query.run('INSERT OR REPLACE INTO users (id, email, name) VALUES (?, ?, ?)', [user.id, user.email, user.name]);
+  await query.run('UPDATE users SET email_verified = 0 WHERE id = ?', [user.id]);
 
   const mockAna = `ana_no_perm_${crypto.randomBytes(4).toString('hex')}`;
   await query.run('INSERT INTO analyses (id, final_score, risk_level, transcript) VALUES (?, 85, "CRITICAL", "call")', [mockAna]);
@@ -476,7 +494,7 @@ test('31. Mail failure handled truthfully when mail permission missing', async (
 
   await assert.rejects(
     async () => sendIncidentReport({ reportId: report.reportId, user, organizationContactId: 'contact_demo_mailbox' }),
-    err => err.code === 'MAIL_NOT_CONNECTED' || /Google Mail send permission is not connected/i.test(err.message)
+    err => err.code === 'EMAIL_NOT_VERIFIED' || /verified authenticated email/i.test(err.message)
   );
 });
 
