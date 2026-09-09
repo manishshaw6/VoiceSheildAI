@@ -219,6 +219,7 @@ export const Defaults = Object.freeze({
   // Provider timeouts (ms)
   REALITY_DEFENDER_TIMEOUT_MS: 25000,
   ASSEMBLYAI_TIMEOUT_MS: 60000,
+  ML_SERVICE_TIMEOUT_MS: 120000,
   LLM_TIMEOUT_MS: 30000,
 
   // Retries
@@ -227,7 +228,7 @@ export const Defaults = Object.freeze({
 
   // Speaker
   SPEAKER_MATCH_THRESHOLD: 0.70,
-  SPEAKER_EMBEDDING_DIMENSIONS: 80,
+  SPEAKER_EMBEDDING_DIMENSIONS: 192,
 
   // Cache
   CACHE_TTL_SEC: 3600,

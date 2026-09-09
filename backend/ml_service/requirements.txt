@@ -1,0 +1,9 @@
+# Install a torch/torchaudio build matching the local CPU or CUDA runtime first when needed.
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+python-multipart>=0.0.9,<1
+faster-whisper>=1.1,<2
+speechbrain>=1.0,<2
+torch>=2.3,<3
+torchaudio>=2.3,<3
+numpy>=1.26,<3

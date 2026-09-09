@@ -74,15 +74,28 @@ export function calculateFusedRisk({ evidence = null, deepfakeResult = null, sca
     components.VOICE_CLONE_PATTERN = 100;
     reasons.unshift('Voice clone pattern: strong speaker match combined with synthetic speech indicators.');
   }
-  if ((signals.OTP_REQUEST?.score ?? 0) >= config.interactions.credentialTheftOtpThreshold &&
-      (signals.FINANCIAL_REQUEST?.score ?? 0) >= config.interactions.credentialTheftFinancialThreshold) {
+
+  const otpScore = Math.max(signals.OTP_REQUEST?.score ?? 0, signals.CREDENTIAL_REQUEST?.score ?? 0);
+  const finScore = Math.max(signals.FINANCIAL_REQUEST?.score ?? 0, signals.PAYMENT_FRAUD?.score ?? 0);
+  if (otpScore >= config.interactions.credentialTheftOtpThreshold &&
+      finScore >= config.interactions.credentialTheftFinancialThreshold) {
     score = Math.min(100, score + 15);
-    reasons.push('Credential-theft interaction: OTP and financial requests occurred together.');
+    reasons.push('Credential-theft interaction: OTP/credential and financial requests occurred together.');
   }
-  if ((signals.IMPERSONATION?.score ?? 0) >= config.interactions.socialEngineeringImpersonationThreshold &&
-      (signals.URGENCY?.score ?? 0) >= config.interactions.socialEngineeringUrgencyThreshold) {
+
+  const impScore = Math.max(signals.IMPERSONATION?.score ?? 0, signals.AUTHORITY_IMPERSONATION?.score ?? 0);
+  const urgScore = Math.max(signals.URGENCY?.score ?? 0, signals.URGENCY_COERCION?.score ?? 0);
+  if (impScore >= config.interactions.socialEngineeringImpersonationThreshold &&
+      urgScore >= config.interactions.socialEngineeringUrgencyThreshold) {
     score = Math.min(100, score + 10);
     reasons.push('Social-engineering interaction: impersonation and urgency occurred together.');
+  }
+
+  // Active Fraud Intent Floor: Severe financial scam intent from an unverified/mismatched identity must not be diluted by authentic voice
+  const contextRisk = signals.CONTEXT_RISK?.score ?? 0;
+  if (contextRisk >= 0.8 && (signals.SPEAKER_MISMATCH?.score ?? 0) >= 0.5) {
+    score = Math.max(score, 75);
+    reasons.unshift('High-risk social engineering scam from unverified/mismatched identity.');
   }
 
   const ranked = Object.entries(signals)

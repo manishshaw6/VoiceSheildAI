@@ -53,10 +53,15 @@ The backend is organized into `audio`, `config`, `controllers`, `core`, `databas
 - SQLite incident/audit schemas and read endpoints.
 - Automated unit and HTTP integration coverage for boundaries, fusion, policy, state, temporal risk, context, speaker math, quality, probes, errors, and unusable uploads.
 
-## Intentional truthful limitations
+## Local model upgrade
 
-- The local speaker engine is an acoustic fingerprint comparator, not SpeechBrain ECAPA-TDNN. Provider health reports its actual engine name.
-- Speech recognition is AssemblyAI rather than faster-whisper. Without configuration, transcription and dependent context evidence are unavailable; none is fabricated.
+- Speech recognition now defaults to the local `faster-whisper` provider, accessed only by Express through `backend/ml_service`. It preserves detected language and segment timestamps and does not invent a transcript confidence.
+- Speaker verification now defaults to SpeechBrain ECAPA-TDNN embeddings. Profiles retain the model version, dimension, enrollment speech duration, and source hash; public responses never expose embeddings. Cosine similarity is reported as a similarity, never relabelled as a probability.
+- AssemblyAI and the previous acoustic fingerprint provider are retained only as explicitly configured, truthfully identified fallbacks. If the local ML service is unavailable and fallbacks are disabled, the applicable evidence is unavailable rather than safe.
+
+## Remaining truthful limitations
+
+- This workspace does not have a Python interpreter installed, so model imports, downloads, and audio-based manual validation could not be executed here. The Python service is syntax-oriented code supplied with pinned compatible ranges; installation and a real model-health check remain required on the target machine.
 - VAD is a lightweight energy detector for PCM WAV. Compressed formats report VAD unavailable unless decoded to PCM.
 - The API publishes an OpenAPI 3.1 document at `/openapi.json` and a lightweight endpoint guide at `/docs`; it intentionally avoids adding a large documentation UI dependency.
 

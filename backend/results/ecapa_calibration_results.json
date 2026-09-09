@@ -1,0 +1,146 @@
+{
+  "timestamp": "2026-09-08T17:00:10.862Z",
+  "ml_health": {
+    "status": "ok",
+    "whisper": {
+      "loaded": true,
+      "provider": "faster_whisper",
+      "model": "small",
+      "device": "auto",
+      "last_inference_ms": null,
+      "failure": null
+    },
+    "ecapa": {
+      "loaded": true,
+      "provider": "speechbrain_ecapa_tdnn",
+      "model": "speechbrain/spkrec-ecapa-voxceleb",
+      "device": "cpu",
+      "last_inference_ms": null,
+      "failure": null
+    },
+    "latencyMs": 75
+  },
+  "embeddings_summary": [
+    {
+      "sample_id": "sample_A_genuine_enrolled",
+      "available": true,
+      "dimensions": 192,
+      "speech_duration": 2.955,
+      "latency_ms": 246,
+      "error": null
+    },
+    {
+      "sample_id": "sample_B_same_speaker",
+      "available": true,
+      "dimensions": 192,
+      "speech_duration": 2.952,
+      "latency_ms": 208,
+      "error": null
+    },
+    {
+      "sample_id": "sample_C_different_speaker",
+      "available": true,
+      "dimensions": 192,
+      "speech_duration": 2.97,
+      "latency_ms": 216,
+      "error": null
+    },
+    {
+      "sample_id": "sample_D_different_scam",
+      "available": true,
+      "dimensions": 192,
+      "speech_duration": 2.952,
+      "latency_ms": 196,
+      "error": null
+    },
+    {
+      "sample_id": "sample_E_synthetic_generic",
+      "available": true,
+      "dimensions": 192,
+      "speech_duration": 2.625,
+      "latency_ms": 197,
+      "error": null
+    },
+    {
+      "sample_id": "sample_F_too_short",
+      "available": false,
+      "dimensions": 0,
+      "speech_duration": 0,
+      "latency_ms": 6,
+      "error": "insufficient_speech"
+    },
+    {
+      "sample_id": "sample_G_noisy",
+      "available": true,
+      "dimensions": 192,
+      "speech_duration": 2.849,
+      "latency_ms": 193,
+      "error": null
+    },
+    {
+      "sample_id": "sample_H_near_silence",
+      "available": false,
+      "dimensions": 0,
+      "speech_duration": 0,
+      "latency_ms": 7,
+      "error": "insufficient_speech"
+    }
+  ],
+  "pairwise_matrix": {
+    "sample_A_genuine_enrolled": {
+      "sample_A_genuine_enrolled": 1,
+      "sample_B_same_speaker": 0.7336664768904229,
+      "sample_C_different_speaker": 0.9807407527555756,
+      "sample_D_different_scam": 0.7133872212430513,
+      "sample_E_synthetic_generic": 0.7026686864545489,
+      "sample_G_noisy": 0.7316339436727199
+    },
+    "sample_B_same_speaker": {
+      "sample_A_genuine_enrolled": 0.7336664768904229,
+      "sample_B_same_speaker": 1,
+      "sample_C_different_speaker": 0.7151489194569429,
+      "sample_D_different_scam": 0.919475104549999,
+      "sample_E_synthetic_generic": 0.6935761038398117,
+      "sample_G_noisy": 0.9497978246546906
+    },
+    "sample_C_different_speaker": {
+      "sample_A_genuine_enrolled": 0.9807407527555756,
+      "sample_B_same_speaker": 0.7151489194569429,
+      "sample_C_different_speaker": 1,
+      "sample_D_different_scam": 0.6803722985699187,
+      "sample_E_synthetic_generic": 0.6799820140625427,
+      "sample_G_noisy": 0.7048697215508536
+    },
+    "sample_D_different_scam": {
+      "sample_A_genuine_enrolled": 0.7133872212430513,
+      "sample_B_same_speaker": 0.919475104549999,
+      "sample_C_different_speaker": 0.6803722985699187,
+      "sample_D_different_scam": 1.0000000000000002,
+      "sample_E_synthetic_generic": 0.7175996095028567,
+      "sample_G_noisy": 0.9667967037788143
+    },
+    "sample_E_synthetic_generic": {
+      "sample_A_genuine_enrolled": 0.7026686864545489,
+      "sample_B_same_speaker": 0.6935761038398117,
+      "sample_C_different_speaker": 0.6799820140625427,
+      "sample_D_different_scam": 0.7175996095028567,
+      "sample_E_synthetic_generic": 1,
+      "sample_G_noisy": 0.7212711521549197
+    },
+    "sample_G_noisy": {
+      "sample_A_genuine_enrolled": 0.7316339436727199,
+      "sample_B_same_speaker": 0.9497978246546906,
+      "sample_C_different_speaker": 0.7048697215508536,
+      "sample_D_different_scam": 0.9667967037788143,
+      "sample_E_synthetic_generic": 0.7212711521549197,
+      "sample_G_noisy": 1.0000000000000002
+    }
+  },
+  "key_scenarios": {
+    "same_speaker_sim": 0.7336664768904229,
+    "diff_speaker_sim": 0.9807407527555756,
+    "scam_speaker_sim": 0.7133872212430513,
+    "synth_speaker_sim": 0.7026686864545489,
+    "recommended_threshold": 0.86
+  }
+}

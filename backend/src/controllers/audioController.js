@@ -13,7 +13,8 @@ export async function analyzeAudio(req, res, next) {
     if (!audioBuffer.length) throw audioEmptyError();
     const analysisId = generateAnalysisId();
     const result = await orchestrateAnalysis({ analysisId, requestId: req.requestId, filePath, audioBuffer,
-      originalName: req.file.originalname, targetSpeakerId: req.body.speakerId || null });
+      originalName: req.file.originalname, targetSpeakerId: req.body.speakerId || null,
+      languageHint: req.body.language_code || req.body.language || null });
 
     if (!result.success && result.state === 'AUDIO_UNUSABLE') return res.status(422).json(result);
     if (!result.cached) {

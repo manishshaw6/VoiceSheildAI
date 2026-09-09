@@ -1,0 +1,123 @@
+{
+  "timestamp": "2026-09-08T17:05:43.789Z",
+  "whisper_health": {
+    "loaded": true,
+    "provider": "faster_whisper",
+    "model": "small",
+    "device": "cpu",
+    "last_inference_ms": null,
+    "failure": null
+  },
+  "summary": {
+    "total": 8,
+    "processed": 8,
+    "avg_latency_ms": 2162,
+    "avg_rtf": 1.525
+  },
+  "samples": [
+    {
+      "sample_id": "sample_A_genuine_enrolled",
+      "filename": "sample_A_genuine_enrolled.wav",
+      "duration_sec": 3,
+      "available": true,
+      "language": "en",
+      "language_probability": 0.33264100551605225,
+      "text": "",
+      "segment_count": 0,
+      "latency_ms": 2289,
+      "rtf": 0.763,
+      "error_reason": null
+    },
+    {
+      "sample_id": "sample_B_same_speaker",
+      "filename": "sample_B_same_speaker.wav",
+      "duration_sec": 3,
+      "available": true,
+      "language": "en",
+      "language_probability": 0.33264100551605225,
+      "text": "",
+      "segment_count": 0,
+      "latency_ms": 2127,
+      "rtf": 0.709,
+      "error_reason": null
+    },
+    {
+      "sample_id": "sample_C_different_speaker",
+      "filename": "sample_C_different_speaker.wav",
+      "duration_sec": 3,
+      "available": true,
+      "language": "en",
+      "language_probability": 0.33264100551605225,
+      "text": "",
+      "segment_count": 0,
+      "latency_ms": 2110,
+      "rtf": 0.703,
+      "error_reason": null
+    },
+    {
+      "sample_id": "sample_D_different_scam",
+      "filename": "sample_D_different_scam.wav",
+      "duration_sec": 3,
+      "available": true,
+      "language": "en",
+      "language_probability": 0.33264100551605225,
+      "text": "",
+      "segment_count": 0,
+      "latency_ms": 2108,
+      "rtf": 0.703,
+      "error_reason": null
+    },
+    {
+      "sample_id": "sample_E_synthetic_generic",
+      "filename": "sample_E_synthetic_generic.wav",
+      "duration_sec": 3,
+      "available": true,
+      "language": "en",
+      "language_probability": 0.33264100551605225,
+      "text": "",
+      "segment_count": 0,
+      "latency_ms": 2173,
+      "rtf": 0.724,
+      "error_reason": null
+    },
+    {
+      "sample_id": "sample_F_too_short",
+      "filename": "sample_F_too_short.wav",
+      "duration_sec": 0.3,
+      "available": true,
+      "language": "en",
+      "language_probability": 0.33264100551605225,
+      "text": "",
+      "segment_count": 0,
+      "latency_ms": 2144,
+      "rtf": 7.147,
+      "error_reason": null
+    },
+    {
+      "sample_id": "sample_G_noisy",
+      "filename": "sample_G_noisy.wav",
+      "duration_sec": 3,
+      "available": true,
+      "language": "en",
+      "language_probability": 0.33264100551605225,
+      "text": "",
+      "segment_count": 0,
+      "latency_ms": 2154,
+      "rtf": 0.718,
+      "error_reason": null
+    },
+    {
+      "sample_id": "sample_H_near_silence",
+      "filename": "sample_H_near_silence.wav",
+      "duration_sec": 3,
+      "available": true,
+      "language": "en",
+      "language_probability": 0.33264100551605225,
+      "text": "",
+      "segment_count": 0,
+      "latency_ms": 2194,
+      "rtf": 0.731,
+      "error_reason": null
+    }
+  ]
+}

@@ -1586,6 +1586,8 @@ body {
 .dashboard-footer-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .report-download-btn {
@@ -1606,6 +1608,17 @@ body {
   transform: translateY(-2px);
   border-color: #00d2ff;
   box-shadow: 0 6px 25px rgba(0, 210, 255, 0.4);
+}
+
+.report-download-btn-alt {
+  background: linear-gradient(135deg, rgba(155, 89, 182, 0.25), rgba(142, 68, 173, 0.15));
+  border: 1px solid rgba(155, 89, 182, 0.4);
+  box-shadow: 0 4px 18px rgba(155, 89, 182, 0.25);
+}
+
+.report-download-btn-alt:hover {
+  border-color: #9b59b6;
+  box-shadow: 0 6px 25px rgba(155, 89, 182, 0.4);
 }
 
 /* ==========================================================================

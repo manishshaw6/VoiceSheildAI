@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-09-08T17:07:08.126Z",
+  "results": [
+    {
+      "sample_id": "sample_A_genuine",
+      "filename": "sample_A_genuine_enrolled.wav",
+      "available": false,
+      "classification": "NOT_APPLICABLE",
+      "score": null,
+      "confidence": null,
+      "error": null,
+      "metadata": {
+        "requestId": "e592f028-a535-4bfd-845a-3ed753fbab7c",
+        "providerStatus": "NOT_APPLICABLE",
+        "latencyMs": 9280
+      }
+    },
+    {
+      "sample_id": "sample_E_synthetic",
+      "filename": "sample_E_synthetic_generic.wav",
+      "available": false,
+      "classification": "NOT_APPLICABLE",
+      "score": null,
+      "confidence": null,
+      "error": null,
+      "metadata": {
+        "requestId": "766cea2e-17f6-4173-8d50-71d4c5392fb9",
+        "providerStatus": "NOT_APPLICABLE",
+        "latencyMs": 8354
+      }
+    }
+  ]
+}

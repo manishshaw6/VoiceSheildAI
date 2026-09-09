@@ -39,7 +39,6 @@ function initSchema() {
         raw_result TEXT
       )
     `);
-
     // Speaker Profiles table for enrollment & verification
     db.run(`
       CREATE TABLE IF NOT EXISTS speaker_profiles (
@@ -48,9 +47,22 @@ function initSchema() {
         name TEXT,
         embedding TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        sample_filename TEXT
+        sample_filename TEXT,
+        updated_at DATETIME,
+        model_version TEXT,
+        embedding_dimension INTEGER,
+        enrollment_quality REAL,
+        source_hash TEXT
       )
     `);
+    // Additive migration for existing profile databases. Duplicate-column errors are expected.
+    for (const statement of [
+      'ALTER TABLE speaker_profiles ADD COLUMN updated_at DATETIME',
+      'ALTER TABLE speaker_profiles ADD COLUMN model_version TEXT',
+      'ALTER TABLE speaker_profiles ADD COLUMN embedding_dimension INTEGER',
+      'ALTER TABLE speaker_profiles ADD COLUMN enrollment_quality REAL',
+      'ALTER TABLE speaker_profiles ADD COLUMN source_hash TEXT'
+    ]) db.run(statement, () => {});
 
     db.run(`
       CREATE TABLE IF NOT EXISTS incidents (

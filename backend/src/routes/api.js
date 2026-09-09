@@ -4,7 +4,7 @@
 
 import { Router } from 'express';
 import { uploadAudio } from '../middleware/uploadMiddleware.js';
-import { getHealth, getReadiness, getProviderStatus } from '../controllers/healthController.js';
+import { getHealth, getReadiness, getProviderStatus, getPreflight } from '../controllers/healthController.js';
 import { analyzeAudio } from '../controllers/audioController.js';
 import { enroll, verify, listProfiles } from '../controllers/speakerController.js';
 import { getHistory, getHistoryById, deleteHistory, getSecurityReport } from '../controllers/historyController.js';
@@ -16,6 +16,7 @@ const router = Router();
 router.get('/health', getHealth);
 router.get('/ready', getReadiness);
 router.get('/system/providers', getProviderStatus);
+router.get('/system/preflight', getPreflight);
 
 // Audio Pipeline Analysis
 router.post('/audio/analyze', uploadAudio.single('audio'), analyzeAudio);

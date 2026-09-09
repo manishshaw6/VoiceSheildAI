@@ -40,6 +40,7 @@ export const config = {
   // Provider API keys (never log these)
   realityDefenderApiKey: process.env.REALITY_DEFENDER_API_KEY || '',
   assemblyAiApiKey: process.env.ASSEMBLYAI_API_KEY || '',
+  sarvamApiKey: process.env.SARVAM_API_KEY || '',
   geminiApiKey: process.env.GEMINI_API_KEY || '',
   groqApiKey: process.env.GROQ_API_KEY || '',
 
@@ -75,7 +76,8 @@ export const config = {
   timeouts: {
     realityDefender: parseInt(process.env.RD_TIMEOUT_MS, 10) || Defaults.REALITY_DEFENDER_TIMEOUT_MS,
     assemblyAI: parseInt(process.env.ASSEMBLYAI_TIMEOUT_MS, 10) || Defaults.ASSEMBLYAI_TIMEOUT_MS,
-    llm: parseInt(process.env.LLM_TIMEOUT_MS, 10) || Defaults.LLM_TIMEOUT_MS
+    llm: parseInt(process.env.LLM_TIMEOUT_MS, 10) || Defaults.LLM_TIMEOUT_MS,
+    mlService: parseInt(process.env.ML_SERVICE_TIMEOUT_MS, 10) || Defaults.ML_SERVICE_TIMEOUT_MS
   },
 
   // Retry settings
@@ -87,7 +89,27 @@ export const config = {
   // Speaker verification
   speaker: {
     matchThreshold: parseFloat(process.env.SPEAKER_MATCH_THRESHOLD) || Defaults.SPEAKER_MATCH_THRESHOLD,
-    embeddingDimensions: Defaults.SPEAKER_EMBEDDING_DIMENSIONS
+    embeddingDimensions: parseInt(process.env.SPEAKER_EMBEDDING_DIMENSIONS, 10) || Defaults.SPEAKER_EMBEDDING_DIMENSIONS
+  },
+
+  mlService: {
+    url: (process.env.ML_SERVICE_URL || 'http://127.0.0.1:8001').replace(/\/$/, ''),
+    primaryStt: (process.env.PRIMARY_STT || 'faster_whisper').toLowerCase(),
+    primarySpeakerProvider: (process.env.PRIMARY_SPEAKER_PROVIDER || 'ecapa').toLowerCase(),
+    enableAssemblyAiFallback: process.env.ENABLE_ASSEMBLYAI_FALLBACK === 'true',
+    enableFingerprintFallback: process.env.ENABLE_FINGERPRINT_FALLBACK === 'true'
+  },
+
+  sarvam: {
+    enabled: process.env.ENABLE_SARVAM !== 'false',
+    model: process.env.SARVAM_STT_MODEL || 'saaras:v4',
+    timeoutMs: parseInt(process.env.SARVAM_TIMEOUT_MS, 10) || 30000,
+    routing: (process.env.PRIMARY_STT_ROUTING || 'language_aware').toLowerCase(),
+    englishProvider: (process.env.ENGLISH_STT_PROVIDER || 'faster_whisper').toLowerCase(),
+    indicProvider: (process.env.INDIC_STT_PROVIDER || 'sarvam').toLowerCase(),
+    enableFasterWhisper: process.env.ENABLE_FASTER_WHISPER !== 'false',
+    enableWhisperFallback: process.env.ENABLE_FASTER_WHISPER_FALLBACK === 'true',
+    baseUrl: (process.env.SARVAM_API_URL || 'https://api.sarvam.ai').replace(/\/$/, '')
   },
 
   // Cache
@@ -132,7 +154,7 @@ export function validateConfig() {
   if (!config.realityDefenderApiKey) {
     warnings.push('REALITY_DEFENDER_API_KEY is not configured. Deepfake detection will be unavailable.');
   }
-  if (!config.assemblyAiApiKey) {
+  if (!config.assemblyAiApiKey && config.mlService.primaryStt === 'assemblyai') {
     warnings.push('ASSEMBLYAI_API_KEY is not configured. Speech-to-text will be unavailable.');
   }
   if (!config.geminiApiKey && !config.groqApiKey) {

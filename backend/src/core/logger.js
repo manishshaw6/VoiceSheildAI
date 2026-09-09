@@ -18,6 +18,7 @@ const SECRET_PATTERNS = [
   /Bearer\s+\S+/gi,
   /\b(rd_[a-f0-9_]+)\b/g,           // Reality Defender keys
   /\b(sk-[a-zA-Z0-9]+)\b/g,         // OpenAI-style keys
+  /\b(sk_[a-zA-Z0-9_]+)\b/g,        // Sarvam keys
   /\b(gsk_[a-zA-Z0-9]+)\b/g,        // Groq keys
   /\b(AQ\.[a-zA-Z0-9]+)\b/g         // Gemini keys
 ];

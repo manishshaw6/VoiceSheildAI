@@ -1,0 +1,73 @@
+{
+  "timestamp": "2026-09-08T17:02:05.622Z",
+  "live_sarvam_test": {
+    "available": true,
+    "model": "saaras:v4",
+    "latency_ms": 415,
+    "language": "hi-IN",
+    "transcript": "",
+    "error_reason": null
+  },
+  "code_mix_fraud_scenarios": [
+    {
+      "scenario": "Telugu-English Code-Mix Bank Fraud",
+      "language": "te-IN",
+      "text": "Mee account block aipothundi immediately OTP cheppandi urgently debit card verify cheyali",
+      "rule_signals": [
+        "OTP_REQUEST",
+        "URGENCY_COERCION"
+      ],
+      "category": "Bank Impersonation | OTP Fraud",
+      "severity": "CRITICAL",
+      "probability": 0.99,
+      "canonical_evidence": {
+        "OTP_REQUEST": true,
+        "URGENCY": true
+      }
+    },
+    {
+      "scenario": "Hindi-English Code-Mix Urgent OTP Scam",
+      "language": "hi-IN",
+      "text": "Aapka electricity connection kat jayega turant OTP share karein warna light disconnect ho jayegi abhi payment karo",
+      "rule_signals": [
+        "OTP_REQUEST"
+      ],
+      "category": "Utility Impersonation / OTP Fraud",
+      "severity": "CRITICAL",
+      "probability": 1,
+      "canonical_evidence": {
+        "OTP_REQUEST": true
+      }
+    },
+    {
+      "scenario": "Pure English Financial Urgency",
+      "language": "en-IN",
+      "text": "Your bank account has been suspended for KYC update. Send the one time password immediately to avoid total account freeze.",
+      "rule_signals": [
+        "OTP_REQUEST",
+        "CREDENTIAL_REQUEST",
+        "ACCOUNT_SUSPENSION_THREAT",
+        "URGENCY_COERCION"
+      ],
+      "category": "Bank Impersonation | OTP Fraud",
+      "severity": "CRITICAL",
+      "probability": 0.99,
+      "canonical_evidence": {
+        "OTP_REQUEST": true,
+        "URGENCY": true
+      }
+    },
+    {
+      "scenario": "Legitimate Customer Service Call",
+      "language": "en-IN",
+      "text": "Good morning sir, thank you for calling customer support. How can I assist you today with your order delivery status?",
+      "rule_signals": [
+        "AUTHORITY_IMPERSONATION"
+      ],
+      "category": "Normal Conversation",
+      "severity": "LOW",
+      "probability": 0.05,
+      "canonical_evidence": {}
+    }
+  ]
+}
