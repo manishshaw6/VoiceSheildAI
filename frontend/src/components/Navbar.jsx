@@ -1,16 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import voxShieldMark from '../assets/voxshield-mark.svg';
+import { useAuth } from '../context/AuthContext';
+import AuthModal from './AuthModal';
 
 export default function Navbar() {
   const [health, setHealth] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const profileMenuRef = React.useRef(null);
+  const { user, authenticated, mailStatus, openAuthModal, logout } = useAuth();
 
   useEffect(() => {
     fetch('/api/health')
       .then(res => res.json())
       .then(data => setHealth(data))
       .catch(() => setHealth(null));
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+        setShowProfileMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   return (
@@ -45,7 +60,7 @@ export default function Navbar() {
             </NavLink>
           </nav>
 
-          <div className="header-actions-pro">
+          <div className="header-actions-pro" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               className="status-pill-pro"
               onClick={() => setShowStatusModal(true)}
@@ -54,8 +69,105 @@ export default function Navbar() {
               <span className="status-dot-pulse"></span>
               <span className="status-label">All Systems Active</span>
             </button>
+
+            {/* Auth & Profile Controls */}
+            {authenticated ? (
+              <div style={{ position: 'relative' }} ref={profileMenuRef}>
+                <div
+                  className="pro-user-pill"
+                  onClick={() => setShowProfileMenu(!showProfileMenu)}
+                  title="View User Account & Security Settings"
+                >
+                  <div className="pro-user-avatar">
+                    {(user?.name?.trim()?.[0] || user?.email?.[0] || 'U').toUpperCase()}
+                  </div>
+                  <div className="pro-user-info">
+                    <span className="pro-user-name">{user.name?.split(' ')[0] || 'User'}</span>
+                    <span className="pro-user-role">Verified</span>
+                  </div>
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#94a3b8"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{
+                      transform: showProfileMenu ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s ease',
+                      marginLeft: '2px'
+                    }}
+                  >
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </div>
+
+                {/* Luxury Profile Dropdown Menu */}
+                {showProfileMenu && (
+                  <div className="pro-profile-menu">
+                    <div className="pro-menu-header">
+                      <div className="pro-menu-avatar-lg">
+                        {(user?.name?.trim()?.[0] || user?.email?.[0] || 'U').toUpperCase()}
+                      </div>
+                      <div className="pro-menu-meta">
+                        <div className="pro-menu-fullname">{user.name || 'Verified User'}</div>
+                        <div className="pro-menu-email">{user.email}</div>
+                        <div className="pro-menu-badge">Verified Account</div>
+                      </div>
+                    </div>
+
+                    <div className="pro-menu-section">
+                      <div className="pro-menu-status-row">
+                        <span className="pro-menu-status-label">Report Delivery:</span>
+                        <span className="pro-menu-status-val">
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#70c99f' }} />
+                          VoxShield Secure Relay
+                        </span>
+                      </div>
+
+                      <div className="pro-menu-btn" style={{ cursor: 'default' }}>
+                        <span>Email & Security</span>
+                        <span style={{ fontSize: '0.68rem', color: '#70c99f', fontWeight: 700, textTransform: 'uppercase' }}>Active</span>
+                      </div>
+                    </div>
+
+                    <button
+                      className="pro-menu-logout-btn"
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        logout();
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                      </svg>
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                className="pro-auth-btn"
+                onClick={() => openAuthModal('signin')}
+                title="Secure Sign In to VoxShield"
+              >
+                <span className="pro-auth-btn-icon">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </span>
+                <span>Secure Sign In</span>
+              </button>
+            )}
+
             <Link to="/scanner" className="cta-header-btn">
-              Launch Scanner
+              Scanner
             </Link>
           </div>
         </div>
@@ -128,6 +240,9 @@ export default function Navbar() {
           </div>
         </div>
       )}
+
+      {/* Global Authentication Modal */}
+      <AuthModal />
     </>
   );
 }

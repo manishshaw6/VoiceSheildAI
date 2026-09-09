@@ -22,6 +22,8 @@ import {
   generateEvidenceChecklist,
   generateComplaintDraft
 } from './incidentGuidanceService.js';
+import { extractOrganizationIntelligence } from './organizationIntelligenceService.js';
+import { evaluateReportingEligibility } from './reportingEligibilityService.js';
 
 // ─── Demo Benchmark Fixtures ────────────────────────────────────────────────
 const __dirname_local = dirname(fileURLToPath(import.meta.url));
@@ -172,6 +174,21 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
   const convIntel = contextAnalysis.conversationIntelligence || null;
   const isBenign = !convIntel?.threat_assessment?.malicious_intent_detected && risk.score < 50;
 
+  const organization = extractOrganizationIntelligence({
+    text: transcription?.text || '',
+    conversationIntelligence: convIntel,
+    riskScore: risk.score
+  });
+
+  const reportingEligibility = evaluateReportingEligibility({
+    risk,
+    organization,
+    conversationIntelligence: convIntel,
+    deepfake,
+    speaker,
+    indicators
+  });
+
   const incidentGuidance = {
     resources: OFFICIAL_REPORTING_RESOURCES,
     immediateActions: generateImmediateActions({ conversationIntelligence: convIntel, risk, speaker, deepfake }),
@@ -214,6 +231,8 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
     threatRules: contextAnalysis.rules,
     context: contextAnalysis.context,
     conversationIntelligence: convIntel,
+    organization,
+    reportingEligibility,
     isBenign,
     incidentGuidance,
     complaintDraft,

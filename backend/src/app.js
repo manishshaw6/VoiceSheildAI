@@ -6,6 +6,7 @@
 
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import apiRouter from './routes/api.js';
 import { config } from './config/index.js';
 import { requestIdMiddleware, requestLogMiddleware } from './core/requestContext.js';
@@ -13,6 +14,7 @@ import { createLogger } from './core/logger.js';
 import { ApiError, formatErrorResponse } from './schemas/errors.js';
 import { rateLimitMiddleware } from './middleware/rateLimitMiddleware.js';
 import { openApiDocument, docsHtml } from './api/openapi.js';
+import { attachUser } from './middleware/authMiddleware.js';
 
 const logger = createLogger({ component: 'app' });
 const app = express();
@@ -31,12 +33,13 @@ app.use((req, res, next) => {
 
 const corsOrigin = config.isProduction
   ? config.frontendUrl
-  : '*'; // Allow all in dev for hackathon convenience
+  : (origin, callback) => callback(null, true); // Allow all in dev while supporting credentials
 
 app.use(cors({
   origin: corsOrigin,
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'Cookie']
 }));
 
 // ─── Request ID & Logging ───────────────────────────────────────────────────
@@ -45,8 +48,10 @@ app.use(requestIdMiddleware);
 app.use(requestLogMiddleware(logger));
 app.use(rateLimitMiddleware);
 
-// ─── Body Parsing ───────────────────────────────────────────────────────────
+// ─── Body & Cookie Parsing ───────────────────────────────────────────────────
 
+app.use(cookieParser());
+app.use(attachUser);
 app.use(express.json({ limit: `${config.audio.maxUploadSizeMB}mb` }));
 app.use(express.urlencoded({ extended: true, limit: `${config.audio.maxUploadSizeMB}mb` }));
 

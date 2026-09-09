@@ -12,6 +12,9 @@ import AuditVaultPage from './pages/AuditVaultPage';
 import AboutPage from './pages/AboutPage';
 import { generateCyberCrimePdfReport } from './services/pdfReportGenerator';
 
+import { AuthProvider } from './context/AuthContext';
+import ReportVerificationPage from './pages/ReportVerificationPage';
+
 function App() {
   const handleExportReport = async (analysisId, format = 'pdf') => {
     try {
@@ -22,7 +25,7 @@ function App() {
       const report = data.report;
 
       if (format === 'pdf') {
-        generateCyberCrimePdfReport(report);
+        window.open(`/api/v1/reports/${analysisId}/pdf`, '_blank');
       } else if (format === 'markdown') {
         const md = generateMarkdownReport(report);
         const blob = new Blob([md], { type: 'text/markdown' });
@@ -128,24 +131,28 @@ function App() {
   };
 
   return (
-    <BrowserRouter>
-      <div className="page-shell-pro">
-        <Navbar />
+    <AuthProvider>
+      <BrowserRouter>
+        <div className="page-shell-pro">
+          <Navbar />
 
-        <main className="main-content-pro">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/scanner" element={<ScannerPage onExportReport={handleExportReport} />} />
-            <Route path="/live" element={<LiveShieldPage onExportReport={handleExportReport} />} />
-            <Route path="/speaker-guard" element={<SpeakerGuardPage />} />
-            <Route path="/history" element={<AuditVaultPage onExportReport={handleExportReport} />} />
-            <Route path="/about" element={<AboutPage />} />
-          </Routes>
-        </main>
+          <main className="main-content-pro">
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/scanner" element={<ScannerPage onExportReport={handleExportReport} />} />
+              <Route path="/live" element={<LiveShieldPage onExportReport={handleExportReport} />} />
+              <Route path="/speaker-guard" element={<SpeakerGuardPage />} />
+              <Route path="/history" element={<AuditVaultPage onExportReport={handleExportReport} />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/reports/:id/verify" element={<ReportVerificationPage />} />
+              <Route path="/reports/verify/:id" element={<ReportVerificationPage />} />
+            </Routes>
+          </main>
 
-        <Footer />
-      </div>
-    </BrowserRouter>
+          <Footer />
+        </div>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 

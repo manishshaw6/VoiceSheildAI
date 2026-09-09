@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { generateCyberCrimePdfReport } from '../services/pdfReportGenerator';
+import IncidentReportModal from './IncidentReportModal';
 
 export default function SecurityDashboard({ analysis, onExportReport }) {
   const [activeGuidanceTab, setActiveGuidanceTab] = useState('all');
   const [showComplaintModal, setShowComplaintModal] = useState(false);
+  const [showIncidentModal, setShowIncidentModal] = useState(false);
   const [copiedToast, setCopiedToast] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'forensics' | 'guidance'
@@ -46,6 +48,30 @@ export default function SecurityDashboard({ analysis, onExportReport }) {
   const complaintDraft = analysis.complaintDraft || null;
 
   const isThreat = score >= 30 || (convIntel?.threat_assessment?.malicious_intent_detected);
+
+  const orgIntel = analysis.organization || (convIntel?.threat_assessment?.impersonated_organization ? {
+    detected: true,
+    claimedOrganization: convIntel.threat_assessment.impersonated_organization,
+    category: convIntel.threat_assessment.threat_category || 'Banking / Financial Services',
+    isImpersonation: true,
+    confidence: 0.88,
+    isVerifiedOrg: true,
+    trustScore: 95,
+    primaryDomain: 'sbi.co.in',
+    officialHelpline: '1800 1234 / 1930',
+    suspiciousReasons: ['Unsolicited caller claiming to represent financial institution requesting urgent credential verification.'],
+    evidenceQuotes: []
+  } : null);
+
+  const reportingEligibility = analysis.reportingEligibility || (isThreat ? {
+    status: score >= 75 ? 'STRONGLY_RECOMMENDED' : 'RECOMMENDED',
+    isEligible: true,
+    recommendedAction: 'File an authenticated fraud report with the impersonated entity.'
+  } : {
+    status: 'NOT_ELIGIBLE',
+    isEligible: false,
+    recommendedAction: 'No report required for benign or non-impersonation calls.'
+  });
 
   const getLevelColor = (lvl) => {
     switch (lvl) {
@@ -227,11 +253,162 @@ Please review this draft, verify all information, and file an official complaint
             gap: '8px',
             letterSpacing: '0.02em'
           }}
-          title="Generate and download official National Cyber Crime Reporting Portal & Police FIR Dossier (PDF)"
+          title="Download digitally signed VoxShield Incident Report dossier (PDF)"
         >
-          {downloadingPdf ? 'Generating Official Dossier...' : 'Download Official NCRP / Police FIR Report (PDF)'}
+          {downloadingPdf ? 'Generating Verified Dossier...' : 'Download VoxShield Verified Incident Dossier (PDF)'}
         </button>
       </div>
+
+      {/* Organization Impersonation Alert & Action Card */}
+      {orgIntel && orgIntel.detected && isThreat && (
+        <div className="org-impersonation-card" style={{
+          background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95))',
+          border: '2px solid rgba(255, 59, 92, 0.6)',
+          borderRadius: '14px',
+          padding: '20px',
+          marginBottom: '20px',
+          boxShadow: '0 8px 32px rgba(255, 59, 92, 0.15)',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '4px',
+            background: 'linear-gradient(90deg, #ff3b5c, #ff8c00, #ffd700)'
+          }} />
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px' }}>
+            <div style={{ flex: 1, minWidth: '280px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span style={{
+                  background: 'rgba(255, 59, 92, 0.2)',
+                  color: '#ff3b5c',
+                  border: '1px solid #ff3b5c',
+                  padding: '3px 10px',
+                  borderRadius: '6px',
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase'
+                }}>
+                  POSSIBLE ORGANIZATION IMPERSONATION
+                </span>
+
+                {orgIntel.isVerifiedOrg ? (
+                  <span style={{
+                    background: 'rgba(0, 229, 163, 0.15)',
+                    color: '#00e5a3',
+                    border: '1px solid #00e5a3',
+                    padding: '3px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.72rem',
+                    fontWeight: 800
+                  }}>
+                    ✓ TRUSTED DIRECTORY ENTITY
+                  </span>
+                ) : (
+                  <span style={{
+                    background: 'rgba(255, 140, 0, 0.15)',
+                    color: '#ff8c00',
+                    border: '1px solid #ff8c00',
+                    padding: '3px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.72rem',
+                    fontWeight: 800
+                  }}>
+                    UNVERIFIED CLAIMED ENTITY
+                  </span>
+                )}
+
+                <span style={{
+                  background: 'rgba(0, 210, 255, 0.12)',
+                  color: '#00d2ff',
+                  border: '1px solid rgba(0, 210, 255, 0.3)',
+                  padding: '3px 10px',
+                  borderRadius: '6px',
+                  fontSize: '0.72rem',
+                  fontWeight: 800
+                }}>
+                  DIRECTORY TRUST: {orgIntel.trustScore || 85}/100
+                </span>
+              </div>
+
+              <h3 style={{ color: '#fff', fontSize: '1.35rem', fontWeight: 800, margin: '10px 0 4px 0' }}>
+                {orgIntel.claimedOrganization || 'Unknown Organization'}
+              </h3>
+              <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
+                Category: <strong style={{ color: '#eff4ff' }}>{orgIntel.category || 'Banking / Financial Services'}</strong>
+                {orgIntel.primaryDomain && (
+                  <span style={{ marginLeft: '12px' }}>
+                    Official Domain: <code style={{ color: '#00d2ff' }}>{orgIntel.primaryDomain}</code>
+                  </span>
+                )}
+                {orgIntel.officialHelpline && (
+                  <span style={{ marginLeft: '12px' }}>
+                    Helpline: <strong style={{ color: '#ffd700' }}>{orgIntel.officialHelpline}</strong>
+                  </span>
+                )}
+              </div>
+
+              {orgIntel.suspiciousReasons && orgIntel.suspiciousReasons.length > 0 && (
+                <div style={{ marginTop: '12px', background: 'rgba(0,0,0,0.3)', padding: '10px 14px', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#ff8c00', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
+                    Impersonation Assessment Findings:
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: '18px', color: '#eff4ff', fontSize: '0.83rem', lineHeight: 1.5 }}>
+                    {orgIntel.suspiciousReasons.map((reason, idx) => (
+                      <li key={idx}>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px', justifyContent: 'center' }}>
+              <div style={{
+                background: reportingEligibility?.status === 'STRONGLY_RECOMMENDED'
+                  ? 'rgba(255, 59, 92, 0.2)'
+                  : 'rgba(255, 140, 0, 0.2)',
+                border: `1px solid ${reportingEligibility?.status === 'STRONGLY_RECOMMENDED' ? '#ff3b5c' : '#ff8c00'}`,
+                color: reportingEligibility?.status === 'STRONGLY_RECOMMENDED' ? '#ff3b5c' : '#ff8c00',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                fontSize: '0.78rem',
+                fontWeight: 800,
+                textAlign: 'center',
+                letterSpacing: '0.04em'
+              }}>
+                REPORTING STATUS: {reportingEligibility?.status?.replace(/_/g, ' ') || 'RECOMMENDED'}
+              </div>
+
+              <button
+                onClick={() => setShowIncidentModal(true)}
+                style={{
+                  background: 'linear-gradient(135deg, #ff3b5c, #e11d48)',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '12px 22px',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 18px rgba(255, 59, 92, 0.4)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'transform 0.15s ease'
+                }}
+              >
+                <span>GENERATE & AUTHORIZE INCIDENT REPORT</span>
+                <span style={{ fontSize: '1.1rem' }}>↗</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main KPI 4-Card Grid */}
       <div className="kpi-grid">
@@ -797,6 +974,26 @@ Please review this draft, verify all information, and file an official complaint
           {/* Generate Complaint Draft & PDF Buttons */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap', marginTop: '10px' }}>
             <button
+              onClick={() => setShowIncidentModal(true)}
+              style={{
+                background: 'linear-gradient(135deg, #ff3b5c, #e11d48)',
+                color: '#fff',
+                border: 'none',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                fontSize: '0.95rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 4px 16px rgba(255, 59, 92, 0.4)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <span>Generate & Authorize Incident Report (Gmail)</span>
+              <span>↗</span>
+            </button>
+            <button
               onClick={handleDownloadPdf}
               style={{
                 background: 'linear-gradient(135deg, #0b1d3a, #1e3a8a)',
@@ -814,7 +1011,7 @@ Please review this draft, verify all information, and file an official complaint
                 letterSpacing: '0.02em'
               }}
             >
-              {downloadingPdf ? 'Generating Official Dossier...' : 'Download Official NCRP / Police FIR Report (PDF)'}
+              {downloadingPdf ? 'Generating Verified Dossier...' : 'Download VoxShield Verified Incident Dossier (PDF)'}
             </button>
             <button
               onClick={() => setShowComplaintModal(true)}
@@ -830,7 +1027,7 @@ Please review this draft, verify all information, and file an official complaint
                 boxShadow: '0 4px 16px rgba(0, 210, 255, 0.4)'
               }}
             >
-              View & Copy Official Incident Complaint Draft
+              View & Copy Incident Complaint Draft
             </button>
           </div>
         </div>
@@ -938,7 +1135,7 @@ Please review this draft, verify all information, and file an official complaint
                   boxShadow: '0 4px 14px rgba(30, 58, 138, 0.5)'
                 }}
               >
-                {downloadingPdf ? 'Generating Dossier...' : 'Download Official NCRP / Police FIR Report (PDF)'}
+                {downloadingPdf ? 'Generating Dossier...' : 'Download VoxShield Verified Incident Dossier (PDF)'}
               </button>
               <button
                 onClick={() => copyToClipboard(effectiveComplaintDraft)}
@@ -980,6 +1177,19 @@ Please review this draft, verify all information, and file an official complaint
         <button
           className="report-download-btn"
           style={{
+            background: 'linear-gradient(135deg, #ff3b5c, #e11d48)',
+            color: '#fff',
+            fontWeight: 800,
+            border: 'none',
+            boxShadow: '0 4px 14px rgba(255, 59, 92, 0.4)'
+          }}
+          onClick={() => setShowIncidentModal(true)}
+        >
+          Authorize Incident Report (Gmail) ↗
+        </button>
+        <button
+          className="report-download-btn"
+          style={{
             background: 'linear-gradient(135deg, #0f172a, #1e3a8a)',
             color: '#fbbf24',
             fontWeight: 800,
@@ -988,7 +1198,7 @@ Please review this draft, verify all information, and file an official complaint
           }}
           onClick={handleDownloadPdf}
         >
-          {downloadingPdf ? 'Generating Dossier...' : 'Download Official NCRP / Police FIR Report (PDF)'}
+          {downloadingPdf ? 'Generating Dossier...' : 'Download VoxShield Verified Incident Dossier (PDF)'}
         </button>
         <button
           className="report-download-btn"
@@ -1003,6 +1213,13 @@ Please review this draft, verify all information, and file an official complaint
           Export Summary Report (Markdown)
         </button>
       </div>
+
+      {/* Authenticated Incident Report & Mail Authorization Modal */}
+      <IncidentReportModal
+        analysis={analysis}
+        isOpen={showIncidentModal}
+        onClose={() => setShowIncidentModal(false)}
+      />
     </div>
   );
 }
