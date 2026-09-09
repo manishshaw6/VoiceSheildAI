@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import voxShieldMark from '../assets/voxshield-mark.svg';
 
 export default function Navbar() {
   const [health, setHealth] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/auth');
+  };
 
   useEffect(() => {
     fetch('/api/health')
@@ -54,9 +62,27 @@ export default function Navbar() {
               <span className="status-dot-pulse"></span>
               <span className="status-label">All Systems Active</span>
             </button>
-            <Link to="/scanner" className="cta-header-btn">
-              Launch Scanner
-            </Link>
+
+            {isAuthenticated ? (
+              <div className="user-profile-badge-group">
+                <div className="user-profile-pill" title={user?.email}>
+                  <span className="user-avatar-icon">🛡️</span>
+                  <span className="user-name-text">{user?.fullName || user?.username || 'Agent'}</span>
+                </div>
+                <button
+                  type="button"
+                  className="nav-logout-btn"
+                  onClick={handleLogout}
+                  title="Sign Out of VOXSHIELD"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <Link to="/auth" className="cta-header-btn">
+                Join Us Now
+              </Link>
+            )}
           </div>
         </div>
       </header>
