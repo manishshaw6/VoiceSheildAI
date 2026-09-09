@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { VoicePoweredOrb } from './ui/voice-powered-orb';
 
 export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, enrolledSpeakers }) {
   const [activeMode, setActiveMode] = useState('upload'); // 'upload' | 'mic'
@@ -10,6 +11,8 @@ export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, e
   const [errorMessage, setErrorMessage] = useState('');
   const [currentStep, setCurrentStep] = useState('');
   const [speakerId, setSpeakerId] = useState(selectedSpeakerId || '');
+  const [recordingStream, setRecordingStream] = useState(null);
+  const [showMicWorkspace, setShowMicWorkspace] = useState(false);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -46,6 +49,7 @@ export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, e
     try {
       setErrorMessage('');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setRecordingStream(stream);
       audioChunksRef.current = [];
 
       const mediaRecorder = new MediaRecorder(stream);
@@ -64,6 +68,7 @@ export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, e
         if (audioUrl) URL.revokeObjectURL(audioUrl);
         setAudioUrl(URL.createObjectURL(audioBlob));
         stream.getTracks().forEach(track => track.stop());
+        setRecordingStream(null);
       };
 
       mediaRecorder.start(250);
@@ -86,8 +91,15 @@ export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, e
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       clearInterval(timerRef.current);
+      setRecordingStream(null);
       setRecordingState('idle');
     }
+  };
+
+  const closeMicWorkspace = () => {
+    if (isRecording) stopRecording();
+    setShowMicWorkspace(false);
+    setActiveMode('upload');
   };
 
   const executeAnalysis = async () => {
@@ -151,13 +163,13 @@ export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, e
           className={`mode-btn ${activeMode === 'upload' ? 'active' : ''}`}
           onClick={() => { setActiveMode('upload'); setErrorMessage(''); }}
         >
-          <span className="btn-icon">📁</span> Upload Audio File
+          Upload Audio File
         </button>
         <button
           className={`mode-btn ${activeMode === 'mic' ? 'active' : ''}`}
-          onClick={() => { setActiveMode('mic'); setErrorMessage(''); }}
+          onClick={() => { setActiveMode('mic'); setErrorMessage(''); setShowMicWorkspace(true); }}
         >
-          <span className="btn-icon">🎙️</span> Microphone Capture
+          Microphone Capture
         </button>
       </div>
 
@@ -175,7 +187,9 @@ export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, e
             <div className="dropzone-title">
               {file ? file.name : 'Drag & drop audio file or Click to Browse'}
             </div>
-            <div className="dropzone-hint">Supported formats: WAV, MP3, M4A, WEBM, OGG (Max: 25MB)</div>
+            <div className="dropzone-hint">
+              Supported formats: WAV, MP3, M4A, WEBM, OGG (Max: 25MB)
+            </div>
             {file && (
               <div className="file-size-tag">
                 {(file.size / (1024 * 1024)).toFixed(2)} MB
@@ -185,12 +199,21 @@ export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, e
         </div>
       )}
 
-      {activeMode === 'mic' && (
+      {activeMode === 'mic' && !showMicWorkspace && (
         <div className="mic-capture-zone">
+          <VoicePoweredOrb
+            className="mic-voice-orb"
+            enableVoiceControl={isRecording}
+            stream={recordingStream}
+            voiceSensitivity={3.8}
+            maxRotationSpeed={1.5}
+            maxHoverIntensity={1}
+          />
           <div className="mic-visualizer-container">
             <div className={`mic-ring ${isRecording ? 'pulsing' : ''}`}>
               <button
                 type="button"
+                aria-label={isRecording ? 'Stop microphone recording' : 'Start microphone recording'}
                 className={`mic-action-btn ${isRecording ? 'recording' : ''}`}
                 onClick={isRecording ? stopRecording : startRecording}
               >
@@ -236,7 +259,7 @@ export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, e
           onClick={executeAnalysis}
           disabled={!file || recordingState === 'processing'}
         >
-          {recordingState === 'processing' ? '⚡ Analyzing...' : '🛡️ Analyze Voice Security'}
+          {recordingState === 'processing' ? 'Analyzing…' : 'Analyze Voice Security'}
         </button>
       </div>
 
@@ -249,7 +272,54 @@ export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, e
 
       {errorMessage && (
         <div className="error-banner">
-          ⚠️ {errorMessage}
+          {errorMessage}
+        </div>
+      )}
+
+      {showMicWorkspace && (
+        <div className="voice-workspace-backdrop" role="dialog" aria-modal="true" aria-label="Microphone capture workspace">
+          <section className="voice-workspace">
+            <header className="voice-workspace-header">
+              <div>
+                <span className="workspace-kicker">VOICE CAPTURE</span>
+                <h2>Listen and analyze</h2>
+              </div>
+              <button type="button" className="workspace-minimize" onClick={closeMicWorkspace}>Close</button>
+            </header>
+
+            <div className="workspace-listening-stage">
+                <VoicePoweredOrb
+                  className="workspace-orb"
+                  enableVoiceControl={isRecording}
+                  stream={recordingStream}
+                  voiceSensitivity={3.8}
+                  maxRotationSpeed={1.5}
+                  maxHoverIntensity={1}
+                />
+              <div className="workspace-stage-copy">
+                <span className={`workspace-status ${isRecording ? 'is-live' : ''}`}>{isRecording ? 'Listening' : 'Ready'}</span>
+                <strong>{isRecording ? formatTimer(recordingTime) : file ? 'Recording ready' : 'Press to begin'}</strong>
+                <span>{isRecording ? 'Voice activity shapes the signal in real time.' : 'Capture a short voice sample to begin analysis.'}</span>
+              </div>
+              <button
+                type="button"
+                className={`workspace-record-control ${isRecording ? 'is-recording' : ''}`}
+                onClick={isRecording ? stopRecording : startRecording}
+                aria-label={isRecording ? 'Stop microphone recording' : 'Start microphone recording'}
+              />
+            </div>
+
+            <footer className="voice-workspace-footer">
+              <div className="workspace-note">WAV, MP3, M4A, WEBM, or OGG · up to 25 MB</div>
+              <div className="workspace-actions">
+                <button type="button" className="workspace-secondary" onClick={closeMicWorkspace}>Cancel</button>
+                <button type="button" className="run-analysis-btn" onClick={executeAnalysis} disabled={!file || recordingState === 'processing'}>
+                  {recordingState === 'processing' ? 'Analyzing…' : 'Analyze recording'}
+                </button>
+              </div>
+            </footer>
+            {errorMessage && <div className="workspace-error">{errorMessage}</div>}
+          </section>
         </div>
       )}
     </div>

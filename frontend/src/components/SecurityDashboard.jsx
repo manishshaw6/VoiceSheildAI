@@ -184,7 +184,7 @@ export default function SecurityDashboard({ analysis, onExportReport }) {
         {/* Left: Detected Signals / Indicators */}
         <div className="detail-card">
           <div className="detail-card-header">
-            <h4>🚨 Detected Threat Signals ({indicators.length})</h4>
+            <h4>Detected Threat Signals ({indicators.length})</h4>
             <span className="header-sub">Deterministic Rules + LLM Extractions</span>
           </div>
 
@@ -251,7 +251,7 @@ export default function SecurityDashboard({ analysis, onExportReport }) {
                       {seg.indicators && seg.indicators.length > 0 && (
                         <div className="seg-tags">
                           {seg.indicators.map((tg, i) => (
-                            <span key={i} className="seg-tag">⚠️ {tg}</span>
+                            <span key={i} className="seg-tag">{tg}</span>
                           ))}
                         </div>
                       )}

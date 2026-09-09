@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Link } from 'react-router-dom';
+import voxShieldMark from '../assets/voxshield-mark.svg';
 
 export default function Navbar() {
   const [health, setHealth] = useState(null);
@@ -18,10 +19,7 @@ export default function Navbar() {
         <div className="header-inner">
           <Link to="/" className="brand-pro">
             <div className="brand-icon-shield">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                <circle cx="12" cy="11" r="3" fill="#00d2ff" stroke="none" />
-              </svg>
+              <img src={voxShieldMark} alt="" />
             </div>
             <span className="brand-title">VOXSHIELD <span className="brand-accent">AI</span></span>
           </Link>
@@ -57,7 +55,7 @@ export default function Navbar() {
               <span className="status-label">All Systems Active</span>
             </button>
             <Link to="/scanner" className="cta-header-btn">
-              Launch Scanner ⚡
+              Launch Scanner
             </Link>
           </div>
         </div>

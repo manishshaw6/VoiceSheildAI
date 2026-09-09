@@ -134,7 +134,7 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
             </div>
 
             <button type="submit" className="action-btn-primary">
-              💾 Register Speaker Profile
+              Register Speaker Profile
             </button>
 
             {enrollStatus && (
@@ -197,10 +197,10 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
             </div>
 
             <button type="submit" className="action-btn-primary" disabled={isVerifying}>
-              {isVerifying ? 'Comparing Acoustic Vectors...' : '🔎 Run Biometric Verification'}
+              {isVerifying ? 'Comparing Acoustic Vectors...' : 'Run Biometric Verification'}
             </button>
 
-            {verifyError && <div className="error-banner">⚠️ {verifyError}</div>}
+            {verifyError && <div className="error-banner">{verifyError}</div>}
           </form>
 
           {verifyResult && (

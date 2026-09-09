@@ -77,7 +77,7 @@ export default function HistoryReports({ onSelectAnalysis, onExportReport }) {
           <p>Review past scan evaluations, examine forensic evidence, or export compliance reports.</p>
         </div>
         <button onClick={fetchHistory} className="refresh-btn" disabled={isLoading}>
-          🔄 {isLoading ? 'Refreshing...' : 'Refresh Records'}
+          {isLoading ? 'Refreshing...' : 'Refresh Records'}
         </button>
       </div>
 
@@ -134,21 +134,21 @@ export default function HistoryReports({ onSelectAnalysis, onExportReport }) {
                         onClick={(e) => { e.stopPropagation(); handleInspect(row.id); }}
                         title="View Full Dashboard"
                       >
-                        👁️ Inspect
+                        Inspect
                       </button>
                       <button
                         className="table-btn report-btn"
                         onClick={(e) => { e.stopPropagation(); onExportReport(row.id); }}
                         title="Download Security Report"
                       >
-                        📄 Report
+                        Report
                       </button>
                       <button
                         className="table-btn delete-btn"
                         onClick={(e) => handleDelete(row.id, e)}
                         title="Delete Record"
                       >
-                        🗑️
+                        Delete
                       </button>
                     </td>
                   </tr>
