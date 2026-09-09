@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './App.css';
 import './voxshield.css';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
@@ -10,6 +12,7 @@ import LiveShieldPage from './pages/LiveShieldPage';
 import SpeakerGuardPage from './pages/SpeakerGuardPage';
 import AuditVaultPage from './pages/AuditVaultPage';
 import AboutPage from './pages/AboutPage';
+import AuthPage from './pages/AuthPage';
 
 function App() {
   const handleExportReport = async (analysisId, format = 'json') => {
@@ -131,12 +134,21 @@ function App() {
 
         <main className="main-content-pro">
           <Routes>
+            {/* Public Landing Page */}
             <Route path="/" element={<HomePage />} />
-            <Route path="/scanner" element={<ScannerPage onExportReport={handleExportReport} />} />
-            <Route path="/live" element={<LiveShieldPage />} />
-            <Route path="/speaker-guard" element={<SpeakerGuardPage />} />
-            <Route path="/history" element={<AuditVaultPage onExportReport={handleExportReport} />} />
-            <Route path="/about" element={<AboutPage />} />
+
+            {/* Public Authentication Routes */}
+            <Route path="/auth" element={<AuthPage />} />
+            <Route path="/login" element={<AuthPage />} />
+            <Route path="/register" element={<AuthPage />} />
+
+            {/* Protected Dashboard & Operations Routes */}
+            <Route path="/dashboard" element={<ProtectedRoute><ScannerPage onExportReport={handleExportReport} /></ProtectedRoute>} />
+            <Route path="/scanner" element={<ProtectedRoute><ScannerPage onExportReport={handleExportReport} /></ProtectedRoute>} />
+            <Route path="/live" element={<ProtectedRoute><LiveShieldPage /></ProtectedRoute>} />
+            <Route path="/speaker-guard" element={<ProtectedRoute><SpeakerGuardPage /></ProtectedRoute>} />
+            <Route path="/history" element={<ProtectedRoute><AuditVaultPage onExportReport={handleExportReport} /></ProtectedRoute>} />
+            <Route path="/about" element={<ProtectedRoute><AboutPage /></ProtectedRoute>} />
           </Routes>
         </main>
 

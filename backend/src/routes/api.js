@@ -9,8 +9,16 @@ import { analyzeAudio } from '../controllers/audioController.js';
 import { enroll, verify, listProfiles } from '../controllers/speakerController.js';
 import { getHistory, getHistoryById, deleteHistory, getSecurityReport } from '../controllers/historyController.js';
 import { getIncident, getAuditTrail } from '../controllers/securityController.js';
+import { register, login, getProfile, logout } from '../controllers/authController.js';
+import { requireAuth } from '../middleware/authMiddleware.js';
 
 const router = Router();
+
+// Authentication Routes
+router.post('/auth/register', register);
+router.post('/auth/login', login);
+router.get('/auth/me', requireAuth, getProfile);
+router.post('/auth/logout', logout);
 
 // Health Check
 router.get('/health', getHealth);
