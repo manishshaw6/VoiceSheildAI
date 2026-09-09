@@ -141,6 +141,13 @@ ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
 # Scam & Conversation Intelligence
 GEMINI_API_KEY=your_gemini_api_key_here
 GROQ_API_KEY=your_groq_api_key_here # optional fallback
+
+# VoxCall LiveKit voice rooms
+LIVEKIT_URL=wss://your-livekit-host
+LIVEKIT_API_KEY=your_livekit_api_key
+LIVEKIT_API_SECRET=your_livekit_api_secret
+# Optional; defaults to 3600 seconds
+LIVEKIT_TOKEN_TTL_SECONDS=3600
 ```
 
 ---

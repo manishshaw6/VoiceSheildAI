@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import './App.css';
 import './voxshield.css';
 import Navbar from './components/Navbar';
@@ -14,6 +14,36 @@ import { generateCyberCrimePdfReport } from './services/pdfReportGenerator';
 
 import { AuthProvider } from './context/AuthContext';
 import ReportVerificationPage from './pages/ReportVerificationPage';
+import VoxCallPage from './pages/VoxCallPage';
+
+function AppContent({ handleExportReport }) {
+  const location = useLocation();
+
+  if (location.pathname === '/voxcall') {
+    return <VoxCallPage />;
+  }
+
+  return (
+    <div className="page-shell-pro">
+      <Navbar />
+
+      <main className="main-content-pro">
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/scanner" element={<ScannerPage onExportReport={handleExportReport} />} />
+          <Route path="/live" element={<LiveShieldPage onExportReport={handleExportReport} />} />
+          <Route path="/speaker-guard" element={<SpeakerGuardPage />} />
+          <Route path="/history" element={<AuditVaultPage onExportReport={handleExportReport} />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/reports/:id/verify" element={<ReportVerificationPage />} />
+          <Route path="/reports/verify/:id" element={<ReportVerificationPage />} />
+        </Routes>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}
 
 function App() {
   const handleExportReport = async (analysisId, format = 'pdf') => {
@@ -133,24 +163,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <div className="page-shell-pro">
-          <Navbar />
-
-          <main className="main-content-pro">
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/scanner" element={<ScannerPage onExportReport={handleExportReport} />} />
-              <Route path="/live" element={<LiveShieldPage onExportReport={handleExportReport} />} />
-              <Route path="/speaker-guard" element={<SpeakerGuardPage />} />
-              <Route path="/history" element={<AuditVaultPage onExportReport={handleExportReport} />} />
-              <Route path="/about" element={<AboutPage />} />
-              <Route path="/reports/:id/verify" element={<ReportVerificationPage />} />
-              <Route path="/reports/verify/:id" element={<ReportVerificationPage />} />
-            </Routes>
-          </main>
-
-          <Footer />
-        </div>
+        <AppContent handleExportReport={handleExportReport} />
       </BrowserRouter>
     </AuthProvider>
   );

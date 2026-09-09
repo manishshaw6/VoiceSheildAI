@@ -1,10 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { VoicePoweredOrb } from './ui/voice-powered-orb';
 
-export default function LiveStreamMonitor({
+const LiveStreamMonitor = forwardRef(function LiveStreamMonitor({
+  onSessionStart,
   onSessionComplete,
-  enrolledSpeakers
-}) {
+  enrolledSpeakers,
+  audioStream = null,
+  autoStart = false,
+  enableSpeechRecognition = true,
+  onRiskUpdate,
+  onTranscriptUpdate
+}, ref) {
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [speakerId, setSpeakerId] = useState('');
@@ -29,6 +35,16 @@ export default function LiveStreamMonitor({
   const mediaRecorderRef = useRef(null);
   const recognitionRef = useRef(null);
   const timerRef = useRef(null);
+  const ownsAudioStreamRef = useRef(false);
+  const sessionIdRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    stop: (notifyBackend = true) => stopLiveMonitor(notifyBackend),
+    start: (stream) => startLiveMonitor(stream),
+    getSessionId: () => sessionIdRef.current,
+    isStreaming: () => isStreaming,
+    isConnected: () => isConnected
+  }));
 
   const getWsUrl = () => {
     const protocol =
@@ -37,7 +53,7 @@ export default function LiveStreamMonitor({
     return `${protocol}//${window.location.host}/ws/live-analysis`;
   };
 
-  const startLiveMonitor = async () => {
+  const startLiveMonitor = async (providedStream = null) => {
     try {
       setWsStatus('Connecting to WebSocket...');
 
@@ -56,10 +72,8 @@ export default function LiveStreamMonitor({
             })
           );
 
-          const stream =
-            await navigator.mediaDevices.getUserMedia({
-              audio: true
-            });
+          const stream = providedStream || await navigator.mediaDevices.getUserMedia({ audio: true });
+          ownsAudioStreamRef.current = !providedStream;
 
           setLiveAudioStream(stream);
 
@@ -95,17 +109,20 @@ export default function LiveStreamMonitor({
 
           setIsStreaming(true);
 
-          // Speech Recognition
+          // The remote LiveKit path deliberately disables browser speech recognition:
+          // Web Speech listens to the local microphone, not the subscribed remote track.
           const SpeechRec =
             window.SpeechRecognition ||
             window.webkitSpeechRecognition;
 
-          if (SpeechRec) {
+          if (enableSpeechRecognition && SpeechRec) {
             const recognition = new SpeechRec();
 
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = 'en-US';
+
+            let lastSentInterimTs = 0;
 
             recognition.onresult = (event) => {
               let fullTranscript = '';
@@ -130,6 +147,23 @@ export default function LiveStreamMonitor({
                       text: transcriptPiece
                     })
                   );
+                } else if (
+                  !event.results[i].isFinal &&
+                  socket.readyState === WebSocket.OPEN
+                ) {
+                  // Low-latency threat escalation: check for scam keywords in real-time without waiting for sentence pause
+                  const lower = transcriptPiece.toLowerCase();
+                  const isThreatKeyword = /otp|pin|password|bank|wire|transfer|police|cbi|arrest|urgent|card|verify|account|credential/i.test(lower);
+                  const now = Date.now();
+                  if (isThreatKeyword || (now - lastSentInterimTs > 1500 && transcriptPiece.trim().length >= 6)) {
+                    lastSentInterimTs = now;
+                    socket.send(
+                      JSON.stringify({
+                        type: 'transcript_chunk',
+                        text: transcriptPiece
+                      })
+                    );
+                  }
                 }
               }
 
@@ -137,6 +171,7 @@ export default function LiveStreamMonitor({
                 setLiveTranscript((prev) =>
                   `${prev} ${fullTranscript}`.trim()
                 );
+                onTranscriptUpdate?.(fullTranscript.trim());
               }
             };
 
@@ -174,12 +209,18 @@ export default function LiveStreamMonitor({
         try {
           const data = JSON.parse(event.data);
 
+          if (data.type === 'connected') {
+            sessionIdRef.current = data.sessionId;
+            onSessionStart?.(data.sessionId, data);
+          }
+
           if (data.type === 'risk_update') {
             setLiveScore(data.score || 0);
             setLiveLevel(data.riskLevel || 'LOW');
 
             if (data.transcript) {
               setLiveTranscript(data.transcript);
+              onTranscriptUpdate?.(data.transcript);
             }
 
             if (data.indicators) {
@@ -195,6 +236,8 @@ export default function LiveStreamMonitor({
             if (data.cloneSuspicion) {
               setCloneWarning(true);
             }
+
+              onRiskUpdate?.(data);
           }
 
           if (data.type === 'session_complete') {
@@ -253,11 +296,14 @@ export default function LiveStreamMonitor({
     ) {
       try {
         mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream
-          .getTracks()
-          .forEach((track) => track.stop());
+        if (ownsAudioStreamRef.current) {
+          mediaRecorderRef.current.stream
+            .getTracks()
+            .forEach((track) => track.stop());
+        }
       } catch (_) {}
       setLiveAudioStream(null);
+      ownsAudioStreamRef.current = false;
     }
 
     if (recognitionRef.current) {
@@ -298,6 +344,45 @@ export default function LiveStreamMonitor({
   };
 
   useEffect(() => {
+    if (autoStart && audioStream && !isStreaming && !isConnected) {
+      startLiveMonitor(audioStream);
+    } else if (isStreaming && audioStream && audioStream !== liveAudioStream && wsRef.current?.readyState === WebSocket.OPEN) {
+      // Hot-swap stream into active MediaRecorder without breaking WebSocket session
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+          if (ownsAudioStreamRef.current) {
+            mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+          }
+        } catch (_) {}
+      }
+      ownsAudioStreamRef.current = false;
+      setLiveAudioStream(audioStream);
+      try {
+        let newRecorder;
+        try {
+          newRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+        } catch {
+          newRecorder = new MediaRecorder(audioStream);
+        }
+        mediaRecorderRef.current = newRecorder;
+        newRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+            event.data.arrayBuffer().then((buffer) => {
+              if (wsRef.current?.readyState === WebSocket.OPEN) {
+                wsRef.current.send(buffer);
+              }
+            });
+          }
+        };
+        newRecorder.start(1000);
+      } catch (err) {
+        console.error('Audio stream hot-swap failed:', err);
+      }
+    }
+  }, [autoStart, audioStream, isStreaming, isConnected, liveAudioStream]);
+
+  useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -308,6 +393,13 @@ export default function LiveStreamMonitor({
         mediaRecorderRef.current.state !== 'inactive'
       ) {
         mediaRecorderRef.current.stop();
+        if (ownsAudioStreamRef.current) {
+          mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+        }
+      }
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'stop' }));
       }
 
       if (recognitionRef.current) {
@@ -817,4 +909,6 @@ export default function LiveStreamMonitor({
 
     </div>
   );
-}
+});
+
+export default LiveStreamMonitor;

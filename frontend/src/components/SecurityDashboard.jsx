@@ -835,7 +835,7 @@ Please review this draft, verify all information, and file an official complaint
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', fontSize: '0.85rem' }}>
               <div><span style={{ color: '#888' }}>SHA-256:</span> <code style={{ color: '#00d2ff', wordBreak: 'break-all' }}>{forensic.sha256 || 'Calculated on upload'}</code></div>
               <div><span style={{ color: '#888' }}>File Name:</span> <span style={{ color: '#fff' }}>{forensic.filename || 'voice_sample.wav'}</span></div>
-              <div><span style={{ color: '#888' }}>Duration:</span> <span style={{ color: '#fff' }}>{forensic.duration_sec ? `${forensic.duration_sec.toFixed(1)}s` : 'N/A'}</span></div>
+              <div><span style={{ color: '#888' }}>Duration:</span> <span style={{ color: '#fff' }}>{Number(analysis.duration ?? forensic.duration_sec) > 0 ? `${Number(analysis.duration ?? forensic.duration_sec).toFixed(1)}s` : 'N/A'}</span></div>
               <div><span style={{ color: '#888' }}>Sample Rate:</span> <span style={{ color: '#fff' }}>{forensic.sample_rate || 16000} Hz</span></div>
             </div>
           </div>

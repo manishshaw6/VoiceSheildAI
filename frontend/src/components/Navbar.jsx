@@ -169,6 +169,13 @@ export default function Navbar() {
             <Link to="/scanner" className="cta-header-btn">
               Scanner
             </Link>
+            <button
+              type="button"
+              className="cta-header-btn"
+              onClick={() => window.open("/voxcall", "_blank")}
+            >
+              Open VoxCall
+            </button>
           </div>
         </div>
       </header>

@@ -44,6 +44,13 @@ export const config = {
   geminiApiKey: process.env.GEMINI_API_KEY || '',
   groqApiKey: process.env.GROQ_API_KEY || '',
 
+  livekit: {
+    url: (process.env.LIVEKIT_URL || '').replace(/\/$/, ''),
+    apiKey: process.env.LIVEKIT_API_KEY || '',
+    apiSecret: process.env.LIVEKIT_API_SECRET || '',
+    tokenTtlSeconds: parseInt(process.env.LIVEKIT_TOKEN_TTL_SECONDS, 10) || 3600
+  },
+
   // Directories
   uploadDir: path.resolve(__dirname, '../../uploads'),
   tempDir: path.resolve(__dirname, '../../temp'),
@@ -96,7 +103,7 @@ export const config = {
     url: (process.env.ML_SERVICE_URL || 'http://127.0.0.1:8001').replace(/\/$/, ''),
     primaryStt: (process.env.PRIMARY_STT || 'faster_whisper').toLowerCase(),
     primarySpeakerProvider: (process.env.PRIMARY_SPEAKER_PROVIDER || 'ecapa').toLowerCase(),
-    enableAssemblyAiFallback: process.env.ENABLE_ASSEMBLYAI_FALLBACK === 'true',
+    enableAssemblyAiFallback: process.env.ENABLE_ASSEMBLYAI_FALLBACK === 'false' ? false : Boolean(process.env.ASSEMBLYAI_API_KEY),
     enableFingerprintFallback: process.env.ENABLE_FINGERPRINT_FALLBACK !== 'false'
   },
 
@@ -178,6 +185,9 @@ export function validateConfig() {
   }
   if (!config.assemblyAiApiKey && config.mlService.primaryStt === 'assemblyai') {
     warnings.push('ASSEMBLYAI_API_KEY is not configured. Speech-to-text will be unavailable.');
+  }
+  if (!config.livekit.url || !config.livekit.apiKey || !config.livekit.apiSecret) {
+    warnings.push('LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET are not fully configured. VoxCall will be unavailable.');
   }
   if (!config.geminiApiKey && !config.groqApiKey) {
     warnings.push('Neither GEMINI_API_KEY nor GROQ_API_KEY is configured. LLM scam analysis will be unavailable.');

@@ -53,6 +53,8 @@ export function setupLiveAnalysisWebSocket(wss) {
     session.speakerResult = null;
     session.isAnalyzing = false;
     session.isFinished = false;
+    session.hasClientTranscript = false;
+    session.lastTranscribedLength = 0;
     const send = (type, data) => {
       if (ws.readyState === ws.OPEN) ws.send(createWSMessage(type, callId, data, sessions.nextSequence(callId)));
     };
@@ -72,9 +74,10 @@ export function setupLiveAnalysisWebSocket(wss) {
           sessions.transition(callId, CallState.ANALYZING);
         const fullBuffer = Buffer.concat(session.audioChunks);
         if (fullBuffer.length >= config.ws.minAudioBytes) {
+          tempPath = path.join(config.tempDir, `live_${crypto.randomUUID()}.webm`);
+          await fs.writeFile(tempPath, fullBuffer);
+
           if (!session.deepfake) {
-            tempPath = path.join(config.tempDir, `live_${crypto.randomUUID()}.webm`);
-            await fs.writeFile(tempPath, fullBuffer);
             session.deepfake = await getIntelligenceProvider('deepfake').analyze(tempPath);
           }
           if (session.speakerProfile && !session.speakerResult) {
@@ -83,6 +86,19 @@ export function setupLiveAnalysisWebSocket(wss) {
               targetSpeakerId: session.speakerProfile,
               threshold: config.speaker.matchThreshold
             });
+          }
+          // If no client-side transcript was supplied (e.g. remote LiveKit call audio stream or non-WebSpeech browser),
+          // transcribe audio on the backend so STT, threat rules, and risk evaluation stream in real time.
+          if (!session.hasClientTranscript && (fullBuffer.length - session.lastTranscribedLength >= 16000 || !session.transcript)) {
+            try {
+              const sttRes = await getIntelligenceProvider('transcription').transcribe(tempPath);
+              if (sttRes?.text) {
+                session.transcript = sttRes.text.trim();
+                session.lastTranscribedLength = fullBuffer.length;
+              }
+            } catch (sttErr) {
+              logger.debug('live.periodic_stt_error', { call_id: callId, error: sttErr.message });
+            }
           }
         }
         const update = liveRisk(session);
@@ -120,6 +136,7 @@ export function setupLiveAnalysisWebSocket(wss) {
         const msg = JSON.parse(data.toString());
         if (msg.type === 'start') session.speakerProfile = msg.speakerId || null;
         else if (msg.type === 'transcript_chunk' && typeof msg.text === 'string') {
+          session.hasClientTranscript = true;
           session.transcript = `${session.transcript} ${msg.text.slice(0, 2000)}`.trim();
           const update = liveRisk(session);
           await eventBus.emit(DomainEvent.RISK_UPDATED, { callId, data: { timestamp: update.elapsedSec,
@@ -198,8 +215,15 @@ export function setupLiveAnalysisWebSocket(wss) {
       eventBus.emit(DomainEvent.CALL_ENDED, { callId, data: { risk: finalAnalysis?.risk || update.risk } });
     }
 
-    ws.on('close', () => {
+    ws.on('close', async () => {
       clearInterval(session.periodicTimer);
+      if (!session.isFinished && session.audioChunks.length > 0) {
+        try {
+          await finish();
+        } catch (err) {
+          logger.error('live.finish_on_close_failed', { call_id: callId, error: err.message });
+        }
+      }
       session.isFinished = true;
       unsubscribe();
       sessions.remove(callId);

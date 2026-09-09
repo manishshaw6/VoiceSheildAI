@@ -12,6 +12,7 @@ import { getIncident, getAuditTrail } from '../controllers/securityController.js
 import { getMe, signup, login, demoLoginEndpoint, saveMailPasswordEndpoint, googleLogin, googleCallback, logout } from '../controllers/authController.js';
 import { getMailStatus, googleMailConnect, googleMailCallback, disconnectMail } from '../controllers/mailController.js';
 import { getOrganizations, getOrganization } from '../controllers/organizationController.js';
+import { createCallToken, terminateCall } from '../controllers/callController.js';
 import {
   generateReport,
   getReport,
@@ -61,6 +62,10 @@ router.post('/auth/mail-password', requireAuth, saveMailPasswordEndpoint);
 router.get('/auth/google', googleLogin);
 router.get('/auth/google/callback', googleCallback);
 router.post('/auth/logout', logout);
+
+// VoxCall LiveKit room access
+router.post('/calls/token', createCallToken);
+router.post('/calls/terminate', terminateCall);
 
 // Incremental Mail-Send Authorization (Gmail API Send Scope)
 router.get('/mail/status', getMailStatus);
