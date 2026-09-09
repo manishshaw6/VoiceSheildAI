@@ -136,7 +136,8 @@ export async function analyzeScamIntent(transcriptText) {
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: `TRANSCRIPT TO ANALYZE:\n"""${transcriptText}"""` }
         ],
-        model: 'qwen/qwen3.6-27b'
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 800
       }), config.timeouts.llm, 'Groq context analysis');
 
       let text = completion.choices[0]?.message?.content || '{}';

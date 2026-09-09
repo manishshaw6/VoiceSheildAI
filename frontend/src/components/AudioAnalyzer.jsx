@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { VoicePoweredOrb } from './ui/voice-powered-orb';
 
-export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, enrolledSpeakers }) {
+export default function AudioAnalyzer({ onAnalysisComplete, onAnalysisReset, selectedSpeakerId, enrolledSpeakers }) {
   const [activeMode, setActiveMode] = useState('upload'); // 'upload' | 'mic'
   const [file, setFile] = useState(null);
   const [audioUrl, setAudioUrl] = useState(null);
@@ -43,11 +43,13 @@ export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, e
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(URL.createObjectURL(selected));
     setRecordingState('idle');
+    if (onAnalysisReset) onAnalysisReset();
   };
 
   const startRecording = async () => {
     try {
       setErrorMessage('');
+      if (onAnalysisReset) onAnalysisReset();
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setRecordingStream(stream);
       audioChunksRef.current = [];
@@ -245,7 +247,7 @@ export default function AudioAnalyzer({ onAnalysisComplete, selectedSpeakerId, e
             onChange={(e) => setSpeakerId(e.target.value)}
             className="speaker-dropdown"
           >
-            <option value="">-- No enrolled speaker comparison --</option>
+            <option value="">-- None (General Scan / No Speaker Comparison) --</option>
             {enrolledSpeakers && enrolledSpeakers.map(spk => (
               <option key={spk.speaker_id} value={spk.speaker_id}>
                 {spk.name} ({spk.speaker_id})

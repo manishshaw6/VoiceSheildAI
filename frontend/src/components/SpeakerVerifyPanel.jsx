@@ -204,29 +204,45 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
           </form>
 
           {verifyResult && (
-            <div className={`verification-result-box ${verifyResult.match ? 'match-ok' : 'mismatch-alert'}`}>
-              <div className="result-status-title">
-                {verifyResult.match ? '✅ VERIFIED SPEAKER MATCH' : '❌ SPEAKER IDENTITY MISMATCH'}
+            verifyResult.status === 'NO_TARGET_SPEAKER' || verifyResult.decision === 'NO_COMPARISON_REQUESTED' ? (
+              <div className="verification-result-box" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                <div className="result-status-title" style={{ color: '#ccc' }}>
+                  ℹ️ NO ENROLLED TARGET IDENTITIES SELECTED
+                </div>
+                <p style={{ color: '#aaa', fontSize: '0.85rem', marginTop: '6px' }}>
+                  Please select an enrolled speaker identity from the dropdown above or register a reference profile first.
+                </p>
               </div>
-              <div className="result-metric-grid">
-                <div>
-                  <span className="label">Identity Target:</span>
-                  <strong>{verifyResult.speakerName || 'Best Match Candidate'}</strong>
+            ) : (
+              <div className={`verification-result-box ${verifyResult.match ? 'match-ok' : 'mismatch-alert'}`}>
+                <div className="result-status-title">
+                  {verifyResult.match
+                    ? `✅ ${verifyResult.decision || 'VERIFIED SPEAKER MATCH'}`
+                    : `❌ ${verifyResult.decision || 'SPEAKER IDENTITY MISMATCH'}`}
                 </div>
-                <div>
-                  <span className="label">Acoustic Similarity:</span>
-                  <strong className="score-val">{Math.round((verifyResult.similarity || 0) * 100)}%</strong>
+                <div className="result-metric-grid">
+                  <div>
+                    <span className="label">Identity Target:</span>
+                    <strong>{verifyResult.speakerName || 'Best Match Candidate'}</strong>
+                  </div>
+                  <div>
+                    <span className="label">Cosine Similarity:</span>
+                    <strong className="score-val">{verifyResult.similarity != null ? `${Math.round(verifyResult.similarity * 100)}%` : 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span className="label">Decision Threshold:</span>
+                    <strong>{Math.round((verifyResult.threshold || 0.7) * 100)}%</strong>
+                  </div>
+                  <div>
+                    <span className="label">Confidence:</span>
+                    <strong>{verifyResult.confidence != null ? `${Math.round(verifyResult.confidence * 100)}%` : 'Calibrated'}</strong>
+                  </div>
                 </div>
-                <div>
-                  <span className="label">Verification Threshold:</span>
-                  <strong>{Math.round((verifyResult.threshold || 0.7) * 100)}%</strong>
-                </div>
-                <div>
-                  <span className="label">Confidence:</span>
-                  <strong>{Math.round((verifyResult.confidence || 0.8) * 100)}%</strong>
+                <div style={{ marginTop: '10px', fontSize: '0.78rem', color: '#888', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '6px' }}>
+                  💡 Cosine similarity of 192-dimensional ECAPA-TDNN acoustic embeddings benchmarked against decision threshold {Math.round((verifyResult.threshold || 0.7) * 100)}%.
                 </div>
               </div>
-            </div>
+            )
           )}
         </div>
       </div>

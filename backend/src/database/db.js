@@ -43,25 +43,37 @@ function initSchema() {
     db.run(`
       CREATE TABLE IF NOT EXISTS speaker_profiles (
         id TEXT PRIMARY KEY,
-        speaker_id TEXT UNIQUE,
+        profile_id TEXT UNIQUE,
+        speaker_id TEXT,
         name TEXT,
+        display_name TEXT,
         embedding TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        sample_filename TEXT,
         updated_at DATETIME,
+        sample_filename TEXT,
+        model_name TEXT,
         model_version TEXT,
         embedding_dimension INTEGER,
         enrollment_quality REAL,
-        source_hash TEXT
+        speech_duration REAL,
+        source_hash TEXT,
+        sample_count INTEGER DEFAULT 1,
+        samples_meta TEXT DEFAULT '[]'
       )
     `);
     // Additive migration for existing profile databases. Duplicate-column errors are expected.
     for (const statement of [
+      'ALTER TABLE speaker_profiles ADD COLUMN profile_id TEXT',
+      'ALTER TABLE speaker_profiles ADD COLUMN display_name TEXT',
       'ALTER TABLE speaker_profiles ADD COLUMN updated_at DATETIME',
+      'ALTER TABLE speaker_profiles ADD COLUMN model_name TEXT',
       'ALTER TABLE speaker_profiles ADD COLUMN model_version TEXT',
       'ALTER TABLE speaker_profiles ADD COLUMN embedding_dimension INTEGER',
       'ALTER TABLE speaker_profiles ADD COLUMN enrollment_quality REAL',
-      'ALTER TABLE speaker_profiles ADD COLUMN source_hash TEXT'
+      'ALTER TABLE speaker_profiles ADD COLUMN speech_duration REAL',
+      'ALTER TABLE speaker_profiles ADD COLUMN source_hash TEXT',
+      'ALTER TABLE speaker_profiles ADD COLUMN sample_count INTEGER DEFAULT 1',
+      'ALTER TABLE speaker_profiles ADD COLUMN samples_meta TEXT DEFAULT "[]"'
     ]) db.run(statement, () => {});
 
     db.run(`

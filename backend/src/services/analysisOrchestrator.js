@@ -16,6 +16,12 @@ import { config } from '../config/index.js';
 import { getCachedAnalysis as getCache, setCachedAnalysis as setCache } from '../audio/hashService.js';
 import { createIncident } from './incidentService.js';
 import { recordAudit } from './auditService.js';
+import {
+  OFFICIAL_REPORTING_RESOURCES,
+  generateImmediateActions,
+  generateEvidenceChecklist,
+  generateComplaintDraft
+} from './incidentGuidanceService.js';
 
 // ─── Demo Benchmark Fixtures ────────────────────────────────────────────────
 const __dirname_local = dirname(fileURLToPath(import.meta.url));
@@ -69,7 +75,8 @@ const elapsed = start => Math.round(performance.now() - start);
 export async function orchestrateAnalysis({ analysisId, requestId, filePath, audioBuffer, originalName, targetSpeakerId = null, languageHint = null }) {
   const totalStart = performance.now();
   const forensic = createForensicRecord(originalName, audioBuffer);
-  const cached = config.cache.enabled ? getCache(forensic.sha256, config.cache.ttlSec) : null;
+  const cacheKey = `${forensic.sha256}:${targetSpeakerId || 'none'}:${languageHint || 'auto'}`;
+  const cached = config.cache.enabled ? getCache(cacheKey, config.cache.ttlSec) : null;
   if (cached) return { ...cached, analysisId, requestId, timestamp: new Date().toISOString(), cached: true,
     cachedFromAnalysisId: cached.analysisId };
 
@@ -162,14 +169,65 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
       flagged: matches.length > 0, indicators: matches.map(item => item.type.replace(/_/g, ' ')) };
   });
 
-  const result = { success: true, analysisId, requestId, timestamp: new Date().toISOString(), filename: originalName,
-    duration: audioQuality.duration || transcription.duration || 0, audioQuality, preprocessing: {
-      normalized: Boolean(preprocessed), sampleRate: preprocessed?.sampleRate || null, vad
-    }, forensic, deepfake: { ...deepfake, fakeProbability: deepfake.score }, transcription, speaker,
-    scam: contextAnalysis.llm, threatRules: contextAnalysis.rules, context: contextAnalysis.context,
-    evidence, indicators, timeline,
-    risk, policy, explanation, incident, unavailable, cached: false,
-    ...(config.isDevelopment ? { telemetry } : {}) };
-  if (config.cache.enabled) setCache(forensic.sha256, result);
+  const convIntel = contextAnalysis.conversationIntelligence || null;
+  const isBenign = !convIntel?.threat_assessment?.malicious_intent_detected && risk.score < 50;
+
+  const incidentGuidance = {
+    resources: OFFICIAL_REPORTING_RESOURCES,
+    immediateActions: generateImmediateActions({ conversationIntelligence: convIntel, risk, speaker, deepfake }),
+    evidenceChecklist: generateEvidenceChecklist({ callId: analysisId, filename: originalName, forensic, conversationIntelligence: convIntel, deepfake, speaker }),
+    exposure: convIntel?.victim_exposure || null
+  };
+
+  const complaintDraft = (risk.score >= 45 || convIntel?.threat_assessment?.malicious_intent_detected)
+    ? generateComplaintDraft({
+        callId: analysisId,
+        timestamp: new Date().toISOString(),
+        filename: originalName,
+        forensic,
+        transcription,
+        conversationIntelligence: convIntel,
+        risk,
+        speaker,
+        deepfake
+      })
+    : null;
+
+  const result = {
+    success: true,
+    analysisId,
+    requestId,
+    timestamp: new Date().toISOString(),
+    filename: originalName,
+    duration: audioQuality.duration || transcription.duration || 0,
+    audioQuality,
+    preprocessing: {
+      normalized: Boolean(preprocessed),
+      sampleRate: preprocessed?.sampleRate || null,
+      vad
+    },
+    forensic,
+    deepfake: { ...deepfake, fakeProbability: deepfake.score },
+    transcription,
+    speaker,
+    scam: contextAnalysis.llm,
+    threatRules: contextAnalysis.rules,
+    context: contextAnalysis.context,
+    conversationIntelligence: convIntel,
+    isBenign,
+    incidentGuidance,
+    complaintDraft,
+    evidence,
+    indicators,
+    timeline,
+    risk,
+    policy,
+    explanation,
+    incident,
+    unavailable,
+    cached: false,
+    ...(config.isDevelopment ? { telemetry } : {})
+  };
+  if (config.cache.enabled) setCache(cacheKey, result);
   return result;
 }

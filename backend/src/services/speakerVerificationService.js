@@ -5,7 +5,10 @@
  */
 
 import fs from 'fs';
+import crypto from 'crypto';
 import { query } from '../database/db.js';
+
+export const NO_TARGET_SPEAKER = 'NO_TARGET_SPEAKER';
 
 /**
  * Parses basic PCM samples from an audio buffer (WAV or raw)
@@ -44,9 +47,37 @@ function extractAudioSamples(buffer) {
   return samples;
 }
 
+export function calibrateFingerprintDecision(rawSimilarity, threshold = 0.70) {
+  if (rawSimilarity === null || rawSimilarity === undefined || isNaN(rawSimilarity)) {
+    return { decision: 'UNCERTAIN', confidence: 'UNCERTAIN', match: false };
+  }
+  const match = rawSimilarity >= threshold;
+  let decision = 'UNCERTAIN';
+  let confidence = 'UNCERTAIN';
+
+  if (rawSimilarity >= 0.82) {
+    decision = 'LIKELY_MATCH';
+    confidence = 'HIGH';
+  } else if (rawSimilarity >= threshold) {
+    decision = 'LIKELY_MATCH';
+    confidence = 'MEDIUM';
+  } else if (rawSimilarity >= 0.60) {
+    decision = 'UNCERTAIN';
+    confidence = 'UNCERTAIN';
+  } else if (rawSimilarity >= 0.35) {
+    decision = 'DOES_NOT_MATCH';
+    confidence = 'MEDIUM';
+  } else {
+    decision = 'DOES_NOT_MATCH';
+    confidence = 'HIGH';
+  }
+
+  return { decision, confidence, match };
+}
+
 /**
  * Extracts acoustic fingerprint embedding vector (80 dimensions)
- * Captures spectral energy distribution, zero-crossing rates, centroid dynamics, and band ratios
+ * Captures orthogonal spectral filterbank energy distribution with mean-variance normalization
  * @param {Buffer} audioBuffer 
  * @returns {number[]} Normalized 80-dimensional feature vector
  */
@@ -57,53 +88,46 @@ export function extractSpeakerEmbedding(audioBuffer) {
   const numFrames = Math.floor((samples.length - frameSize) / hopSize);
 
   const numBands = 80;
-  const embedding = new Array(numBands).fill(0);
-
   if (numFrames <= 0) {
-    // Return standard unit vector for tiny/silent audio
+    const embedding = new Array(numBands).fill(0);
     embedding[0] = 1.0;
     return embedding;
   }
 
+  const bandEnergies = new Float64Array(numBands);
   for (let f = 0; f < numFrames; f++) {
     const frameStart = f * hopSize;
-    let zeroCrossings = 0;
-    let energy = 0;
-
-    for (let i = 0; i < frameSize; i++) {
-      const s1 = samples[frameStart + i];
-      energy += s1 * s1;
-      if (i > 0) {
-        const s0 = samples[frameStart + i - 1];
-        if ((s1 >= 0 && s0 < 0) || (s1 < 0 && s0 >= 0)) {
-          zeroCrossings++;
-        }
+    for (let k = 0; k < numBands; k++) {
+      let sum = 0;
+      for (let n = 0; n < frameSize; n += 2) {
+        sum += samples[frameStart + n] * Math.cos((Math.PI / frameSize) * (n + 0.5) * (k + 1));
       }
+      bandEnergies[k] += sum * sum;
     }
-
-    // Distribute frame acoustic characteristics across frequency-like bands
-    const bandIdx = f % numBands;
-    embedding[bandIdx] += energy + (zeroCrossings / frameSize);
   }
 
-  // Normalize embedding vector (L2 norm)
+  const result = new Array(numBands);
+  let sum = 0;
+  for (let k = 0; k < numBands; k++) {
+    const val = Math.log(1e-6 + bandEnergies[k]);
+    result[k] = val;
+    sum += val;
+  }
+  const mean = sum / numBands;
   let normSq = 0;
-  for (let i = 0; i < numBands; i++) {
-    normSq += embedding[i] * embedding[i];
+  for (let k = 0; k < numBands; k++) {
+    result[k] -= mean;
+    normSq += result[k] * result[k];
   }
   const norm = Math.sqrt(normSq) || 1.0;
-  for (let i = 0; i < numBands; i++) {
-    embedding[i] = Number((embedding[i] / norm).toFixed(6));
-  }
-
-  return embedding;
+  return result.map(v => Number((v / norm).toFixed(6)));
 }
 
 /**
  * Calculates Cosine Similarity between two embedding vectors
  * @param {number[]} vecA 
  * @param {number[]} vecB 
- * @returns {number} Cosine similarity [-1.0, 1.0] normalized to [0.0, 1.0]
+ * @returns {number} Raw cosine similarity [-1.0, 1.0] (returns 0.5 on length mismatch for compatibility)
  */
 export function calculateCosineSimilarity(vecA, vecB) {
   if (!vecA || !vecB || vecA.length !== vecB.length) {
@@ -124,38 +148,80 @@ export function calculateCosineSimilarity(vecA, vecB) {
   if (denominator === 0) return 0.5;
 
   const rawSim = dotProduct / denominator;
-  // Normalize [-1, 1] range to [0, 1]
-  const normalizedSim = Math.max(0, Math.min(1, (rawSim + 1) / 2));
-  return Number(normalizedSim.toFixed(4));
+  return Number(Math.max(-1, Math.min(1, rawSim)).toFixed(4));
 }
 
 /**
  * Enrolls a speaker with an audio sample
  */
 export async function enrollSpeaker({ speakerId, name, audioBuffer, filename }) {
+  const profileId = (speakerId || '').trim().toLowerCase();
+  const displayName = (name || '').trim() || profileId;
   const embedding = extractSpeakerEmbedding(audioBuffer);
   const embeddingJson = JSON.stringify(embedding);
+  const incomingSourceHash = crypto.createHash('sha256').update(audioBuffer).digest('hex');
+  const embeddingHash = crypto.createHash('sha256').update(embeddingJson).digest('hex').slice(0, 16);
 
-  const existing = await query.get('SELECT * FROM speaker_profiles WHERE speaker_id = ?', [speakerId]);
+  const existing = await query.get(
+    'SELECT * FROM speaker_profiles WHERE profile_id = ? OR speaker_id = ?',
+    [profileId, profileId]
+  );
+
+  let sampleCount = 1;
+  let samplesMeta = [];
+
+  if (existing) {
+    sampleCount = (existing.sample_count || 1) + 1;
+    try {
+      samplesMeta = existing.samples_meta ? JSON.parse(existing.samples_meta) : [];
+    } catch {
+      samplesMeta = [];
+    }
+  }
+
+  samplesMeta.push({
+    filename,
+    source_hash: incomingSourceHash,
+    enrolled_at: new Date().toISOString()
+  });
+
   if (existing) {
     await query.run(
-      'UPDATE speaker_profiles SET name = ?, embedding = ?, sample_filename = ?, created_at = CURRENT_TIMESTAMP WHERE speaker_id = ?',
-      [name, embeddingJson, filename, speakerId]
+      `UPDATE speaker_profiles SET
+        name = ?, display_name = ?, profile_id = ?, embedding = ?, sample_filename = ?,
+        updated_at = CURRENT_TIMESTAMP, model_name = 'local_acoustic_fingerprint',
+        model_version = 'v2_orthogonal_dct', embedding_dimension = ?,
+        source_hash = ?, sample_count = ?, samples_meta = ?
+      WHERE id = ?`,
+      [displayName, displayName, profileId, embeddingJson, filename, embedding.length, incomingSourceHash, sampleCount, JSON.stringify(samplesMeta), existing.id]
     );
   } else {
     const id = 'spk_' + Date.now();
     await query.run(
-      'INSERT INTO speaker_profiles (id, speaker_id, name, embedding, sample_filename) VALUES (?, ?, ?, ?, ?)',
-      [id, speakerId, name, embeddingJson, filename]
+      `INSERT INTO speaker_profiles (
+        id, profile_id, speaker_id, name, display_name, embedding, sample_filename,
+        created_at, updated_at, model_name, model_version, embedding_dimension,
+        source_hash, sample_count, samples_meta
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'local_acoustic_fingerprint', 'v2_orthogonal_dct', ?, ?, ?, ?)`,
+      [id, profileId, profileId, displayName, displayName, embeddingJson, filename, embedding.length, incomingSourceHash, sampleCount, JSON.stringify(samplesMeta)]
     );
   }
 
-  console.log(`[SpeakerVerification] Speaker enrolled successfully: ${speakerId} (${name})`);
+  console.log(`[SpeakerVerification] Speaker enrolled successfully: ${profileId} (${displayName})`);
   return {
     success: true,
-    speakerId,
-    name,
-    embeddingDimensions: embedding.length
+    available: true,
+    provider: 'legacy_acoustic_fingerprint',
+    profile_id: profileId,
+    display_name: displayName,
+    speakerId: profileId,
+    name: displayName,
+    embeddingDimensions: embedding.length,
+    embedding_dimension: embedding.length,
+    model: 'local_acoustic_fingerprint',
+    sample_count: sampleCount,
+    reference_source_hash: incomingSourceHash,
+    reference_embedding_hash: embeddingHash
   };
 }
 
@@ -163,75 +229,105 @@ export async function enrollSpeaker({ speakerId, name, audioBuffer, filename }) 
  * Verifies an audio sample against an enrolled speaker or all enrolled profiles
  */
 export async function verifySpeaker({ audioBuffer, targetSpeakerId = null, threshold = 0.70 }) {
-  const currentEmbedding = extractSpeakerEmbedding(audioBuffer);
-
-  if (targetSpeakerId) {
-    const profile = await query.get('SELECT * FROM speaker_profiles WHERE speaker_id = ?', [targetSpeakerId]);
-    if (!profile) {
-      return {
-        enrolled: false,
-        match: false,
-        similarity: 0,
-        message: `No enrolled profile found for speaker ID '${targetSpeakerId}'.`
-      };
-    }
-
-    const referenceEmbedding = JSON.parse(profile.embedding);
-    const similarity = calculateCosineSimilarity(referenceEmbedding, currentEmbedding);
-    const isMatch = similarity >= threshold;
-
-    console.log(`[SpeakerVerification] Verified against ${targetSpeakerId}: Sim=${similarity}, Match=${isMatch}`);
-
+  if (!targetSpeakerId || !String(targetSpeakerId).trim()) {
     return {
-      enrolled: true,
-      profileId: profile.speaker_id,
-      speakerId: profile.speaker_id,
-      speakerName: profile.name,
-      similarity,
-      threshold,
-      match: isMatch,
-      status: isMatch ? 'MATCH' : 'MISMATCH',
-      matchProbability: null,
-      mismatchProbability: null,
-      confidence: Number(Math.min(1, 0.6 + Math.abs(similarity - threshold)).toFixed(2))
+      available: true,
+      enrolled: false,
+      provider: 'legacy_acoustic_fingerprint',
+      status: 'NO_TARGET_SPEAKER',
+      decision: 'NO_COMPARISON_REQUESTED',
+      similarity: null,
+      raw_cosine_similarity: null,
+      match: false,
+      confidence: null,
+      message: 'No enrolled speaker identity specified for comparison.'
     };
   }
 
-  // If no target specified, check against best matching enrolled profile if any exist
-  const profiles = await query.all('SELECT * FROM speaker_profiles');
+  const cleanTargetId = String(targetSpeakerId).trim();
+  const currentEmbedding = extractSpeakerEmbedding(audioBuffer);
+  const incomingSourceHash = crypto.createHash('sha256').update(audioBuffer).digest('hex');
+  const incomingEmbeddingHash = crypto.createHash('sha256')
+    .update(JSON.stringify(currentEmbedding))
+    .digest('hex').slice(0, 16);
+
+  const profiles = cleanTargetId === '__all__'
+    ? await query.all('SELECT * FROM speaker_profiles')
+    : await query.all('SELECT * FROM speaker_profiles WHERE profile_id = ? OR speaker_id = ?', [cleanTargetId.toLowerCase(), cleanTargetId]);
+
   if (!profiles || profiles.length === 0) {
     return {
+      available: true,
       enrolled: false,
-      match: false,
+      provider: 'legacy_acoustic_fingerprint',
+      status: 'NOT_ENROLLED',
+      decision: 'PROFILE_NOT_FOUND',
+      confidence: null,
       similarity: null,
-      message: 'No speaker profiles currently enrolled.'
+      raw_cosine_similarity: null,
+      match: false,
+      targetSpeakerId: cleanTargetId,
+      incoming_source_hash: incomingSourceHash,
+      message: `No enrolled profile found for '${cleanTargetId}'.`
     };
   }
 
-  let bestMatch = null;
-  let highestSim = -1;
-
-  for (const p of profiles) {
-    const ref = JSON.parse(p.embedding);
-    const sim = calculateCosineSimilarity(ref, currentEmbedding);
-    if (sim > highestSim) {
-      highestSim = sim;
-      bestMatch = p;
+  const candidates = profiles.map(p => {
+    try {
+      const ref = JSON.parse(p.embedding);
+      if (!Array.isArray(ref) || ref.length !== currentEmbedding.length) return null;
+      const sim = calculateCosineSimilarity(ref, currentEmbedding);
+      return { profile: p, similarity: sim };
+    } catch {
+      return null;
     }
+  }).filter(Boolean);
+
+  if (!candidates.length) {
+    return {
+      available: false,
+      enrolled: false,
+      provider: 'legacy_acoustic_fingerprint',
+      reason: 'profile_embedding_invalid',
+      incoming_source_hash: incomingSourceHash
+    };
   }
 
-  const isMatch = highestSim >= threshold;
+  const best = candidates.sort((a, b) => b.similarity - a.similarity)[0];
+  const calibrated = calibrateFingerprintDecision(best.similarity, threshold);
+
+  const referenceEmbeddingHash = crypto.createHash('sha256')
+    .update(best.profile.embedding)
+    .digest('hex').slice(0, 16);
+
+  const profileId = best.profile.profile_id || best.profile.speaker_id;
+  const displayName = best.profile.display_name || best.profile.name || profileId;
+
   return {
+    available: true,
     enrolled: true,
-    profileId: bestMatch.speaker_id,
-    speakerId: bestMatch.speaker_id,
-    speakerName: bestMatch.name,
-    similarity: highestSim,
+    provider: 'legacy_acoustic_fingerprint',
+    model: 'local_acoustic_fingerprint',
+    profile_id: profileId,
+    display_name: displayName,
+    profileId,
+    speakerId: profileId,
+    speakerName: displayName,
+    similarity: best.similarity,
+    raw_cosine_similarity: best.similarity,
+    speaker_threshold: threshold,
     threshold,
-    match: isMatch,
-    status: isMatch ? 'MATCH' : 'MISMATCH',
-    matchProbability: null,
-    mismatchProbability: null,
-    confidence: Number(Math.min(1, 0.6 + Math.abs(highestSim - threshold)).toFixed(2))
+    match: calibrated.match,
+    status: calibrated.decision,
+    speaker_decision: calibrated.decision,
+    decision: calibrated.decision,
+    confidence: calibrated.confidence,
+    reference_profile_id: profileId,
+    reference_source_hash: best.profile.source_hash || null,
+    incoming_source_hash: incomingSourceHash,
+    reference_embedding_hash: referenceEmbeddingHash,
+    incoming_embedding_hash: incomingEmbeddingHash,
+    embedding_dimension: currentEmbedding.length,
+    sample_count: best.profile.sample_count || 1
   };
 }

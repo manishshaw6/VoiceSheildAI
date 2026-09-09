@@ -39,6 +39,7 @@ export default function ScannerPage({ onExportReport }) {
         {/* Upload & Mic Controller */}
         <AudioAnalyzer
           onAnalysisComplete={(res) => setAnalysis(res)}
+          onAnalysisReset={() => setAnalysis(null)}
           enrolledSpeakers={enrolledSpeakers}
           selectedSpeakerId={activeSpeakerId}
         />

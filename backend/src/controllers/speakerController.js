@@ -40,8 +40,15 @@ export async function verify(req, res, next) {
 
 export async function listProfiles(_req, res, next) {
   try {
-    const profiles = await query.all(`SELECT speaker_id, name, created_at, updated_at, sample_filename,
-      model_version, embedding_dimension, enrollment_quality FROM speaker_profiles ORDER BY created_at DESC`);
-    return res.status(200).json({ success: true, count: profiles.length, profiles });
+    const profiles = await query.all(`SELECT id, profile_id, speaker_id, name, display_name, created_at, updated_at, sample_filename,
+      model_name, model_version, embedding_dimension, enrollment_quality, speech_duration, source_hash, sample_count FROM speaker_profiles ORDER BY created_at DESC`);
+    const mapped = profiles.map(p => ({
+      ...p,
+      profile_id: p.profile_id || p.speaker_id,
+      speaker_id: p.speaker_id || p.profile_id,
+      display_name: p.display_name || p.name,
+      name: p.name || p.display_name
+    }));
+    return res.status(200).json({ success: true, count: mapped.length, profiles: mapped });
   } catch (error) { return next(error); }
 }

@@ -68,15 +68,28 @@ export function createDeepfakeEvidence({
   available,
   provider,
   classification,
+  verdict = null,
+  provider_verdict = null,
+  provider_status = null,
+  provider_score = null,
+  provider_request_id = null,
+  provider_latency = null,
   score = null,
   confidence = null,
   metadata = {},
   error = null
 }) {
+  const normVerdict = verdict || classification || 'UNKNOWN';
   return {
     available: Boolean(available),
     provider: provider || 'unknown',
     classification: classification || 'UNKNOWN',
+    verdict: normVerdict,
+    provider_verdict: provider_verdict || normVerdict,
+    provider_status: provider_status || null,
+    provider_score: provider_score !== null ? clamp01(provider_score) : null,
+    provider_request_id: provider_request_id || null,
+    provider_latency: provider_latency || null,
     score: score !== null ? clamp01(score) : null,
     confidence: confidence !== null ? clamp01(confidence) : null,
     metadata,
