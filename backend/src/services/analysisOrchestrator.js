@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { assessAudioQuality } from '../audio/qualityGate.js';
-import { preprocessWav } from '../audio/preprocessor.js';
+import { preprocessWav, ensurePcmWav } from '../audio/preprocessor.js';
 import { voiceActivityDetector } from '../audio/vadService.js';
 import { createForensicRecord } from '../audio/hashService.js';
 import { getIntelligenceProvider } from '../integrations/providers.js';
@@ -16,6 +16,15 @@ import { config } from '../config/index.js';
 import { getCachedAnalysis as getCache, setCachedAnalysis as setCache } from '../audio/hashService.js';
 import { createIncident } from './incidentService.js';
 import { recordAudit } from './auditService.js';
+import {
+  OFFICIAL_REPORTING_RESOURCES,
+  generateImmediateActions,
+  generateEvidenceChecklist,
+  generateComplaintDraft
+} from './incidentGuidanceService.js';
+import { extractOrganizationIntelligence } from './organizationIntelligenceService.js';
+import { evaluateReportingEligibility } from './reportingEligibilityService.js';
+import { extractForensicSignals, extractJsForensics } from './forensicAnalysisService.js';
 
 // ─── Demo Benchmark Fixtures ────────────────────────────────────────────────
 const __dirname_local = dirname(fileURLToPath(import.meta.url));
@@ -59,6 +68,7 @@ function getDemoBenchmarkResult(analysisId, requestId, { unavailableProviders = 
     indicators: scenario.indicators,
     policy: { actions: scenario.policy_action.split(', ').map(a => a.trim()) },
     explanation: { recommendedResponse: scenario.recommended_action },
+    forensics: extractJsForensics(new Float32Array(16000 * 5).map((_, i) => Math.sin(i * 0.05) * 0.4), 16000),
     unavailable: [],
     cached: false
   };
@@ -69,7 +79,8 @@ const elapsed = start => Math.round(performance.now() - start);
 export async function orchestrateAnalysis({ analysisId, requestId, filePath, audioBuffer, originalName, targetSpeakerId = null, languageHint = null }) {
   const totalStart = performance.now();
   const forensic = createForensicRecord(originalName, audioBuffer);
-  const cached = config.cache.enabled ? getCache(forensic.sha256, config.cache.ttlSec) : null;
+  const cacheKey = `${forensic.sha256}:${targetSpeakerId || 'none'}:${languageHint || 'auto'}`;
+  const cached = config.cache.enabled ? getCache(cacheKey, config.cache.ttlSec) : null;
   if (cached) return { ...cached, analysisId, requestId, timestamp: new Date().toISOString(), cached: true,
     cachedFromAnalysisId: cached.analysisId };
 
@@ -105,7 +116,7 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
   const [deepfake, transcription, speaker] = await Promise.all([
     deepfakeProvider.analyze(filePath).then(value => { telemetry.deepfakeMs = elapsed(stageStarts.deepfake); return value; }),
     transcriptionProvider.transcribe(filePath, { languageHint }).then(value => { telemetry.whisperMs = elapsed(stageStarts.stt); telemetry.sttMs = telemetry.whisperMs; return value; }),
-    speakerProvider.verify({ audioBuffer, targetSpeakerId, threshold: config.speaker.matchThreshold })
+    speakerProvider.verify({ audioBuffer: ensurePcmWav(audioBuffer), targetSpeakerId, threshold: config.speaker.matchThreshold })
       .then(value => { telemetry.speakerMs = elapsed(stageStarts.speaker); return value; })
   ]);
 
@@ -125,7 +136,7 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
     category: speaker.match ? EvidenceCategory.SPEAKER_MATCH : EvidenceCategory.SPEAKER_MISMATCH,
     source: speaker.provider || 'speaker_verification', score: speaker.match ? speaker.similarity : 1 - speaker.similarity,
     confidence: speaker.confidence ?? 0.8, reliability: 0.85, quality: audioQuality.qualityScore,
-    weight: speaker.match ? 0 : config.riskWeights.speaker, severity: speaker.match ? Severity.LOW : Severity.HIGH,
+    weight: config.riskWeights.speaker, severity: speaker.match ? Severity.LOW : Severity.HIGH,
     explanation: speaker.match ? 'The voice matched the enrolled speaker.' : 'The voice did not match the enrolled speaker.' }));
 
   const fusionStart = performance.now();
@@ -162,14 +173,97 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
       flagged: matches.length > 0, indicators: matches.map(item => item.type.replace(/_/g, ' ')) };
   });
 
-  const result = { success: true, analysisId, requestId, timestamp: new Date().toISOString(), filename: originalName,
-    duration: audioQuality.duration || transcription.duration || 0, audioQuality, preprocessing: {
-      normalized: Boolean(preprocessed), sampleRate: preprocessed?.sampleRate || null, vad
-    }, forensic, deepfake: { ...deepfake, fakeProbability: deepfake.score }, transcription, speaker,
-    scam: contextAnalysis.llm, threatRules: contextAnalysis.rules, context: contextAnalysis.context,
-    evidence, indicators, timeline,
-    risk, policy, explanation, incident, unavailable, cached: false,
-    ...(config.isDevelopment ? { telemetry } : {}) };
-  if (config.cache.enabled) setCache(forensic.sha256, result);
+  const convIntel = contextAnalysis.conversationIntelligence || null;
+  const isBenign = !convIntel?.threat_assessment?.malicious_intent_detected && risk.score < 50;
+
+  const organization = extractOrganizationIntelligence({
+    text: transcription?.text || '',
+    conversationIntelligence: convIntel,
+    riskScore: risk.score
+  });
+
+  const reportingEligibility = evaluateReportingEligibility({
+    risk,
+    organization,
+    conversationIntelligence: convIntel,
+    deepfake,
+    speaker,
+    indicators
+  });
+
+  const incidentGuidance = {
+    resources: OFFICIAL_REPORTING_RESOURCES,
+    immediateActions: generateImmediateActions({ conversationIntelligence: convIntel, risk, speaker, deepfake }),
+    evidenceChecklist: generateEvidenceChecklist({ callId: analysisId, filename: originalName, forensic, conversationIntelligence: convIntel, deepfake, speaker }),
+    exposure: convIntel?.victim_exposure || null
+  };
+
+  const complaintDraft = (risk.score >= 45 || convIntel?.threat_assessment?.malicious_intent_detected)
+    ? generateComplaintDraft({
+        callId: analysisId,
+        timestamp: new Date().toISOString(),
+        filename: originalName,
+        forensic,
+        transcription,
+        conversationIntelligence: convIntel,
+        risk,
+        speaker,
+        deepfake
+      })
+    : null;
+
+  const forensicStart = performance.now();
+  const forensics = await extractForensicSignals({
+    filePath,
+    audioBuffer,
+    preprocessed,
+    deepfake,
+    speaker,
+    transcription,
+    risk,
+    indicators,
+    timeline
+  });
+  telemetry.forensicsMs = elapsed(forensicStart);
+
+  const result = {
+    success: true,
+    analysisId,
+    requestId,
+    timestamp: new Date().toISOString(),
+    filename: originalName,
+    duration: audioQuality.duration || transcription.duration || 0,
+    audioQuality,
+    preprocessing: {
+      normalized: Boolean(preprocessed),
+      sampleRate: preprocessed?.sampleRate || null,
+      vad
+    },
+    forensic,
+    forensics,
+    deepfake: { ...deepfake, fakeProbability: deepfake.score },
+    transcription,
+    speaker,
+    scam: contextAnalysis.llm,
+    threatRules: contextAnalysis.rules,
+    context: contextAnalysis.context,
+    conversationIntelligence: convIntel,
+    organization,
+    reportingEligibility,
+    isBenign,
+    incidentGuidance,
+    complaintDraft,
+    evidence,
+    indicators,
+    timeline,
+    risk,
+    policy,
+    explanation,
+    incident,
+    unavailable,
+    cached: false,
+    ...(config.isDevelopment ? { telemetry } : {})
+  };
+  if (config.cache.enabled) setCache(cacheKey, result);
   return result;
 }

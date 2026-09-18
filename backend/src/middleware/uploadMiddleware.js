@@ -25,17 +25,17 @@ const storage = multer.diskStorage({
 
 function fileFilter(req, file, cb) {
   const ext = path.extname(file.originalname).toLowerCase();
+  const mime = (file.mimetype || '').toLowerCase();
 
-  // Allow browser MediaRecorder default blobs or validate extensions
-  if (ext && !ALLOWED_EXTENSIONS.has(ext)) {
-    return cb(new Error(`Invalid file format: ${ext}. Supported formats: WAV, MP3, M4A, WEBM, OGG.`), false);
+  const isAllowedExt = ext ? (ALLOWED_EXTENSIONS.has(ext) || /\.(wav|mp3|m4a|webm|ogg|mpeg|mpg|aac|flac|mpga|opus)$/i.test(file.originalname)) : false;
+  const isAllowedMime = mime ? (ALLOWED_MIME_TYPES.has(mime) || mime.startsWith('audio/') || mime.includes('mpeg') || mime.includes('webm')) : false;
+
+  // Allow browser MediaRecorder default blobs, allowed extensions, or allowed audio MIME types
+  if (isAllowedExt || isAllowedMime || !ext) {
+    return cb(null, true);
   }
 
-  if (file.mimetype && !ALLOWED_MIME_TYPES.has(file.mimetype.toLowerCase())) {
-    return cb(new Error(`Unsupported MIME type: ${file.mimetype}`), false);
-  }
-
-  cb(null, true);
+  return cb(new Error(`Invalid file format: ${ext || mime}. Supported formats: WAV, MP3, MPEG, M4A, WEBM, OGG.`), false);
 }
 
 export const uploadAudio = multer({

@@ -43,25 +43,37 @@ function initSchema() {
     db.run(`
       CREATE TABLE IF NOT EXISTS speaker_profiles (
         id TEXT PRIMARY KEY,
-        speaker_id TEXT UNIQUE,
+        profile_id TEXT UNIQUE,
+        speaker_id TEXT,
         name TEXT,
+        display_name TEXT,
         embedding TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        sample_filename TEXT,
         updated_at DATETIME,
+        sample_filename TEXT,
+        model_name TEXT,
         model_version TEXT,
         embedding_dimension INTEGER,
         enrollment_quality REAL,
-        source_hash TEXT
+        speech_duration REAL,
+        source_hash TEXT,
+        sample_count INTEGER DEFAULT 1,
+        samples_meta TEXT DEFAULT '[]'
       )
     `);
     // Additive migration for existing profile databases. Duplicate-column errors are expected.
     for (const statement of [
+      'ALTER TABLE speaker_profiles ADD COLUMN profile_id TEXT',
+      'ALTER TABLE speaker_profiles ADD COLUMN display_name TEXT',
       'ALTER TABLE speaker_profiles ADD COLUMN updated_at DATETIME',
+      'ALTER TABLE speaker_profiles ADD COLUMN model_name TEXT',
       'ALTER TABLE speaker_profiles ADD COLUMN model_version TEXT',
       'ALTER TABLE speaker_profiles ADD COLUMN embedding_dimension INTEGER',
       'ALTER TABLE speaker_profiles ADD COLUMN enrollment_quality REAL',
-      'ALTER TABLE speaker_profiles ADD COLUMN source_hash TEXT'
+      'ALTER TABLE speaker_profiles ADD COLUMN speech_duration REAL',
+      'ALTER TABLE speaker_profiles ADD COLUMN source_hash TEXT',
+      'ALTER TABLE speaker_profiles ADD COLUMN sample_count INTEGER DEFAULT 1',
+      'ALTER TABLE speaker_profiles ADD COLUMN samples_meta TEXT DEFAULT "[]"'
     ]) db.run(statement, () => {});
 
     db.run(`
@@ -88,17 +100,124 @@ function initSchema() {
       )
     `);
 
+    // Authenticated Users
+    // Merged schema:
+    // - Ayush branch: Google OAuth, sessions, Gmail permissions
+    // - main branch: username + bcrypt password authentication
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
-        full_name TEXT NOT NULL,
+        google_id TEXT UNIQUE,
         email TEXT UNIQUE NOT NULL,
-        username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
+        name TEXT,
+        full_name TEXT,
+        username TEXT UNIQUE,
+        picture TEXT,
+        password_hash TEXT,
+        password_salt TEXT,
+        mail_password_encrypted TEXT,
+        email_verified INTEGER NOT NULL DEFAULT 1,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_login_at DATETIME
       )
     `);
+
+    // Additive migrations for existing users table.
+    // These allow databases created by either branch to continue working.
+    for (const statement of [
+      'ALTER TABLE users ADD COLUMN google_id TEXT',
+      'ALTER TABLE users ADD COLUMN full_name TEXT',
+      'ALTER TABLE users ADD COLUMN username TEXT',
+      'ALTER TABLE users ADD COLUMN picture TEXT',
+      'ALTER TABLE users ADD COLUMN password_hash TEXT',
+      'ALTER TABLE users ADD COLUMN password_salt TEXT',
+      'ALTER TABLE users ADD COLUMN mail_password_encrypted TEXT',
+      'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1',
+      'ALTER TABLE users ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+      'ALTER TABLE users ADD COLUMN last_login_at DATETIME'
+    ]) {
+      db.run(statement, () => {});
+    }
+
+    // OAuth Tokens for Users (Encrypted at rest)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS user_oauth_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        scope_type TEXT NOT NULL,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT,
+        expires_at INTEGER,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, provider, scope_type),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    // User Sessions (HTTP-Only Cookie Session Store)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        session_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Trusted Organization Directory
+    db.run(`
+      CREATE TABLE IF NOT EXISTS organizations (
+        id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        aliases TEXT NOT NULL DEFAULT '[]',
+        organization_type TEXT NOT NULL,
+        country TEXT DEFAULT 'IN',
+        official_domain TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Trusted Organization Verified Reporting Channels
+    db.run(`
+      CREATE TABLE IF NOT EXISTS organization_contacts (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        channel_type TEXT NOT NULL DEFAULT 'email',
+        destination TEXT NOT NULL,
+        verified INTEGER NOT NULL DEFAULT 0,
+        verification_source TEXT,
+        verified_at DATETIME,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Incident Reports (Digitally Signed & State Machine Tracked)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS incident_reports (
+        id TEXT PRIMARY KEY,
+        incident_id TEXT NOT NULL,
+        analysis_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        organization_id TEXT,
+        organization_contact_id TEXT,
+        status TEXT NOT NULL DEFAULT 'READY_FOR_REVIEW',
+        report_payload TEXT NOT NULL,
+        report_hash TEXT NOT NULL,
+        signature TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        approved_at DATETIME,
+        sent_at DATETIME,
+        idempotency_key TEXT UNIQUE,
+        delivery_metadata TEXT DEFAULT '{}',
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    `, () => {
+      seedTrustedDirectory();
+    });
   });
 }
 

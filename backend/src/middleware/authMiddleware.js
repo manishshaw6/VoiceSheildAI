@@ -1,81 +1,133 @@
+```js
 /**
  * VoxShield AI — Authentication Middleware
- * Validates JWT tokens on protected routes.
+ * Supports both:
+ * 1. HTTP-only session cookies
+ * 2. JWT Bearer tokens
  */
 
 import jwt from 'jsonwebtoken';
+
+import { getUserFromSession } from '../services/authService.js';
 import { config } from '../config/index.js';
 import { ApiError } from '../schemas/errors.js';
 import { query } from '../database/db.js';
 
-export async function requireAuth(req, res, next) {
+/**
+ * Attach authenticated user if a valid session or JWT exists.
+ *
+ * Priority:
+ * 1. Session cookie
+ * 2. Authorization: Bearer <JWT>
+ */
+export async function attachUser(req, res, next) {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new ApiError('UNAUTHORIZED', 'Authentication token required. Please log in.', 401);
-    }
+    let sessionId = req.cookies?.voxshield_session;
 
-    const token = authHeader.split(' ')[1];
-    if (!token) {
-      throw new ApiError('UNAUTHORIZED', 'Authentication token missing.', 401);
-    }
+    // --------------------------------------------------
+    // 1. Try HTTP-only session cookie
+    // --------------------------------------------------
+    if (sessionId) {
+      try {
+        const user = await getUserFromSession(sessionId);
 
-    let decoded;
-    try {
-      decoded = jwt.verify(token, config.jwtSecret);
-    } catch (jwtErr) {
-      throw new ApiError('UNAUTHORIZED', 'Invalid or expired authentication token. Please log in again.', 401);
-    }
-
-    // Verify user exists in database
-    const user = await query.get(
-      'SELECT id, full_name, email, username, created_at FROM users WHERE id = ?',
-      [decoded.id]
-    );
-
-    if (!user) {
-      throw new ApiError('UNAUTHORIZED', 'User associated with this token no longer exists.', 401);
-    }
-
-    req.user = {
-      id: user.id,
-      fullName: user.full_name,
-      email: user.email,
-      username: user.username,
-      createdAt: user.created_at
-    };
-
-    next();
-  } catch (error) {
-    next(error);
-  }
-}
-
-export function optionalAuth(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return next();
-  }
-
-  const token = authHeader.split(' ')[1];
-  if (!token) return next();
-
-  try {
-    const decoded = jwt.verify(token, config.jwtSecret);
-    query.get('SELECT id, full_name, email, username FROM users WHERE id = ?', [decoded.id])
-      .then(user => {
         if (user) {
-          req.user = {
-            id: user.id,
-            fullName: user.full_name,
-            email: user.email,
-            username: user.username
-          };
+          req.user = user;
+          return next();
         }
-        next();
-      })
-      .catch(() => next());
+      } catch {
+        // Session invalid/expired.
+        // Continue and try JWT authentication.
+      }
+    }
+
+    // --------------------------------------------------
+    // 2. Try JWT Bearer token
+    // --------------------------------------------------
+    const authHeader = req.headers.authorization;
+
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+
+      if (token) {
+        try {
+          const decoded = jwt.verify(
+            token,
+            config.jwtSecret
+          );
+
+          const user = await query.get(
+            `SELECT
+              id,
+              full_name,
+              name,
+              email,
+              username,
+              picture,
+              created_at,
+              last_login_at
+             FROM users
+             WHERE id = ?`,
+            [decoded.id]
+          );
+
+          if (user) {
+            req.user = {
+              id: user.id,
+              fullName: user.full_name || user.name,
+              name: user.name || user.full_name,
+              email: user.email,
+              username: user.username,
+              picture: user.picture,
+              createdAt: user.created_at,
+              lastLoginAt: user.last_login_at
+            };
+
+            return next();
+          }
+        } catch {
+          // Invalid JWT — treat as unauthenticated.
+        }
+      }
+    }
+
+    // No valid authentication found.
+    req.user = null;
+
+    next();
   } catch {
+    req.user = null;
     next();
   }
 }
+
+/**
+ * Require authentication.
+ *
+ * Works with either:
+ * - voxshield_session cookie
+ * - Authorization: Bearer <JWT>
+ */
+export function requireAuth(req, res, next) {
+  if (!req.user) {
+    return next(
+      new ApiError(
+        'UNAUTHORIZED',
+        'Authentication is required to perform this action.',
+        401
+      )
+    );
+  }
+
+  next();
+}
+
+/**
+ * Optional authentication.
+ *
+ * Does not reject the request when the user is unauthenticated.
+ */
+export function optionalAuth(req, res, next) {
+  return attachUser(req, res, next);
+}
+```

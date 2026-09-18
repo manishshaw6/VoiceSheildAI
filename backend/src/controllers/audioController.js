@@ -33,3 +33,21 @@ export async function analyzeAudio(req, res, next) {
     if (filePath) await fs.unlink(filePath).catch(() => {});
   }
 }
+
+export async function getAnalysisForensics(req, res, next) {
+  try {
+    const { id } = req.params;
+    const row = await query.get('SELECT raw_result FROM analyses WHERE id = ?', [id]);
+    if (!row || !row.raw_result) {
+      return res.status(404).json({ success: false, error: 'Analysis record not found' });
+    }
+    const parsed = JSON.parse(row.raw_result);
+    return res.status(200).json({
+      success: true,
+      analysisId: id,
+      forensics: parsed.forensics || null
+    });
+  } catch (err) {
+    return next(err);
+  }
+}

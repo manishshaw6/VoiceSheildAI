@@ -251,7 +251,9 @@ export const Defaults = Object.freeze({
 
 // ─── Allowed Audio Formats ──────────────────────────────────────────────────
 
-export const ALLOWED_EXTENSIONS = new Set(['.wav', '.mp3', '.m4a', '.webm', '.ogg']);
+export const ALLOWED_EXTENSIONS = new Set([
+  '.wav', '.mp3', '.m4a', '.webm', '.ogg', '.mpeg', '.mpg', '.mpga', '.aac', '.flac', '.opus'
+]);
 
 export const ALLOWED_MIME_TYPES = new Set([
   'audio/wav',
@@ -259,10 +261,22 @@ export const ALLOWED_MIME_TYPES = new Set([
   'audio/wave',
   'audio/mpeg',
   'audio/mp3',
+  'audio/mpeg3',
+  'audio/x-mp3',
+  'audio/x-mpeg-3',
+  'audio/mpg',
+  'audio/x-mpeg',
+  'audio/x-mpegaudio',
   'audio/mp4',
   'audio/m4a',
   'audio/x-m4a',
   'audio/webm',
   'audio/ogg',
+  'audio/aac',
+  'audio/x-aac',
+  'audio/flac',
+  'video/webm',
+  'video/mpeg',
+  'video/mp4',
   'application/octet-stream' // browser MediaRecorder default
 ]);

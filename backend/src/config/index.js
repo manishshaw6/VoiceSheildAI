@@ -101,7 +101,7 @@ export const config = {
     primaryStt: (process.env.PRIMARY_STT || 'faster_whisper').toLowerCase(),
     primarySpeakerProvider: (process.env.PRIMARY_SPEAKER_PROVIDER || 'ecapa').toLowerCase(),
     enableAssemblyAiFallback: process.env.ENABLE_ASSEMBLYAI_FALLBACK === 'true',
-    enableFingerprintFallback: process.env.ENABLE_FINGERPRINT_FALLBACK === 'true'
+    enableFingerprintFallback: process.env.ENABLE_FINGERPRINT_FALLBACK !== 'false'
   },
 
   sarvam: {
@@ -147,7 +147,30 @@ export const config = {
   logLevel: process.env.LOG_LEVEL || (APP_MODE === 'production' ? 'info' : 'debug'),
 
   // Demo mode
-  enableDemoMode: process.env.ENABLE_DEMO_MODE === 'true' || APP_MODE === 'demo'
+  enableDemoMode: process.env.ENABLE_DEMO_MODE === 'true' || APP_MODE === 'demo',
+
+  // Security & OAuth Configuration
+  sessionSecret: process.env.SESSION_SECRET || 'voxshield-dev-session-secret-change-in-prod-2026',
+  reportSigningSecret: process.env.REPORT_SIGNING_SECRET || 'voxshield-dev-report-signing-key-hmac-sha256',
+  publicReportVerifyBaseUrl: (process.env.PUBLIC_REPORT_VERIFY_BASE_URL || 'http://localhost:5173/reports/verify').replace(/\/$/, ''),
+
+  // Google OAuth (Separate OpenID login and incremental Mail Send scopes)
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/v1/auth/google/callback',
+    mailRedirectUri: process.env.GOOGLE_MAIL_REDIRECT_URI || 'http://localhost:5000/api/v1/mail/google/callback'
+  },
+
+  // Operational notification relay (for system alerts, NOT user fraud complaints)
+  sendgrid: {
+    apiKey: process.env.SENDGRID_API_KEY || '',
+    fromEmail: process.env.SENDGRID_FROM_EMAIL || '',
+    fromName: process.env.SENDGRID_FROM_NAME || 'VoxShield Fraud Intelligence'
+  },
+
+  // Controlled developer test recipient for development/staging validation
+  devTestRecipient: process.env.DEV_TEST_RECIPIENT || 'test-fraud-desk@voxshield.local'
 };
 
 // ─── Startup Validation ─────────────────────────────────────────────────────
@@ -163,6 +186,9 @@ export function validateConfig() {
   }
   if (!config.geminiApiKey && !config.groqApiKey) {
     warnings.push('Neither GEMINI_API_KEY nor GROQ_API_KEY is configured. LLM scam analysis will be unavailable.');
+  }
+  if (!config.sendgrid.apiKey || !config.sendgrid.fromEmail) {
+    warnings.push('SENDGRID_API_KEY and SENDGRID_FROM_EMAIL are not configured. Incident email delivery is unavailable.');
   }
 
   // Validate weight sum is approximately 1.0

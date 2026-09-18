@@ -35,3 +35,15 @@ test('unusable audio stops before intelligence providers', async () => {
   assert.equal(body.state, 'AUDIO_UNUSABLE');
   assert.deepEqual(body.unavailable, ['deepfake', 'speaker', 'transcription', 'context']);
 });
+
+test('speaker enrollment accepts compound extension reference audio like chintu.mp3.mpeg and enrolls profile', async () => {
+  const form = new FormData();
+  form.append('speakerId', 'test_chintu');
+  form.append('name', 'Chintu Test');
+  form.append('audio', new Blob([wavBuffer({ duration: 2, frequency: 300 })], { type: 'audio/mpeg' }), 'chintu.mp3.mpeg');
+  const response = await fetch(base + '/api/speaker/enroll', { method: 'POST', body: form });
+  const body = await response.json();
+  assert.equal(response.status, 201);
+  assert.equal(body.success, true);
+  assert.equal(body.speakerId, 'test_chintu');
+});

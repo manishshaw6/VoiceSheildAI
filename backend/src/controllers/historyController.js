@@ -140,7 +140,10 @@ export async function getSecurityReport(req, res) {
         originalFilename: row.audio_filename,
         durationSeconds: row.duration,
         fileSizeBytes: forensic.sizeBytes || null
-      }
+      },
+      incidentGuidance: raw.incidentGuidance || null,
+      complaintDraft: raw.complaintDraft || null,
+      raw_result: raw
     };
 
     return res.status(200).json({

@@ -85,7 +85,16 @@ export default function HistoryReports({ onSelectAnalysis, onExportReport }) {
 
       {history.length === 0 ? (
         <div className="empty-history-box">
-          <div className="empty-icon">🗄️</div>
+          <div className="empty-icon" style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="18" rx="2" ry="2"></rect>
+              <line x1="2" y1="9" x2="22" y2="9"></line>
+              <line x1="2" y1="15" x2="22" y2="15"></line>
+              <line x1="10" y1="6" x2="14" y2="6"></line>
+              <line x1="10" y1="12" x2="14" y2="12"></line>
+              <line x1="10" y1="18" x2="14" y2="18"></line>
+            </svg>
+          </div>
           <h4>No Security Audit Logs Recorded Yet</h4>
           <p>Scanned audio and live stream sessions will be permanently logged here.</p>
         </div>
@@ -138,10 +147,11 @@ export default function HistoryReports({ onSelectAnalysis, onExportReport }) {
                       </button>
                       <button
                         className="table-btn report-btn"
-                        onClick={(e) => { e.stopPropagation(); onExportReport(row.id); }}
-                        title="Download Security Report"
+                        onClick={(e) => { e.stopPropagation(); onExportReport && onExportReport(row.id, 'pdf'); }}
+                        title="Download Official Cyber Crime PDF Report"
+                        style={{ background: 'rgba(220, 38, 38, 0.15)', color: '#ff3b5c', border: '1px solid rgba(220, 38, 38, 0.4)' }}
                       >
-                        Report
+                        PDF Dossier
                       </button>
                       <button
                         className="table-btn delete-btn"
