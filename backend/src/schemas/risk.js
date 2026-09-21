@@ -35,7 +35,7 @@ export function createRiskAssessment({
   cloneDescription = null,
   recommendedAction = ''
 }) {
-  const clampedScore = Math.round(Math.max(0, Math.min(100, score)));
+  const clampedScore = Number(Math.max(0, Math.min(100, score || 0)).toFixed(2));
   const level = riskLevelFromScore(clampedScore);
 
   return {
@@ -66,8 +66,8 @@ export function createTemporalSnapshot({
 }) {
   return {
     timestamp,
-    risk: Math.round(Math.max(0, Math.min(100, risk))),
-    smoothedRisk: smoothedRisk !== null ? Math.round(Math.max(0, Math.min(100, smoothedRisk))) : null,
+    risk: Number(Math.max(0, Math.min(100, risk || 0)).toFixed(2)),
+    smoothedRisk: smoothedRisk !== null ? Number(Math.max(0, Math.min(100, smoothedRisk)).toFixed(2)) : null,
     evidenceIds
   };
 }
@@ -91,12 +91,6 @@ export function createTemporalRiskState() {
 /**
  * Updates a TemporalRiskState with a new observation.
  * Uses EWMA for smoothing.
- *
- * @param {object} state - Existing TemporalRiskState
- * @param {number} rawRisk - New raw risk score (0–100)
- * @param {number} timestamp - Timestamp in seconds
- * @param {number} alpha - EWMA smoothing factor (0–1)
- * @returns {object} Updated state (mutated in place for performance)
  */
 export function updateTemporalRisk(state, rawRisk, timestamp, alpha = 0.3) {
   const previousRisk = state.currentRisk;
@@ -106,22 +100,22 @@ export function updateTemporalRisk(state, rawRisk, timestamp, alpha = 0.3) {
     ? rawRisk
     : alpha * rawRisk + (1 - alpha) * previousRisk;
 
-  const smoothedRisk = Math.round(Math.max(0, Math.min(100, smoothed)));
+  const smoothedRisk = Number(Math.max(0, Math.min(100, smoothed)).toFixed(2));
 
   state.currentRisk = smoothedRisk;
-  state.peakRisk = Math.max(state.peakRisk, smoothedRisk);
+  state.peakRisk = Number(Math.max(state.peakRisk, smoothedRisk).toFixed(2));
 
   state._sumRisk += smoothedRisk;
   state._countSnapshots += 1;
-  state.averageRisk = Math.round(state._sumRisk / state._countSnapshots);
+  state.averageRisk = Number((state._sumRisk / state._countSnapshots).toFixed(2));
 
   // Velocity: change per snapshot
-  state.riskVelocity = smoothedRisk - previousRisk;
+  state.riskVelocity = Number((smoothedRisk - previousRisk).toFixed(2));
 
   // Trend
-  if (state.riskVelocity > 3) {
+  if (state.riskVelocity > 0.5) {
     state.trend = RiskTrend.RISING;
-  } else if (state.riskVelocity < -3) {
+  } else if (state.riskVelocity < -0.5) {
     state.trend = RiskTrend.FALLING;
   } else {
     state.trend = RiskTrend.STABLE;

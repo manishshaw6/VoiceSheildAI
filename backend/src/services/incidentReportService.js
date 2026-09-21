@@ -12,7 +12,7 @@ import {
 } from './reportIntegrityService.js';
 import { resolveVerifiedReportingContact } from './organizationDirectoryService.js';
 import { generateIncidentPdfBuffer } from './reportPdfService.js';
-import { getUserMailProvider } from './mail/index.js';
+import { sendIncidentReportEmail, getSendGridStatus } from './sendgridMailService.js';
 import { recordAudit } from './auditService.js';
 
 /**
@@ -281,11 +281,10 @@ export async function sendIncidentReport({ reportId, user, organizationContactId
     throw new ApiError('AUTH_REQUIRED', 'Authenticated user identity is required.', 401);
   }
 
-  // Gate 2: Mail-send OAuth authorization exists
-  const mailProvider = getUserMailProvider('gmail');
-  const mailStatus = await mailProvider.getConnectionStatus(user.id);
-  if (!mailStatus.connected) {
-    throw new ApiError('MAIL_NOT_CONNECTED', 'Google Mail send permission is not connected. Please connect your Gmail account.', 403);
+  // Gate 2: authenticated user's email must be verified in the backend record
+  const userRecord = await query.get('SELECT email, name, email_verified FROM users WHERE id = ?', [user.id]);
+  if (!userRecord?.email || !userRecord.email_verified) {
+    throw new ApiError('EMAIL_NOT_VERIFIED', 'A verified authenticated email address is required before dispatch.', 403);
   }
 
   // Gate 3: Report belongs to current user
@@ -318,6 +317,10 @@ export async function sendIncidentReport({ reportId, user, organizationContactId
   // Gate 5 & 6: Explicit approval exists and report is in APPROVED state
   if (reportRecord.status !== 'APPROVED' || !reportRecord.approved_at) {
     throw new ApiError('APPROVAL_REQUIRED', 'Explicit user review and consent is required prior to external dispatch.', 400);
+  }
+
+  if (!getSendGridStatus().configured) {
+    throw new ApiError('SENDGRID_NOT_CONFIGURED', 'Report created successfully, but email delivery is not configured.', 503);
   }
 
   // Gate 7 & 8: Organization contact is verified and enabled in trusted directory
@@ -356,8 +359,7 @@ export async function sendIncidentReport({ reportId, user, organizationContactId
     // Generate official VoxShield PDF attachment
     const pdfBuffer = await generateIncidentPdfBuffer(reportPayload);
 
-    // Subject per prompt: [VoxShield Verified Incident Report] Suspected Impersonation — <REPORT_ID>
-    const subject = `[VoxShield Verified Incident Report] Suspected Impersonation — ${reportId}`;
+    const subject = `[VoxShield Incident Report] Suspected Voice Impersonation — ${reportPayload.incidentId}`;
     const verifyUrl = `${config.publicReportVerifyBaseUrl}/${reportId}`;
 
     const textBody = `Hello,
@@ -378,7 +380,9 @@ The attached report contains the relevant evidence summary, suspicious conversat
 Report Verification:
 ${verifyUrl}
 
-This email is being sent from my authenticated email account after my explicit approval.
+This report was submitted by ${userRecord.name || 'the authenticated reporter'} through VoxShield after explicit approval.
+Sent through VoxShield Secure Email Relay.
+Reply-To: authenticated reporter (${userRecord.email})
 
 The VoxShield report is an automated security-analysis artifact intended to assist review and investigation. It does not represent a law-enforcement or government determination.
 
@@ -434,7 +438,7 @@ VoxShield — Voice Fraud Intelligence`;
       <p><a href="${verifyUrl}" class="btn">Verify Report Integrity on VoxShield</a></p>
 
       <p style="font-size: 12px; color: #4a5568; margin-top: 20px;">
-        <em>This email was sent directly from my authenticated personal mailbox following my explicit authorization.</em>
+        <em>Submitted by ${userRecord.name || 'the authenticated reporter'} through VoxShield after explicit authorization. Sent through VoxShield Secure Email Relay. Reply-To: authenticated reporter.</em>
       </p>
 
       <p>Regards,<br><strong>${user.name || 'VoxShield User'}</strong><br><small style="color: #718096;">${user.email}</small></p>
@@ -446,27 +450,23 @@ VoxShield — Voice Fraud Intelligence`;
 </body>
 </html>`;
 
-    // Deliver from user's authenticated mailbox via UserMailProvider
-    const sendResult = await mailProvider.sendUserAuthorizedReport({
-      user,
-      recipientEmail: contact.destination,
+    const sendResult = await sendIncidentReportEmail({
+      reporter: { ...user, email: userRecord.email, name: userRecord.name },
+      organization: contact.organizationName,
+      recipient: contact.destination,
+      incident: reportPayload,
+      pdfBuffer,
       subject,
       textBody,
-      htmlBody,
-      attachments: [
-        {
-          filename: `VoxShield_Incident_Report_${reportId}.pdf`,
-          contentType: 'application/pdf',
-          content: pdfBuffer
-        }
-      ]
+      htmlBody
     });
 
     const deliveryMeta = {
       messageId: sendResult.messageId,
       threadId: sendResult.threadId,
       provider: sendResult.provider,
-      sender: user.email,
+      sender: sendResult.senderEmail,
+      replyTo: sendResult.replyToEmail,
       recipient: contact.destination,
       organizationId: contact.organizationId,
       organizationName: contact.organizationName,

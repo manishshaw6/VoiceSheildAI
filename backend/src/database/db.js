@@ -101,27 +101,44 @@ function initSchema() {
     `);
 
     // Authenticated Users
+    // Merged schema:
+    // - Ayush branch: Google OAuth, sessions, Gmail permissions
+    // - main branch: username + bcrypt password authentication
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         google_id TEXT UNIQUE,
         email TEXT UNIQUE NOT NULL,
         name TEXT,
+        full_name TEXT,
+        username TEXT UNIQUE,
         picture TEXT,
         password_hash TEXT,
         password_salt TEXT,
         mail_password_encrypted TEXT,
+        email_verified INTEGER NOT NULL DEFAULT 1,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         last_login_at DATETIME
       )
     `);
 
-    // Additive migrations for users table
+    // Additive migrations for existing users table.
+    // These allow databases created by either branch to continue working.
     for (const statement of [
+      'ALTER TABLE users ADD COLUMN google_id TEXT',
+      'ALTER TABLE users ADD COLUMN full_name TEXT',
+      'ALTER TABLE users ADD COLUMN username TEXT',
+      'ALTER TABLE users ADD COLUMN picture TEXT',
       'ALTER TABLE users ADD COLUMN password_hash TEXT',
       'ALTER TABLE users ADD COLUMN password_salt TEXT',
-      'ALTER TABLE users ADD COLUMN mail_password_encrypted TEXT'
-    ]) db.run(statement, () => {});
+      'ALTER TABLE users ADD COLUMN mail_password_encrypted TEXT',
+      'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1',
+      'ALTER TABLE users ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+      'ALTER TABLE users ADD COLUMN last_login_at DATETIME'
+    ]) {
+      db.run(statement, () => {});
+    }
 
     // OAuth Tokens for Users (Encrypted at rest)
     db.run(`
@@ -201,149 +218,6 @@ function initSchema() {
     `, () => {
       seedTrustedDirectory();
     });
-  });
-}
-
-function seedTrustedDirectory() {
-  const seedOrgs = [
-    {
-      id: 'org_sbi',
-      display_name: 'State Bank of India',
-      aliases: JSON.stringify(['sbi', 'state bank', 'state bank of india', 'sbi bank', 'state bank group']),
-      organization_type: 'BANK',
-      country: 'IN',
-      official_domain: 'sbi.co.in',
-      contacts: [{
-        id: 'contact_sbi_fraud',
-        destination: 'fraud.reporting.demo@voxshield.local',
-        verified: 1,
-        verification_source: 'RBI Regulated Entity Staging Directory',
-        enabled: 1
-      }]
-    },
-    {
-      id: 'org_hdfc',
-      display_name: 'HDFC Bank',
-      aliases: JSON.stringify(['hdfc', 'hdfc bank', 'hdfc customer care', 'hdfc security']),
-      organization_type: 'BANK',
-      country: 'IN',
-      official_domain: 'hdfcbank.com',
-      contacts: [{
-        id: 'contact_hdfc_fraud',
-        destination: 'fraud.desk.demo@voxshield.local',
-        verified: 1,
-        verification_source: 'RBI Regulated Entity Staging Directory',
-        enabled: 1
-      }]
-    },
-    {
-      id: 'org_icici',
-      display_name: 'ICICI Bank',
-      aliases: JSON.stringify(['icici', 'icici bank', 'icici direct']),
-      organization_type: 'BANK',
-      country: 'IN',
-      official_domain: 'icicibank.com',
-      contacts: [{
-        id: 'contact_icici_fraud',
-        destination: 'antifraud.demo@voxshield.local',
-        verified: 1,
-        verification_source: 'RBI Regulated Entity Staging Directory',
-        enabled: 1
-      }]
-    },
-    {
-      id: 'org_airtel',
-      display_name: 'Bharti Airtel',
-      aliases: JSON.stringify(['airtel', 'bharti airtel', 'airtel telecom', 'airtel payments bank']),
-      organization_type: 'TELECOM',
-      country: 'IN',
-      official_domain: 'airtel.in',
-      contacts: [{
-        id: 'contact_airtel_abuse',
-        destination: 'telecom.abuse.demo@voxshield.local',
-        verified: 1,
-        verification_source: 'DoT Telecom Security Registry',
-        enabled: 1
-      }]
-    },
-    {
-      id: 'org_amazon',
-      display_name: 'Amazon India',
-      aliases: JSON.stringify(['amazon', 'amazon india', 'amazon pay', 'amazon refund']),
-      organization_type: 'ECOMMERCE',
-      country: 'IN',
-      official_domain: 'amazon.in',
-      contacts: [{
-        id: 'contact_amazon_security',
-        destination: 'brand.protection.demo@voxshield.local',
-        verified: 1,
-        verification_source: 'Corporate Security Operations Directory',
-        enabled: 1
-      }]
-    },
-    {
-      id: 'org_paytm',
-      display_name: 'Paytm',
-      aliases: JSON.stringify(['paytm', 'one97 communications', 'paytm payments bank']),
-      organization_type: 'FINTECH',
-      country: 'IN',
-      official_domain: 'paytm.com',
-      contacts: [{
-        id: 'contact_paytm_fraud',
-        destination: 'frauddesk.demo@voxshield.local',
-        verified: 1,
-        verification_source: 'FinTech Compliance Directory',
-        enabled: 1
-      }]
-    },
-    {
-      id: 'org_demo',
-      display_name: 'VoxShield Demo Test Organization',
-      aliases: JSON.stringify(['demo bank', 'test organization', 'xyz bank', 'demo corp', 'voxshield demo', 'sample organization']),
-      organization_type: 'DEMO',
-      country: 'IN',
-      official_domain: 'voxshield.ai',
-      contacts: [{
-        id: 'contact_demo_mailbox',
-        destination: config.devTestRecipient || 'test-fraud-desk@voxshield.local',
-        verified: 1,
-        verification_source: 'Developer Controlled Demo / Test Mailbox',
-        enabled: 1
-      }]
-    },
-    {
-      id: 'org_unverified_sample',
-      display_name: 'Unverified Third-Party Entity',
-      aliases: JSON.stringify(['unverified entity', 'sample unverified']),
-      organization_type: 'DEMO',
-      country: 'IN',
-      official_domain: 'unverified.example.com',
-      contacts: [{
-        id: 'contact_sample_unverified',
-        destination: 'unverified-reporting-contact@example.com',
-        verified: 0, // Explicitly unverified to test blocking
-        verification_source: 'UNVERIFIED — FOR SECURITY POLICY VALIDATION',
-        enabled: 1
-      }]
-    }
-  ];
-
-  db.get('SELECT COUNT(*) as count FROM organizations', (err, row) => {
-    if (err || !row || row.count > 0) return;
-    for (const org of seedOrgs) {
-      db.run(
-        'INSERT OR IGNORE INTO organizations (id, display_name, aliases, organization_type, country, official_domain) VALUES (?, ?, ?, ?, ?, ?)',
-        [org.id, org.display_name, org.aliases, org.organization_type, org.country, org.official_domain],
-        () => {
-          for (const c of org.contacts) {
-            db.run(
-              'INSERT OR IGNORE INTO organization_contacts (id, organization_id, channel_type, destination, verified, verification_source, verified_at, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-              [c.id, org.id, 'email', c.destination, c.verified, c.verification_source, new Date().toISOString(), c.enabled]
-            );
-          }
-        }
-      );
-    }
   });
 }
 
