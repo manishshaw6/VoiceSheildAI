@@ -4,7 +4,6 @@
 
 import { Router } from 'express';
 import { uploadAudio } from '../middleware/uploadMiddleware.js';
-
 import {
   getHealth,
   getReadiness,
@@ -58,6 +57,10 @@ import {
   getOrganization
 } from '../controllers/organizationController.js';
 
+import {
+  createCallToken,
+  terminateCall
+} from '../controllers/callController.js';
 import {
   generateReport,
   getReport,
@@ -169,6 +172,11 @@ router.get('/incidents/:id', getIncident);
 router.get('/audit', getAuditTrail);
 
 
+// VoxCall LiveKit room access
+router.post('/calls/token', createCallToken);
+router.post('/calls/terminate', terminateCall);
+
+// Incremental Mail-Send Authorization (Gmail API Send Scope)
 // =====================================================
 // Incremental Mail-Send Authorization
 // =====================================================

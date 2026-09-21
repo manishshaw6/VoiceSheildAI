@@ -1,5 +1,10 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  useLocation
+} from 'react-router-dom';
 
 import './App.css';
 import './voxshield.css';
@@ -18,17 +23,165 @@ import AuditVaultPage from './pages/AuditVaultPage';
 import AboutPage from './pages/AboutPage';
 import AuthPage from './pages/AuthPage';
 import ReportVerificationPage from './pages/ReportVerificationPage';
+import VoxCallPage from './pages/VoxCallPage';
 
 import { generateCyberCrimePdfReport } from './services/pdfReportGenerator';
 
+function AppContent({ handleExportReport }) {
+  const location = useLocation();
+
+  // VoxCall has its own full-screen layout
+  if (location.pathname === '/voxcall') {
+    return <VoxCallPage />;
+  }
+
+  return (
+    <div className="page-shell-pro">
+      <Navbar />
+
+      <main className="main-content-pro">
+        <Routes>
+
+          {/* =========================================
+              Public Landing Page
+          ========================================= */}
+
+          <Route
+            path="/"
+            element={<HomePage />}
+          />
+
+
+          {/* =========================================
+              Public Authentication Routes
+          ========================================= */}
+
+          <Route
+            path="/auth"
+            element={<AuthPage />}
+          />
+
+          <Route
+            path="/login"
+            element={<AuthPage />}
+          />
+
+          <Route
+            path="/register"
+            element={<AuthPage />}
+          />
+
+
+          {/* =========================================
+              Protected Dashboard & Operations
+          ========================================= */}
+
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <ScannerPage
+                  onExportReport={handleExportReport}
+                />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/scanner"
+            element={
+              <ProtectedRoute>
+                <ScannerPage
+                  onExportReport={handleExportReport}
+                />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/live"
+            element={
+              <ProtectedRoute>
+                <LiveShieldPage
+                  onExportReport={handleExportReport}
+                />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/speaker-guard"
+            element={
+              <ProtectedRoute>
+                <SpeakerGuardPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/history"
+            element={
+              <ProtectedRoute>
+                <AuditVaultPage
+                  onExportReport={handleExportReport}
+                />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/about"
+            element={
+              <ProtectedRoute>
+                <AboutPage />
+              </ProtectedRoute>
+            }
+          />
+
+
+          {/* =========================================
+              Report Verification
+          ========================================= */}
+
+          <Route
+            path="/reports/:id/verify"
+            element={<ReportVerificationPage />}
+          />
+
+          <Route
+            path="/reports/verify/:id"
+            element={<ReportVerificationPage />}
+          />
+
+        </Routes>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}
+
+
+// =====================================================
+// Main Application
+// =====================================================
+
 function App() {
-  const handleExportReport = async (analysisId, format = 'pdf') => {
+  const handleExportReport = async (
+    analysisId,
+    format = 'pdf'
+  ) => {
     try {
-      const res = await fetch(`/api/analysis/${analysisId}/report`);
+      const res = await fetch(
+        `/api/analysis/${analysisId}/report`
+      );
+
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || 'Report export failed');
+        throw new Error(
+          data.error || 'Report export failed'
+        );
       }
 
       const report = data.report;
@@ -43,7 +196,9 @@ function App() {
 
         const blob = new Blob(
           [md],
-          { type: 'text/markdown' }
+          {
+            type: 'text/markdown'
+          }
         );
 
         downloadBlob(
@@ -52,8 +207,16 @@ function App() {
         );
       } else {
         const blob = new Blob(
-          [JSON.stringify(report, null, 2)],
-          { type: 'application/json' }
+          [
+            JSON.stringify(
+              report,
+              null,
+              2
+            )
+          ],
+          {
+            type: 'application/json'
+          }
         );
 
         downloadBlob(
@@ -62,27 +225,51 @@ function App() {
         );
       }
     } catch (err) {
-      alert('Could not export report: ' + err.message);
+      alert(
+        'Could not export report: ' +
+        err.message
+      );
     }
   };
 
-  const downloadBlob = (blob, filename) => {
-    const url = URL.createObjectURL(blob);
 
-    const a = document.createElement('a');
+  // =====================================================
+  // Download Helper
+  // =====================================================
+
+  const downloadBlob = (
+    blob,
+    filename
+  ) => {
+    const url =
+      URL.createObjectURL(blob);
+
+    const a =
+      document.createElement('a');
+
     a.href = url;
     a.download = filename;
 
     document.body.appendChild(a);
+
     a.click();
+
     document.body.removeChild(a);
 
     URL.revokeObjectURL(url);
   };
 
+
+  // =====================================================
+  // Markdown Report Generator
+  // =====================================================
+
   const generateMarkdownReport = (r) => {
     const lines = [
-      `# ${r.title || 'VoxShieldAI Forensic Voice Threat Report'}`,
+      `# ${
+        r.title ||
+        'VoxShieldAI Forensic Voice Threat Report'
+      }`,
       '',
       `**Call ID:** ${r.callId}`,
       `**Generated:** ${r.generatedAt}`,
@@ -94,41 +281,94 @@ function App() {
       '',
       `| Metric | Value |`,
       `|--------|-------|`,
-      `| Risk Score | ${r.risk?.score ?? 'N/A'} / 100 |`,
-      `| Risk Level | ${r.risk?.level ?? 'N/A'} |`,
-      `| Threat Category | ${r.risk?.threatCategory ?? 'N/A'} |`,
-      `| Voice Clone Suspicion | ${r.risk?.voiceCloneSuspicion ? 'YES (HIGH RISK)' : 'No'} |`,
+      `| Risk Score | ${
+        r.risk?.score ?? 'N/A'
+      } / 100 |`,
+      `| Risk Level | ${
+        r.risk?.level ?? 'N/A'
+      } |`,
+      `| Threat Category | ${
+        r.risk?.threatCategory ?? 'N/A'
+      } |`,
+      `| Voice Clone Suspicion | ${
+        r.risk?.voiceCloneSuspicion
+          ? 'YES (HIGH RISK)'
+          : 'No'
+      } |`,
       '',
       '## Voice Authenticity Evidence',
       '',
-      `- **Provider:** ${r.authenticityEvidence?.provider ?? 'N/A'}`,
-      `- **Classification:** ${r.authenticityEvidence?.classification ?? 'N/A'}`,
-      `- **Synthetic Probability:** ${r.authenticityEvidence?.syntheticProbability ?? 'N/A'}`,
+      `- **Provider:** ${
+        r.authenticityEvidence?.provider ??
+        'N/A'
+      }`,
+      `- **Classification:** ${
+        r.authenticityEvidence?.classification ??
+        'N/A'
+      }`,
+      `- **Synthetic Probability:** ${
+        r.authenticityEvidence
+          ?.syntheticProbability ??
+        'N/A'
+      }`,
       '',
       '## Speaker Verification',
       '',
-      `- **Status:** ${r.speakerEvidence?.status ?? 'N/A'}`,
-      `- **Enrolled Speaker:** ${r.speakerEvidence?.enrolledSpeaker ?? 'N/A'}`,
-      `- **Acoustic Similarity:** ${r.speakerEvidence?.similarityPercentage ?? 'N/A'}`,
+      `- **Status:** ${
+        r.speakerEvidence?.status ??
+        'N/A'
+      }`,
+      `- **Enrolled Speaker:** ${
+        r.speakerEvidence
+          ?.enrolledSpeaker ??
+        'N/A'
+      }`,
+      `- **Acoustic Similarity:** ${
+        r.speakerEvidence
+          ?.similarityPercentage ??
+        'N/A'
+      }`,
       '',
       '## Conversation Intelligence',
       '',
-      `- **Scam Probability:** ${r.conversationIntelligence?.scamProbability ?? 'N/A'}`,
-      `- **Category:** ${r.conversationIntelligence?.category ?? 'N/A'}`,
+      `- **Scam Probability:** ${
+        r.conversationIntelligence
+          ?.scamProbability ??
+        'N/A'
+      }`,
+      `- **Category:** ${
+        r.conversationIntelligence
+          ?.category ??
+        'N/A'
+      }`,
       '',
       '### Transcript Excerpt',
       '',
-      `> ${r.transcriptExcerpt || 'No transcript available.'}`,
-      '',
+      `> ${
+        r.transcriptExcerpt ||
+        'No transcript available.'
+      }`,
+      ''
     ];
 
-    if (r.suspiciousTranscriptPhrases?.length) {
+
+    // ===================================================
+    // Suspicious Transcript Phrases
+    // ===================================================
+
+    if (
+      r.suspiciousTranscriptPhrases
+        ?.length
+    ) {
       lines.push(
         '## Suspicious Phrases Detected',
         ''
       );
 
-      for (const p of r.suspiciousTranscriptPhrases) {
+      for (
+        const p of
+          r.suspiciousTranscriptPhrases
+      ) {
         lines.push(
           `- **${p.type}** (${p.severity}): _"${p.evidence}"_`
         );
@@ -137,32 +377,81 @@ function App() {
       lines.push('');
     }
 
-    if (r.risk?.reasonsFlagged?.length) {
+
+    // ===================================================
+    // Explainable Risk Factors
+    // ===================================================
+
+    if (
+      r.risk?.reasonsFlagged
+        ?.length
+    ) {
       lines.push(
         '## Explainable Risk Factors',
         ''
       );
 
-      for (const reason of r.risk.reasonsFlagged) {
-        lines.push(`- ${reason}`);
+      for (
+        const reason of
+          r.risk.reasonsFlagged
+      ) {
+        lines.push(
+          `- ${reason}`
+        );
       }
 
       lines.push('');
     }
 
+
+    // ===================================================
+    // Intervention
+    // ===================================================
+
     lines.push(
       '## Intervention Taken',
       '',
-      `- **Policy Actions:** ${r.interventionTaken?.policyActions?.join(', ') ?? 'N/A'}`,
-      `- **Recommendation:** ${r.interventionTaken?.recommendation ?? 'N/A'}`,
-      `- **Blocked Sensitive Action:** ${r.interventionTaken?.blockSensitiveAction ? 'Yes' : 'No'}`,
-      `- **Incident Created:** ${r.interventionTaken?.incidentCreated ? 'Yes' : 'No'}`,
+      `- **Policy Actions:** ${
+        r.interventionTaken
+          ?.policyActions
+          ?.join(', ') ??
+        'N/A'
+      }`,
+      `- **Recommendation:** ${
+        r.interventionTaken
+          ?.recommendation ??
+        'N/A'
+      }`,
+      `- **Blocked Sensitive Action:** ${
+        r.interventionTaken
+          ?.blockSensitiveAction
+          ? 'Yes'
+          : 'No'
+      }`,
+      `- **Incident Created:** ${
+        r.interventionTaken
+          ?.incidentCreated
+          ? 'Yes'
+          : 'No'
+      }`,
       '',
       '## Forensic Evidence',
       '',
-      `- **SHA-256 Hash:** \`${r.evidenceHashes?.sha256 ?? 'N/A'}\``,
-      `- **Original Filename:** ${r.evidenceHashes?.originalFilename ?? 'N/A'}`,
-      `- **Duration:** ${r.evidenceHashes?.durationSeconds ?? 'N/A'}s`,
+      `- **SHA-256 Hash:** \`${
+        r.evidenceHashes
+          ?.sha256 ??
+        'N/A'
+      }\``,
+      `- **Original Filename:** ${
+        r.evidenceHashes
+          ?.originalFilename ??
+        'N/A'
+      }`,
+      `- **Duration:** ${
+        r.evidenceHashes
+          ?.durationSeconds ??
+        'N/A'
+      }s`,
       '',
       '---',
       '_Report generated by VoxShieldAI — Multi-Signal Voice Threat Intelligence Platform_',
@@ -172,129 +461,19 @@ function App() {
     return lines.join('\n');
   };
 
+
+  // =====================================================
+  // Application Providers
+  // =====================================================
+
   return (
     <AuthProvider>
       <BrowserRouter>
-        <div className="page-shell-pro">
-
-          <Navbar />
-
-          <main className="main-content-pro">
-            <Routes>
-
-              {/* =========================================
-                  Public Landing Page
-              ========================================= */}
-              <Route
-                path="/"
-                element={<HomePage />}
-              />
-
-
-              {/* =========================================
-                  Public Authentication Routes
-              ========================================= */}
-              <Route
-                path="/auth"
-                element={<AuthPage />}
-              />
-
-              <Route
-                path="/login"
-                element={<AuthPage />}
-              />
-
-              <Route
-                path="/register"
-                element={<AuthPage />}
-              />
-
-
-              {/* =========================================
-                  Protected Dashboard & Operations
-              ========================================= */}
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <ScannerPage
-                      onExportReport={handleExportReport}
-                    />
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
-                path="/scanner"
-                element={
-                  <ProtectedRoute>
-                    <ScannerPage
-                      onExportReport={handleExportReport}
-                    />
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
-                path="/live"
-                element={
-                  <ProtectedRoute>
-                    <LiveShieldPage
-                      onExportReport={handleExportReport}
-                    />
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
-                path="/speaker-guard"
-                element={
-                  <ProtectedRoute>
-                    <SpeakerGuardPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
-                path="/history"
-                element={
-                  <ProtectedRoute>
-                    <AuditVaultPage
-                      onExportReport={handleExportReport}
-                    />
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
-                path="/about"
-                element={
-                  <ProtectedRoute>
-                    <AboutPage />
-                  </ProtectedRoute>
-                }
-              />
-
-
-              {/* =========================================
-                  Report Verification
-              ========================================= */}
-              <Route
-                path="/reports/:id/verify"
-                element={<ReportVerificationPage />}
-              />
-
-              <Route
-                path="/reports/verify/:id"
-                element={<ReportVerificationPage />}
-              />
-
-            </Routes>
-          </main>
-
-          <Footer />
-
-        </div>
+        <AppContent
+          handleExportReport={
+            handleExportReport
+          }
+        />
       </BrowserRouter>
     </AuthProvider>
   );

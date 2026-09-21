@@ -5,6 +5,12 @@
 
 import { query } from '../database/db.js';
 
+function toIsoTimestamp(timestamp) {
+  if (!timestamp) return timestamp;
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(timestamp)) return timestamp;
+  return `${timestamp.replace(' ', 'T')}Z`;
+}
+
 export async function getHistory(req, res) {
   try {
     const limit = parseInt(req.query.limit) || 50;
@@ -19,6 +25,7 @@ export async function getHistory(req, res) {
 
     const formatted = rows.map(r => ({
       ...r,
+      timestamp: toIsoTimestamp(r.timestamp),
       indicators: r.indicators ? JSON.parse(r.indicators) : []
     }));
 
@@ -45,6 +52,7 @@ export async function getHistoryById(req, res) {
       success: true,
       analysis: {
         ...row,
+        timestamp: toIsoTimestamp(row.timestamp),
         indicators: row.indicators ? JSON.parse(row.indicators) : [],
         raw_result: row.raw_result ? JSON.parse(row.raw_result) : null
       }
@@ -95,7 +103,7 @@ export async function getSecurityReport(req, res) {
       title: 'VoxShieldAI Forensic Voice Threat & Fraud Incident Report',
       callId: row.id,
       analysisId: row.id,
-      timestamp: row.timestamp || raw.timestamp || new Date().toISOString(),
+      timestamp: toIsoTimestamp(row.timestamp) || raw.timestamp || new Date().toISOString(),
       generatedAt: new Date().toISOString(),
       risk: {
         score: row.final_score,

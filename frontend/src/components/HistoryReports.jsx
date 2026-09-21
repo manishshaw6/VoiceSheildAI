@@ -48,6 +48,8 @@ export default function HistoryReports({ onSelectAnalysis, onExportReport }) {
         onSelectAnalysis({
           ...raw,
           analysisId: data.analysis.id,
+          timestamp: data.analysis.timestamp,
+          duration: data.analysis.duration,
           final_score: data.analysis.final_score,
           risk_level: data.analysis.risk_level,
           transcript: data.analysis.transcript,
