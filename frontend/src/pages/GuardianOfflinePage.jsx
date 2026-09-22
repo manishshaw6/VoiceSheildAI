@@ -3,6 +3,7 @@ import GuardianHUD from '../components/GuardianHUD';
 import { enrollOfflineContact, listOfflineContacts, deleteOfflineContact } from '../services/offlineBiometricVault';
 import { loadAndDecryptIncidents, deleteVaultIncident, purgeAllVaultIncidents } from '../services/encryptedIncidentVault';
 import { offlineSyncManager } from '../services/offlineSyncManager';
+import Section65BCertificateModal from '../components/Section65BCertificateModal';
 
 export default function GuardianOfflinePage() {
   const [incidents, setIncidents] = useState([]);
@@ -12,6 +13,10 @@ export default function GuardianOfflinePage() {
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Section 65B Certificate Modal
+  const [selectedCertIncident, setSelectedCertIncident] = useState(null);
+  const [isCertModalOpen, setIsCertModalOpen] = useState(false);
 
   const refreshVault = async () => {
     try {
@@ -100,6 +105,11 @@ export default function GuardianOfflinePage() {
     URL.revokeObjectURL(url);
   };
 
+  const openCertModal = (incident) => {
+    setSelectedCertIncident(incident);
+    setIsCertModalOpen(true);
+  };
+
   return (
     <div className="page-view-wrapper guardian-page-container">
       {/* ─── Breadcrumb & Title ────────────────────────────────────── */}
@@ -109,18 +119,18 @@ export default function GuardianOfflinePage() {
         </div>
         <div className="guardian-title-row">
           <h2>VoiceShield Guardian Offline</h2>
-          <span className="guardian-sih-tag">SIH26104 DEFENSE PLATFORM</span>
+          <span className="guardian-defense-tag">SOVEREIGN AIR-GAPPED DEFENSE</span>
         </div>
         <p className="guardian-description">
           Autonomous, privacy-first edge voice-cloning detection & contextual fraud prevention platform.
-          Operates with zero cloud dependency during network failure or intentional airplane mode isolation.
+          Operates with zero cloud dependency during network isolation or cellular failure.
         </p>
 
         {/* Operating Environment Notice */}
         <div className="guardian-platform-notice">
           <span className="notice-icon">🛡️</span>
           <div>
-            <strong>Operational Boundaries & Platform Integrity:</strong> In strict accordance with Android, iOS, and desktop operating system privacy sandboxes, VoiceShield Guardian monitors <em>user-supplied forensic audio</em>, <em>live ambient microphone capture</em>, and <em>permitted in-app VoIP streams</em>. It does not falsely claim silent cellular telephony tapping.
+            <strong>Operational Boundaries & Platform Integrity:</strong> VoiceShield Guardian operates within standard operating system security perimeters. The engine monitors <em>user-supplied forensic audio assets</em>, <em>live ambient microphone capture (speakerphone)</em>, and <em>permitted in-app VoIP interfaces</em>.
           </div>
         </div>
       </div>
@@ -228,8 +238,15 @@ export default function GuardianOfflinePage() {
                   </p>
 
                   <div className="incident-card-footer">
-                    <button onClick={() => exportDossier(inc)} className="export-dossier-btn">Export JSON Dossier</button>
-                    <button onClick={() => handleDeleteIncident(inc.id)} className="delete-inc-btn">Delete</button>
+                    <button onClick={() => openCertModal(inc)} className="cert-btn-hud" style={{ padding: '0.2rem 0.5rem', fontSize: '0.68rem' }}>
+                      📜 Section 65B Cert
+                    </button>
+                    <button onClick={() => exportDossier(inc)} className="export-dossier-btn">
+                      Export JSON
+                    </button>
+                    <button onClick={() => handleDeleteIncident(inc.id)} className="delete-inc-btn">
+                      Delete
+                    </button>
                   </div>
                 </div>
               ))
@@ -237,6 +254,13 @@ export default function GuardianOfflinePage() {
           </div>
         </div>
       </div>
+
+      {/* Section 65B Electronic Evidence Modal */}
+      <Section65BCertificateModal
+        isOpen={isCertModalOpen}
+        onClose={() => setIsCertModalOpen(false)}
+        incident={selectedCertIncident}
+      />
     </div>
   );
 }

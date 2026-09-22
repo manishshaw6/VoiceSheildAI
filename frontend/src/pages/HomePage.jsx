@@ -106,9 +106,9 @@ export default function HomePage() {
       <section className="demo-scenarios-section">
         <div className="section-inner">
           <div className="section-head-pro">
-            <div className="analyzer-badge">HACKATHON DEMO CAPABILITIES</div>
-            <h2>Five Real-World Security Scenarios</h2>
-            <p>VoiceShieldAI's evidence fusion engine is designed to decisively handle edge cases and hybrid attacks.</p>
+            <div className="analyzer-badge">REAL-TIME THREAT DEFENSE MATRIX</div>
+            <h2>Five Mission-Critical Threat Scenarios</h2>
+            <p>VoiceShield AI's evidence fusion engine is designed to decisively handle edge cases and hybrid impersonation attacks.</p>
           </div>
 
           <div className="scenarios-grid">

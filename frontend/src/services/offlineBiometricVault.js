@@ -1,6 +1,6 @@
 /**
  * VoiceShield Guardian Offline — Edge Biometric Trusted Voice Vault
- * Smart India Hackathon SIH26104 Subsystem
+ * Autonomous Sovereign Edge Biometric Vault
  *
  * Extracts 80-dimensional acoustic filterbank embeddings directly on the client,
  * stores enrolled trusted contacts in IndexedDB, and computes cosine similarity.

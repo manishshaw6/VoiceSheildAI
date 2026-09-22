@@ -1,6 +1,6 @@
 /**
  * VoiceShield Guardian Offline — Multilingual Contextual Fraud Engine
- * Smart India Hackathon SIH26104 Subsystem
+ * Autonomous Sovereign Edge Intent Engine
  *
  * Runs 100% offline on the edge. Analyzes speech transcript tokens across
  * English, Hindi, and Telugu for high-risk social engineering vectors,

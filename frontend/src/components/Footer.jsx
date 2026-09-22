@@ -10,10 +10,10 @@ export default function Footer() {
             <span className="logo-text">VOXSHIELD <span className="brand-accent">AI</span></span>
           </div>
           <p className="footer-tagline">
-            Next-generation enterprise voice security, synthetic speech detection, and conversational fraud intelligence.
+            Autonomous sovereign voice security, synthetic speech detection, and real-time conversational fraud intelligence.
           </p>
           <div className="footer-status-tag">
-            <span className="status-dot"></span> End-to-End Multimodal Threat Defense
+            <span className="status-dot"></span> End-to-End Multimodal Threat Defense Matrix
           </div>
         </div>
 
@@ -22,30 +22,32 @@ export default function Footer() {
           <Link to="/scanner">Threat Scanner</Link>
           <Link to="/live">Live Call Shield</Link>
           <Link to="/speaker-guard">Voice ID & Clone Guard</Link>
+          <Link to="/guardian-offline">Guardian Offline HUD</Link>
           <Link to="/history">Forensic Audit Vault</Link>
         </div>
 
         <div className="footer-nav-col">
-          <h6>AI Intelligence Grid</h6>
-          <a href="https://realitydefender.com" target="_blank" rel="noreferrer">Reality Defender SDK</a>
-          <a href="https://assemblyai.com" target="_blank" rel="noreferrer">AssemblyAI Universal-2</a>
-          <a href="https://ai.google.dev" target="_blank" rel="noreferrer">Gemini 2.5 Flash</a>
-          <a href="https://groq.com" target="_blank" rel="noreferrer">Groq Inference Engine</a>
+          <h6>Defense Architecture</h6>
+          <span className="footer-spec-item">Edge Acoustic Biomarkers</span>
+          <span className="footer-spec-item">Neural Vocoder Discontinuity Filter</span>
+          <span className="footer-spec-item">Multilingual Semantic Intent Engine</span>
+          <span className="footer-spec-item">Air-Gapped AES-GCM-256 Vault</span>
         </div>
 
         <div className="footer-nav-col">
-          <h6>Platform</h6>
+          <h6>Platform & Standards</h6>
           <Link to="/about">Architecture & Methodology</Link>
-          <a href="/api/health" target="_blank">API Health Status</a>
-          <a href="/Hero.splinecode" target="_blank">3D Hero Model Asset</a>
+          <a href="/api/health" target="_blank" rel="noreferrer">API Health Status</a>
+          <span className="footer-spec-item">Section 65B Evidence Standard</span>
+          <span className="footer-spec-item">Zero-Knowledge Audio Hygiene</span>
         </div>
       </div>
 
       <div className="footer-bottom-bar">
-        <span>© 2026 VoiceShieldAI Platform. Built for Hackathon Excellence & Enterprise Integrity.</span>
+        <span>© 2026 VoiceShield AI Security Systems. Autonomous Enterprise Voice Defense.</span>
         <div className="bottom-links">
-          <span>Confidential Voice Privacy Standard</span>
-          <span>Zero Knowledge Audio Buffer Cleanup</span>
+          <span>Cryptographic Forensic Chain</span>
+          <span>Zero-Knowledge Buffer Cleanup</span>
         </div>
       </div>
     </footer>

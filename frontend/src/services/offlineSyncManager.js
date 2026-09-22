@@ -1,6 +1,6 @@
 /**
  * VoiceShield Guardian Offline — Connectivity-Aware Sync Manager
- * Smart India Hackathon SIH26104 Subsystem
+ * Autonomous Sovereign Edge Sync Engine
  *
  * Monitors real-time network reachability and safely synchronizes local
  * encrypted forensic incident dossiers to the central database with

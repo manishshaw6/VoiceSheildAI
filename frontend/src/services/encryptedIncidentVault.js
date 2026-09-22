@@ -1,6 +1,6 @@
 /**
  * VoiceShield Guardian Offline — Client-Side Encrypted Incident Vault
- * Smart India Hackathon SIH26104 Subsystem
+ * Autonomous Sovereign Edge Encrypted Vault
  *
  * Utilizes Web Crypto API (AES-GCM-256) to encrypt all local incident records
  * before persisting them in IndexedDB. Protects sensitive call forensics from

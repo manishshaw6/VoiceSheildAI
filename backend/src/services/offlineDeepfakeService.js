@@ -1,6 +1,6 @@
 /**
  * VoiceShield AI — Offline Standalone Deepfake Audio Detection Engine
- * Smart India Hackathon SIH26104 Subsystem
+ * Autonomous Sovereign Edge Deepfake Engine
  *
  * Implements local acoustic & spectral artifact inference without external cloud APIs.
  * Analyzes vocoder smoothing, phase discontinuity, spectral rolloff, and energy variance.

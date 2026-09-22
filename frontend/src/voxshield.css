@@ -1449,7 +1449,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 /* ==========================================================================
-   VOICESHIELD GUARDIAN OFFLINE HUD & EDGE WORKSTATION SYSTEM (SIH26104)
+   VOICESHIELD GUARDIAN OFFLINE HUD & EDGE WORKSTATION SYSTEM
    ========================================================================== */
 
 .guardian-page-container {
@@ -1465,7 +1465,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   flex-wrap: wrap;
 }
 
-.guardian-sih-tag {
+.guardian-defense-tag {
   display: inline-flex;
   align-items: center;
   padding: 0.25rem 0.65rem;
@@ -2335,4 +2335,619 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   border-radius: 3px;
   font-size: 0.68rem;
   cursor: pointer;
-}
+}
+
+/* ─── Visualizer Mode Toggles & Spectrogram Overlay ───────────────────────── */
+
+.visualizer-mode-tabs {
+  display: flex;
+  gap: 0.4rem;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 0.2rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.vis-mode-btn {
+  background: none;
+  border: none;
+  color: var(--vs-faint);
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.vis-mode-btn.active {
+  background: rgba(32, 173, 127, 0.2);
+  color: #effbf3;
+  border: 1px solid rgba(32, 173, 127, 0.5);
+}
+
+.spectrogram-overlay-legend {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(4, 9, 7, 0.85);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.65rem;
+  color: #70c99f;
+  pointer-events: none;
+}
+
+.vocoder-cutoff-line-label {
+  position: absolute;
+  left: 12px;
+  top: 38%;
+  color: #ffb300;
+  font-size: 0.65rem;
+  font-family: monospace;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 0.1rem 0.3rem;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* ─── Tactical Action Buttons (Duress & 65B) ───────────────────────────────── */
+
+.hud-action-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.duress-btn-hud {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.duress-btn-hud:hover {
+  background: rgba(239, 68, 68, 0.25);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+}
+
+.cert-btn-hud {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(32, 173, 127, 0.12);
+  border: 1px solid rgba(32, 173, 127, 0.4);
+  color: #70c99f;
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cert-btn-hud:hover {
+  background: rgba(32, 173, 127, 0.22);
+}
+
+/* ─── Modal Architecture ─────────────────────────────────────────────────── */
+
+.guardian-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.guardian-modal-container {
+  background: #060e0a;
+  border: 1px solid rgba(112, 201, 159, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8);
+  width: 100%;
+  max-width: 720px;
+  color: #effbf3;
+  overflow: hidden;
+  animation: modalScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalScaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ─── Duress Modal Styles ────────────────────────────────────────────────── */
+
+.duress-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1.25rem 1.5rem;
+  background: rgba(239, 68, 68, 0.08);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.duress-badge {
+  display: inline-block;
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.35rem;
+}
+
+.duress-title-group h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #effbf3;
+}
+
+.duress-close-btn {
+  background: none;
+  border: none;
+  color: var(--vs-faint);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+}
+
+.duress-close-btn:hover {
+  color: #effbf3;
+}
+
+.duress-intro {
+  padding: 1rem 1.5rem 0.5rem;
+  color: #d1fae5;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.duress-card {
+  margin: 1rem 1.5rem;
+  padding: 1rem;
+  border-radius: 8px;
+  background: rgba(14, 28, 22, 0.6);
+  border: 1px solid rgba(112, 201, 159, 0.2);
+}
+
+.duress-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.card-step {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #70c99f;
+  background: rgba(32, 173, 127, 0.15);
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  border: 1px solid rgba(32, 173, 127, 0.3);
+}
+
+.duress-card-header h4 {
+  margin: 0 0 0.15rem;
+  font-size: 0.95rem;
+  color: #effbf3;
+}
+
+.card-subtext {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--vs-muted);
+}
+
+.challenge-quote-box {
+  background: rgba(0, 0, 0, 0.4);
+  border-left: 3px solid #20ad7f;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+}
+
+.challenge-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #70c99f;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+}
+
+.challenge-prompt {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #effbf3;
+  line-height: 1.45;
+  margin-bottom: 0.4rem;
+}
+
+.challenge-rationale {
+  font-size: 0.75rem;
+  color: #a7f3d0;
+}
+
+.duress-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 1rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.duress-btn.primary {
+  background: #20ad7f;
+  border: 1px solid #20ad7f;
+  color: #040907;
+}
+
+.duress-btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #effbf3;
+}
+
+.duress-btn.probe {
+  background: rgba(0, 229, 255, 0.12);
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  color: #00e5ff;
+}
+
+.duress-btn.probe.active {
+  background: rgba(0, 229, 255, 0.3);
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.5);
+}
+
+.probe-action-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.probe-note {
+  font-size: 0.72rem;
+  color: var(--vs-faint);
+}
+
+.emergency-buttons-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.duress-action-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.duress-action-pill.call-cyber {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+
+.duress-action-pill.call-cyber:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.duress-action-pill.hangup {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #effbf3;
+}
+
+.duress-action-pill.hangup:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.duress-action-pill strong {
+  display: block;
+  font-size: 0.85rem;
+}
+
+.duress-action-pill span {
+  font-size: 0.7rem;
+  color: var(--vs-muted);
+}
+
+.duress-modal-footer {
+  padding: 1rem 1.5rem;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.25);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ─── Section 65B Certificate Styles ──────────────────────────────────────── */
+
+.cert-modal-container {
+  max-width: 840px;
+}
+
+.cert-modal-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: rgba(8, 16, 14, 0.95);
+  border-bottom: 1px solid rgba(112, 201, 159, 0.2);
+}
+
+.cert-badge-legal {
+  display: inline-block;
+  background: rgba(32, 173, 127, 0.2);
+  color: #70c99f;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.25rem;
+}
+
+.cert-top-title h4 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #effbf3;
+}
+
+.cert-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.cert-printable-document {
+  padding: 2rem;
+  background: #030806;
+  color: #effbf3;
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.cert-doc-header {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.cert-crest {
+  font-size: 2.5rem;
+}
+
+.cert-header-text h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+  letter-spacing: 0.05em;
+  color: #70c99f;
+}
+
+.cert-header-text p {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  color: var(--vs-muted);
+}
+
+.cert-doc-id {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: #00e5ff;
+}
+
+.cert-divider-line {
+  height: 2px;
+  background: linear-gradient(90deg, #20ad7f, transparent);
+  margin-bottom: 1.5rem;
+}
+
+.cert-section {
+  margin-bottom: 1.5rem;
+}
+
+.cert-section h5 {
+  font-size: 0.9rem;
+  color: #70c99f;
+  border-bottom: 1px solid rgba(112, 201, 159, 0.2);
+  padding-bottom: 0.35rem;
+  margin: 0 0 0.75rem;
+}
+
+.cert-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1.5rem;
+  background: rgba(14, 28, 22, 0.5);
+  padding: 0.85rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.cert-telemetry-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.cert-telemetry-table th {
+  background: rgba(32, 173, 127, 0.15);
+  color: #70c99f;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(112, 201, 159, 0.25);
+}
+
+.cert-telemetry-table td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(112, 201, 159, 0.15);
+}
+
+.cert-threat-tag {
+  display: inline-block;
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: 0.72rem;
+}
+
+.cert-transcript-box {
+  background: rgba(0, 0, 0, 0.4);
+  border-left: 3px solid #f59e0b;
+  padding: 0.75rem 1rem;
+  font-style: italic;
+  margin-bottom: 0.75rem;
+}
+
+.cert-indicators-list {
+  font-size: 0.78rem;
+  color: #c2ded0;
+}
+
+.cert-indicators-list ul {
+  margin: 0.35rem 0 0 1.25rem;
+  padding: 0;
+}
+
+.cert-legal-declaration {
+  background: rgba(14, 28, 22, 0.4);
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px dashed rgba(112, 201, 159, 0.35);
+}
+
+.cert-declaration-text {
+  font-size: 0.78rem;
+  color: var(--vs-muted);
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+
+.cert-signature-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-top: 1rem;
+}
+
+.cert-sign-box {
+  width: 280px;
+}
+
+.cert-sig-line {
+  height: 1px;
+  background: #70c99f;
+  margin-bottom: 0.4rem;
+}
+
+.cert-sign-box span {
+  font-size: 0.7rem;
+  color: var(--vs-faint);
+}
+
+.cert-seal-badge {
+  text-align: right;
+  border: 2px solid #20ad7f;
+  padding: 0.4rem 0.75rem;
+  border-radius: 4px;
+}
+
+.cert-seal-badge span {
+  display: block;
+  font-size: 0.65rem;
+  color: #70c99f;
+  letter-spacing: 0.08em;
+}
+
+.cert-seal-badge strong {
+  color: #effbf3;
+  font-size: 0.85rem;
+}
+
+.cert-modal-bottom {
+  padding: 1rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.4);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.75rem;
+  color: var(--vs-faint);
+}
+
+/* Print Overrides */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .cert-printable-document,
+  .cert-printable-document * {
+    visibility: visible;
+  }
+  .cert-printable-document {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+  .cert-printable-document h3,
+  .cert-printable-document h5,
+  .cert-telemetry-table th {
+    color: #0b5345 !important;
+  }
+  .cert-divider-line {
+    background: #0b5345 !important;
+  }
+  .cert-seal-badge {
+    border-color: #0b5345 !important;
+  }
+  .guardian-modal-overlay {
+    background: none !important;
+    position: static !important;
+  }
+}
+

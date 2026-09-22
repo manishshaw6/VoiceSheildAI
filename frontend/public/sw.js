@@ -1,6 +1,6 @@
 /**
  * VoiceShield Guardian Offline — Service Worker
- * Smart India Hackathon SIH26104 Subsystem
+ * Autonomous Sovereign Edge PWA Service Worker
  *
  * Implements PWA offline caching for the entire VoiceShield Guardian workstation
  * so the application loads and runs locally even without an internet connection.

@@ -5,12 +5,20 @@ import { fuseOfflineRisk } from '../services/offlineRiskFusion';
 import { saveEncryptedIncident } from '../services/encryptedIncidentVault';
 import { verifyAgainstOfflineContact, listOfflineContacts } from '../services/offlineBiometricVault';
 import { offlineSyncManager } from '../services/offlineSyncManager';
+import DuressProtocolModal from './DuressProtocolModal';
+import Section65BCertificateModal from './Section65BCertificateModal';
 
 export default function GuardianHUD({ onIncidentRecorded }) {
   const [isOnline, setIsOnline] = useState(offlineSyncManager.isOnline);
   const [activeSource, setActiveSource] = useState('mic'); // 'mic' | 'file' | 'scenario'
+  const [visualizerMode, setVisualizerMode] = useState('spectrogram'); // 'spectrogram' | 'waveform'
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Tactical Modals
+  const [isDuressOpen, setIsDuressOpen] = useState(false);
+  const [isCertOpen, setIsCertOpen] = useState(false);
+  const [lastIncidentDossier, setLastIncidentDossier] = useState(null);
 
   // Telemetry & Results
   const [fusedRisk, setFusedRisk] = useState(null);
@@ -22,7 +30,7 @@ export default function GuardianHUD({ onIncidentRecorded }) {
   const [enrolledContacts, setEnrolledContacts] = useState([]);
   const [selectedContactId, setSelectedContactId] = useState('');
 
-  // Audio nodes for live waveform canvas
+  // Audio nodes for live canvas visualizer
   const canvasRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
@@ -31,7 +39,7 @@ export default function GuardianHUD({ onIncidentRecorded }) {
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
 
-  // Monitor connectivity
+  // Monitor connectivity & enrolled contacts
   useEffect(() => {
     const unsub = offlineSyncManager.subscribe(status => setIsOnline(status));
     listOfflineContacts().then(list => {
@@ -73,45 +81,116 @@ export default function GuardianHUD({ onIncidentRecorded }) {
     return () => stopLiveAudio();
   }, []);
 
-  // Canvas visualizer loop
-  const drawWaveform = () => {
+  // Dual Canvas visualizer loop: Waveform Oscilloscope or 2D Forensic Spectrogram
+  const drawCanvas = () => {
     if (!analyserRef.current || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     const analyser = analyserRef.current;
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
+
+    const timeData = new Uint8Array(analyser.fftSize);
+    const freqData = new Uint8Array(analyser.frequencyBinCount);
 
     const render = () => {
       animationFrameRef.current = requestAnimationFrame(render);
-      analyser.getByteTimeDomainData(dataArray);
 
-      ctx.fillStyle = '#060d0a';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (visualizerMode === 'waveform') {
+        // Mode A: Oscilloscope Waveform
+        analyser.getByteTimeDomainData(timeData);
+        ctx.fillStyle = '#050a08';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#20ad7f';
-      ctx.beginPath();
+        // Cyber Grid Lines
+        ctx.strokeStyle = 'rgba(32, 173, 127, 0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let y = 20; y < canvas.height; y += 30) {
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvas.width, y);
+        }
+        for (let x = 30; x < canvas.width; x += 60) {
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, canvas.height);
+        }
+        ctx.stroke();
 
-      const sliceWidth = canvas.width / bufferLength;
-      let x = 0;
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#00e5ff';
+        ctx.shadowColor = '#00e5ff';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
 
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = (v * canvas.height) / 2;
+        const sliceWidth = canvas.width / timeData.length;
+        let x = 0;
 
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+        for (let i = 0; i < timeData.length; i++) {
+          const v = timeData[i] / 128.0;
+          const y = (v * canvas.height) / 2;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+          x += sliceWidth;
+        }
 
-        x += sliceWidth;
+        ctx.lineTo(canvas.width, canvas.height / 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0; // reset
+      } else {
+        // Mode B: Real-Time 2D Forensic Mel-Scale Spectrogram (0 - 8000 Hz)
+        analyser.getByteFrequencyData(freqData);
+
+        ctx.fillStyle = '#04070a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const binCount = 80; // focus on audible band 0-8kHz
+        const barWidth = canvas.width / binCount;
+
+        // Draw frequency columns
+        for (let i = 0; i < binCount; i++) {
+          const val = freqData[i] || 0;
+          const barHeight = (val / 255) * (canvas.height - 18);
+          const x = i * barWidth;
+          const y = canvas.height - barHeight;
+
+          // Multi-stage forensic thermal gradient
+          const grad = ctx.createLinearGradient(0, canvas.height, 0, 0);
+          grad.addColorStop(0, '#042f2e');
+          grad.addColorStop(0.35, '#00e5ff');
+          grad.addColorStop(0.7, '#20ad7f');
+          grad.addColorStop(0.9, '#f59e0b');
+          grad.addColorStop(1, '#ef4444');
+
+          ctx.fillStyle = grad;
+          ctx.fillRect(x, y, barWidth - 1, barHeight);
+        }
+
+        // Neural Vocoder Cutoff Anomaly Threshold Line (~3.8 kHz corresponds to bin ~38 at 16kHz SR)
+        const cutoffX = Math.round((3800 / 8000) * canvas.width);
+        ctx.save();
+        ctx.strokeStyle = '#ffb300';
+        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cutoffX, 0);
+        ctx.lineTo(cutoffX, canvas.height);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffb300';
+        ctx.font = '9px monospace';
+        ctx.fillText('VOC-CUTOFF (3.8kHz)', cutoffX + 4, 16);
+        ctx.restore();
       }
-
-      ctx.lineTo(canvas.width, canvas.height / 2);
-      ctx.stroke();
     };
 
     render();
   };
+
+  // Switch visualizer mode without stopping audio
+  useEffect(() => {
+    if (isMonitoring && analyserRef.current && canvasRef.current) {
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      drawCanvas();
+    }
+  }, [visualizerMode]);
 
   // Start Live Mic Stream
   const startLiveMic = async () => {
@@ -137,10 +216,11 @@ export default function GuardianHUD({ onIncidentRecorded }) {
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.8;
       source.connect(analyser);
       analyserRef.current = analyser;
 
-      drawWaveform();
+      drawCanvas();
 
       // Record chunks for sliding-window edge analysis
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -149,7 +229,6 @@ export default function GuardianHUD({ onIncidentRecorded }) {
       recorder.ondataavailable = async (e) => {
         if (e.data.size > 0) {
           recordedChunksRef.current.push(e.data);
-          // Trigger edge sliding inference when enough data is gathered
           if (recordedChunksRef.current.length >= 2) {
             const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
             runLocalAnalysisOnBlob(blob);
@@ -197,19 +276,21 @@ export default function GuardianHUD({ onIncidentRecorded }) {
       });
       setFusedRisk(fused);
 
-      // 5. Encrypted Incident Vault Logging for Elevated/High/Critical
+      // 5. Encrypted Incident Vault Logging & Legal Dossier Preparedness
+      const incidentDossier = {
+        riskLevel: fused.riskLevel,
+        finalScore: fused.finalScore,
+        deepfakeScore: fakeResult.score,
+        scamScore: fraudRes.scamScore,
+        isCloneAttack: fused.isCloneAttack,
+        transcript: transcriptToUse,
+        indicators: fraudRes.indicators,
+        recommendedAction: fused.recommendedAction,
+        timestamp: new Date().toISOString()
+      };
+      setLastIncidentDossier(incidentDossier);
+
       if (fused.finalScore >= 30) {
-        const incidentDossier = {
-          riskLevel: fused.riskLevel,
-          finalScore: fused.finalScore,
-          deepfakeScore: fakeResult.score,
-          scamScore: fraudRes.scamScore,
-          isCloneAttack: fused.isCloneAttack,
-          transcript: transcriptToUse,
-          indicators: fraudRes.indicators,
-          recommendedAction: fused.recommendedAction,
-          timestamp: new Date().toISOString()
-        };
         await saveEncryptedIncident(incidentDossier);
         if (onIncidentRecorded) onIncidentRecorded();
       }
@@ -227,7 +308,7 @@ export default function GuardianHUD({ onIncidentRecorded }) {
     runLocalAnalysisOnBlob(file);
   };
 
-  // Pre-configured Test Attack Scenarios for demonstration
+  // Pre-configured Test Attack Scenarios
   const runDemoScenario = (type) => {
     stopLiveAudio();
     setAlertDismissed(false);
@@ -235,7 +316,6 @@ export default function GuardianHUD({ onIncidentRecorded }) {
     if (type === 'digital_arrest') {
       const text = 'This is CBI Officer Sharma. Your Aadhaar is linked to illegal narcotics. A Supreme Court digital arrest warrant is issued. Do not disconnect the call, do not tell anyone, and immediately transfer five lakhs.';
       setTranscriptText(text);
-      // Synthetic speech simulation audio buffer (5s tone with vocoder spectral profile)
       const fakeSamples = new Float32Array(16000 * 4);
       for (let i = 0; i < fakeSamples.length; i++) {
         fakeSamples[i] = (Math.sin(i * 0.05) * 0.3) + ((Math.random() - 0.5) * 0.04);
@@ -258,14 +338,13 @@ export default function GuardianHUD({ onIncidentRecorded }) {
       }
       runLocalAnalysisOnBlob(fakeSamples, text);
     } else if (type === 'benign_safety') {
-      const text = 'Remember to never share your OTP or UPI PIN with anyone over the phone. Bank officials never ask for secret codes.';
+      const text = 'Bank security announcement: Please do NOT share your OTP, UPI PIN, or card CVV with anyone. Official staff will never ask for confidential codes.';
       setTranscriptText(text);
-      // Clean dynamic human voice simulation (natural harmonic transients)
-      const naturalSamples = new Float32Array(16000 * 4);
-      for (let i = 0; i < naturalSamples.length; i++) {
-        naturalSamples[i] = Math.sin(i * (0.02 + 0.04 * Math.sin(i * 0.0005))) * (0.2 + 0.15 * Math.sin(i * 0.002));
+      const cleanSamples = new Float32Array(16000 * 4);
+      for (let i = 0; i < cleanSamples.length; i++) {
+        cleanSamples[i] = (Math.sin(i * 0.03) * 0.4) + ((Math.random() - 0.5) * 0.15);
       }
-      runLocalAnalysisOnBlob(naturalSamples, text);
+      runLocalAnalysisOnBlob(cleanSamples, text);
     }
   };
 
@@ -275,34 +354,60 @@ export default function GuardianHUD({ onIncidentRecorded }) {
       <div className="guardian-telemetry-ribbon">
         <div className="guardian-badge-cluster">
           <div className="hud-status-badge">
-            <span className={`status-dot ${isOnline ? 'online' : 'offline-pulse'}`} />
-            <strong>{isOnline ? 'CLOUD-ASSISTED' : 'OFFLINE GUARDIAN ACTIVE'}</strong>
+            <span
+              className="status-dot"
+              style={{ background: isOnline ? '#20ad7f' : '#00e5ff' }}
+            />
+            <strong>{isOnline ? 'CONNECTED (ONLINE SYNC READY)' : 'AIR-GAPPED DEFENSE (OFFLINE ACTIVE)'}</strong>
           </div>
-          <div className="hud-mode-pill">
-            <span>EDGE INFERENCE: LOCAL ON-DEVICE</span>
-          </div>
+          <span className="ribbon-subtag">AES-GCM-256 VAULT</span>
+          <span className="ribbon-subtag">16kHz EDGE ACOUSTICS</span>
         </div>
 
-        {fusedRisk && (
-          <div className={`hud-risk-flag ${fusedRisk.bannerColor}`}>
-            <span>THREAT LEVEL: </span>
-            <strong>{fusedRisk.riskLevel} ({fusedRisk.finalScore}/100)</strong>
-          </div>
-        )}
+        {/* Tactical Actions (Duress & 65B) */}
+        <div className="hud-action-strip">
+          <button 
+            className="duress-btn-hud"
+            onClick={() => setIsDuressOpen(true)}
+            title="Engage emergency cognitive challenge & acoustic countermeasures"
+          >
+            🚨 Engage Duress Interlock
+          </button>
+
+          {lastIncidentDossier && (
+            <button 
+              className="cert-btn-hud"
+              onClick={() => setIsCertOpen(true)}
+              title="Generate court-admissible electronic evidence certificate"
+            >
+              📜 Section 65B Dossier
+            </button>
+          )}
+
+          {fusedRisk && (
+            <div className={`threat-indicator-pill ${fusedRisk.riskLevel.toLowerCase()}`}>
+              <span className="pill-pulse" />
+              <span>THREAT LEVEL: <strong>{fusedRisk.riskLevel} ({fusedRisk.finalScore}%)</strong></span>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* ─── Alert Banner (High / Critical) ──────────────────────────── */}
-      {fusedRisk && (fusedRisk.riskLevel === 'HIGH' || fusedRisk.riskLevel === 'CRITICAL') && !alertDismissed && (
-        <div className="guardian-alert-banner">
-          <div className="alert-banner-header">
-            <span className="alert-icon">⚠️</span>
-            <div>
+      {/* ─── Imminent Attack Warning Banner ─────────────────────────── */}
+      {fusedRisk && (fusedRisk.riskLevel === 'CRITICAL' || fusedRisk.riskLevel === 'HIGH') && !alertDismissed && (
+        <div className={`guardian-alert-banner ${fusedRisk.riskLevel.toLowerCase()}`}>
+          <div className="alert-banner-content">
+            <div className="alert-icon">⚠️</div>
+            <div className="alert-text">
               <h4>{fusedRisk.isCloneAttack ? '🚨 CRITICAL TARGETED VOICE CLONE DETECTED' : '⚠️ HIGH PROBABILITY FRAUD COERCION'}</h4>
               <p>{fusedRisk.recommendedAction}</p>
             </div>
             <button className="dismiss-alert-btn" onClick={() => setAlertDismissed(true)}>✕</button>
           </div>
           <div className="alert-banner-actions">
+            <button className="duress-btn-hud" onClick={() => setIsDuressOpen(true)}>
+              🚨 ENGAGE DURESS CHALLENGE
+            </button>
             <button className="emergency-hangup-btn" onClick={stopLiveAudio}>
               🛑 EMERGENCY HANG UP & SECURE LOG
             </button>
@@ -323,13 +428,42 @@ export default function GuardianHUD({ onIncidentRecorded }) {
             <div className="source-tabs">
               <button className={activeSource === 'mic' ? 'active' : ''} onClick={() => { stopLiveAudio(); setActiveSource('mic'); }}>Microphone</button>
               <button className={activeSource === 'file' ? 'active' : ''} onClick={() => { stopLiveAudio(); setActiveSource('file'); }}>File Drop</button>
-              <button className={activeSource === 'scenario' ? 'active' : ''} onClick={() => { stopLiveAudio(); setActiveSource('scenario'); }}>Attack Demos</button>
+              <button className={activeSource === 'scenario' ? 'active' : ''} onClick={() => { stopLiveAudio(); setActiveSource('scenario'); }}>Attack Vectors</button>
             </div>
           </div>
 
-          {/* Canvas Waveform */}
-          <div className="waveform-container">
-            <canvas ref={canvasRef} width="600" height="140" className="waveform-canvas" />
+          {/* Visualizer Mode Switcher */}
+          <div className="visualizer-controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <div className="visualizer-mode-tabs">
+              <button 
+                className={`vis-mode-btn ${visualizerMode === 'spectrogram' ? 'active' : ''}`}
+                onClick={() => setVisualizerMode('spectrogram')}
+              >
+                📊 Mel Spectrogram (0-8kHz)
+              </button>
+              <button 
+                className={`vis-mode-btn ${visualizerMode === 'waveform' ? 'active' : ''}`}
+                onClick={() => setVisualizerMode('waveform')}
+              >
+                〰 Oscilloscope Waveform
+              </button>
+            </div>
+            <span style={{ fontSize: '0.68rem', color: 'var(--vs-faint)' }}>
+              {visualizerMode === 'spectrogram' ? 'Thermal FFT Vocoder Analysis' : '16kHz PCM Time Domain'}
+            </span>
+          </div>
+
+          {/* Canvas Waveform / Spectrogram */}
+          <div className="waveform-container" style={{ position: 'relative' }}>
+            <canvas ref={canvasRef} width="600" height="150" className="waveform-canvas" />
+
+            {/* Spectrogram overlay details */}
+            {visualizerMode === 'spectrogram' && isMonitoring && (
+              <div className="spectrogram-overlay-legend">
+                <span>FFT: 512</span> • <span>ANOMALY THRESHOLD: 3.8kHz</span>
+              </div>
+            )}
+
             {!isMonitoring && activeSource === 'mic' && (
               <div className="waveform-overlay">
                 <span>Microphone Standby</span>
@@ -354,15 +488,15 @@ export default function GuardianHUD({ onIncidentRecorded }) {
             </div>
           )}
 
-          {/* Quick Demo Attack Scenarios */}
+          {/* Quick Attack Threat Vectors */}
           {activeSource === 'scenario' && (
             <div className="demo-scenarios-bar">
-              <span>Select SIH Demo Vector:</span>
+              <span>Simulate Attack Threat Vectors:</span>
               <div className="scenario-buttons">
                 <button onClick={() => runDemoScenario('digital_arrest')}>🚨 CBI Digital Arrest</button>
-                <button onClick={() => runDemoScenario('clone_otp_telugu')}>⚡ Telugu Clone + OTP</button>
-                <button onClick={() => runDemoScenario('hindi_fake_kyc')}>📱 Hindi Fake KYC</button>
-                <button onClick={() => runDemoScenario('benign_safety')}>🛡️ Benign Safety Advice</button>
+                <button onClick={() => runDemoScenario('clone_otp_telugu')}>⚡ Targeted Clone + OTP</button>
+                <button onClick={() => runDemoScenario('hindi_fake_kyc')}>📱 Fake KYC Remote App</button>
+                <button onClick={() => runDemoScenario('benign_safety')}>🛡️ Negation Guard Check</button>
               </div>
             </div>
           )}
@@ -474,6 +608,19 @@ export default function GuardianHUD({ onIncidentRecorded }) {
           )}
         </div>
       </div>
+
+      {/* ─── Tactical Modals ───────────────────────────────────────── */}
+      <DuressProtocolModal
+        isOpen={isDuressOpen}
+        onClose={() => setIsDuressOpen(false)}
+        currentIncident={lastIncidentDossier}
+      />
+
+      <Section65BCertificateModal
+        isOpen={isCertOpen}
+        onClose={() => setIsCertOpen(false)}
+        incident={lastIncidentDossier}
+      />
     </div>
   );
 }

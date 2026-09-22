@@ -1,6 +1,6 @@
 /**
  * VoiceShield Guardian Offline — Multilayer Risk Fusion Engine
- * Smart India Hackathon SIH26104 Subsystem
+ * Autonomous Sovereign Edge Fusion Engine
  *
  * Transparently fuses on-device synthetic speech estimates, multilingual
  * fraud intent indicators, acoustic uncertainty, and biometric comparison

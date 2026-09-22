@@ -1,6 +1,6 @@
 /**
  * VoiceShield Guardian Offline — Edge AI Audio Deepfake Detector
- * Smart India Hackathon SIH26104 Subsystem
+ * Autonomous Sovereign Edge Deepfake Detector
  *
  * Runs 100% inside the client browser without any external network request.
  * Decodes audio via Web Audio API, extracts spectral biomarkers, and computes
