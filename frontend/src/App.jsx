@@ -19,6 +19,7 @@ import AuditVaultPage from './pages/AuditVaultPage';
 import AboutPage from './pages/AboutPage';
 import ApiKeyPortalPage from './pages/ApiKeyPortalPage';
 import AuthPage from './pages/AuthPage';
+import GuardianOfflinePage from './pages/GuardianOfflinePage';
 import ReportVerificationPage from './pages/ReportVerificationPage';
 
 import { generateCyberCrimePdfReport } from './services/pdfReportGenerator';
@@ -260,6 +261,10 @@ function App() {
                         <ScannerPage onExportReport={handleExportReport} />
                       </ProtectedRoute>
                     }
+                  />
+                  <Route
+                    path="/guardian-offline"
+                    element={<GuardianOfflinePage />}
                   />
                   <Route
                     path="/live"

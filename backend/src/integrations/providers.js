@@ -64,7 +64,38 @@ const speakerProvider = config.mlService.primarySpeakerProvider === 'fingerprint
   }
 };
 
-providerRegistry.register('deepfake', realityDefenderAdapter);
+import { offlineDeepfakeProvider } from '../services/offlineDeepfakeService.js';
+
+const hybridDeepfakeProvider = {
+  getProviderName: () => 'hybrid_deepfake_engine',
+  async analyze(filePath) {
+    if (config.realityDefenderApiKey) {
+      try {
+        const cloudResult = await realityDefenderAdapter.analyze(filePath);
+        if (cloudResult.available) return cloudResult;
+      } catch {
+        // Fall back to offline edge engine
+      }
+    }
+    const offlineResult = await offlineDeepfakeProvider.analyze(filePath);
+    return {
+      ...offlineResult,
+      provider: 'offline_deepfake_engine',
+      fallback_active: true
+    };
+  },
+  async checkHealth() {
+    const cloudHealth = await realityDefenderAdapter.checkHealth();
+    const offlineHealth = await offlineDeepfakeProvider.checkHealth();
+    return {
+      available: true,
+      cloud: cloudHealth,
+      offline: offlineHealth
+    };
+  }
+};
+
+providerRegistry.register('deepfake', hybridDeepfakeProvider);
 providerRegistry.register('transcription', transcriptionProvider);
 providerRegistry.register('context', contextProvider);
 providerRegistry.register('speaker', speakerProvider);

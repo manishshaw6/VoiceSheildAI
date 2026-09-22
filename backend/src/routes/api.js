@@ -73,11 +73,15 @@ import {
 
 import { requireAuth } from '../middleware/authMiddleware.js';
 import apiKeyRoutes from './apiKeyRoutes.js';
+import offlineRoutes from './offlineRoutes.js';
 
 const router = Router();
 
 // API Key Management & Developer Layer
 router.use('/api-keys', apiKeyRoutes);
+
+// VoiceShield Guardian Offline Edge Subsystem
+router.use('/offline', offlineRoutes);
 
 // =====================================================
 // Authentication Routes
