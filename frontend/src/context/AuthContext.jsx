@@ -175,8 +175,16 @@ export function AuthProvider({ children }) {
 
   const login = async (
     emailOrUsername,
-    password
+    passwordArg
   ) => {
+    let identity = emailOrUsername;
+    let password = passwordArg;
+
+    if (typeof emailOrUsername === 'object' && emailOrUsername !== null) {
+      identity = emailOrUsername.login || emailOrUsername.email || emailOrUsername.username || '';
+      password = emailOrUsername.password || passwordArg || '';
+    }
+
     const res = await fetch(
       '/api/v1/auth/login',
       {
@@ -186,9 +194,9 @@ export function AuthProvider({ children }) {
         },
         credentials: 'include',
         body: JSON.stringify({
-          login: emailOrUsername,
-          email: emailOrUsername,
-          username: emailOrUsername,
+          login: identity,
+          email: identity,
+          username: identity,
           password
         })
       }
@@ -234,15 +242,34 @@ export function AuthProvider({ children }) {
   // Signup
   // =====================================================
 
-  const signup = async ({
-    name,
-    fullName,
-    email,
-    password,
-    confirmPassword
-  }) => {
-    const finalName =
-      name || fullName || '';
+  const signup = async (
+    dataOrName,
+    emailArg,
+    passArg,
+    confirmArg
+  ) => {
+    let payload = {};
+
+    if (typeof dataOrName === 'object' && dataOrName !== null) {
+      const finalName = dataOrName.name || dataOrName.fullName || dataOrName.full_name || '';
+      payload = {
+        name: finalName,
+        fullName: finalName,
+        full_name: finalName,
+        email: dataOrName.email,
+        password: dataOrName.password,
+        confirmPassword: dataOrName.confirmPassword
+      };
+    } else {
+      payload = {
+        name: dataOrName,
+        fullName: dataOrName,
+        full_name: dataOrName,
+        email: emailArg,
+        password: passArg,
+        confirmPassword: confirmArg
+      };
+    }
 
     const res = await fetch(
       '/api/v1/auth/signup',
@@ -252,14 +279,7 @@ export function AuthProvider({ children }) {
           'Content-Type': 'application/json'
         },
         credentials: 'include',
-        body: JSON.stringify({
-          name: finalName,
-          fullName: finalName,
-          full_name: finalName,
-          email,
-          password,
-          confirmPassword
-        })
+        body: JSON.stringify(payload)
       }
     );
 

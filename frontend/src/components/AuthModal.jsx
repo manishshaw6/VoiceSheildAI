@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function AuthModal() {
-  const { authModalOpen, authModalTab, closeAuthModal, login, signup } = useAuth();
+  const { authModalOpen, authModalTab, closeAuthModal, login, signup, demoLogin } = useAuth();
   const [activeTab, setActiveTab] = useState(authModalTab || 'signin');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -38,9 +38,13 @@ export default function AuthModal() {
       setError(null);
       // Auto-delegate demo investigator email to demoLogin for convenience
       if (signInEmail.trim().toLowerCase().includes('demo.investigator') || signInEmail.trim().toLowerCase().includes('investigator.demo')) {
-        await demoLogin();
+        if (typeof demoLogin === 'function') {
+          await demoLogin();
+        } else {
+          await login(signInEmail, signInPassword);
+        }
       } else {
-        await login({ email: signInEmail, password: signInPassword });
+        await login(signInEmail, signInPassword);
       }
     } catch (err) {
       const msg = typeof err === 'string' ? err : err?.message;

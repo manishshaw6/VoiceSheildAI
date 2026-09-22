@@ -37,7 +37,9 @@ import {
 
 import {
   getMe,
+  getProfile,
   signup,
+  register,
   login,
   demoLoginEndpoint,
   saveMailPasswordEndpoint,
@@ -82,9 +84,10 @@ router.use('/api-keys', apiKeyRoutes);
 // =====================================================
 
 router.get('/auth/me', requireAuth, getMe);
+router.get('/auth/profile', requireAuth, getProfile);
 
 router.post('/auth/signup', signup);
-router.post('/auth/register', signup);
+router.post('/auth/register', register);
 
 router.post('/auth/login', login);
 
