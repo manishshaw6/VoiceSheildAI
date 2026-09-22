@@ -246,6 +246,8 @@ export async function register(req, res, next) {
   }
 }
 
+export const signup = register;
+
 /**
  * Login user.
  *

@@ -1,4 +1,3 @@
-```js
 /**
  * VoxShield AI — Authentication Middleware
  * Supports both:
@@ -130,4 +129,3 @@ export function requireAuth(req, res, next) {
 export function optionalAuth(req, res, next) {
   return attachUser(req, res, next);
 }
-```
