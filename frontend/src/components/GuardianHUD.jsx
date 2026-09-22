@@ -15,7 +15,7 @@ export default function GuardianHUD({ onIncidentRecorded }) {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Tactical Modals
+  // Modals
   const [isDuressOpen, setIsDuressOpen] = useState(false);
   const [isCertOpen, setIsCertOpen] = useState(false);
   const [lastIncidentDossier, setLastIncidentDossier] = useState(null);
@@ -95,29 +95,29 @@ export default function GuardianHUD({ onIncidentRecorded }) {
       animationFrameRef.current = requestAnimationFrame(render);
 
       if (visualizerMode === 'waveform') {
-        // Mode A: Oscilloscope Waveform
+        // Mode A: Smooth Waveform
         analyser.getByteTimeDomainData(timeData);
-        ctx.fillStyle = '#030806';
+        ctx.fillStyle = '#060a08';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Cyber Grid Lines
-        ctx.strokeStyle = 'rgba(32, 173, 127, 0.08)';
+        // Subtle Grid lines
+        ctx.strokeStyle = 'rgba(0, 229, 163, 0.08)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        for (let y = 20; y < canvas.height; y += 30) {
+        for (let y = 34; y < canvas.height; y += 34) {
           ctx.moveTo(0, y);
           ctx.lineTo(canvas.width, y);
         }
-        for (let x = 30; x < canvas.width; x += 60) {
+        for (let x = 60; x < canvas.width; x += 60) {
           ctx.moveTo(x, 0);
           ctx.lineTo(x, canvas.height);
         }
         ctx.stroke();
 
-        ctx.lineWidth = 2.5;
-        ctx.strokeStyle = '#00f0ff';
-        ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 10;
+        ctx.lineWidth = 2.2;
+        ctx.strokeStyle = '#00e5a3';
+        ctx.shadowColor = 'rgba(0, 229, 163, 0.45)';
+        ctx.shadowBlur = 8;
         ctx.beginPath();
 
         const sliceWidth = canvas.width / timeData.length;
@@ -135,54 +135,46 @@ export default function GuardianHUD({ onIncidentRecorded }) {
         ctx.stroke();
         ctx.shadowBlur = 0;
       } else {
-        // Mode B: Real-Time 2D Forensic Mel-Scale Spectrogram (0 - 8000 Hz)
+        // Mode B: Mel-Scale Spectrogram
         analyser.getByteFrequencyData(freqData);
 
-        ctx.fillStyle = '#030706';
+        ctx.fillStyle = '#060a08';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        const binCount = 80;
+        const binCount = 72;
         const barWidth = canvas.width / binCount;
 
-        // Draw frequency columns
         for (let i = 0; i < binCount; i++) {
           const val = freqData[i] || 0;
-          const barHeight = (val / 255) * (canvas.height - 20);
+          const barHeight = (val / 255) * (canvas.height - 18);
           const x = i * barWidth;
           const y = canvas.height - barHeight;
 
-          // Multi-stage forensic thermal gradient
           const grad = ctx.createLinearGradient(0, canvas.height, 0, 0);
-          grad.addColorStop(0, '#022c22');
-          grad.addColorStop(0.3, '#00f0ff');
-          grad.addColorStop(0.65, '#10b981');
-          grad.addColorStop(0.85, '#f59e0b');
+          grad.addColorStop(0, '#042f24');
+          grad.addColorStop(0.35, '#0d9488');
+          grad.addColorStop(0.7, '#00e5a3');
+          grad.addColorStop(0.88, '#f59e0b');
           grad.addColorStop(1, '#ef4444');
 
           ctx.fillStyle = grad;
-          ctx.fillRect(x, y, barWidth - 1, barHeight);
-
-          // Top peak glowing cap
-          if (val > 40) {
-            ctx.fillStyle = '#effbf3';
-            ctx.fillRect(x, y - 2, barWidth - 1, 2);
-          }
+          ctx.fillRect(x, y, barWidth - 1.5, barHeight);
         }
 
-        // Neural Vocoder Cutoff Anomaly Threshold Line (3.8 kHz boundary)
+        // Cutoff threshold guideline at 3.8 kHz
         const cutoffX = Math.round((3800 / 8000) * canvas.width);
         ctx.save();
-        ctx.strokeStyle = '#f59e0b';
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.6)';
         ctx.setLineDash([4, 4]);
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(cutoffX, 0);
         ctx.lineTo(cutoffX, canvas.height);
         ctx.stroke();
 
         ctx.fillStyle = '#f59e0b';
-        ctx.font = '10px monospace';
-        ctx.fillText('ANOMALY BOUNDARY [3.8 kHz]', cutoffX + 6, 16);
+        ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        ctx.fillText('Nyquist Cutoff (3.8 kHz)', cutoffX + 6, 16);
         ctx.restore();
       }
     };
@@ -190,13 +182,72 @@ export default function GuardianHUD({ onIncidentRecorded }) {
     render();
   };
 
-  // Switch visualizer mode without stopping audio
+  // Ambient Idle Waveform (Siri / Linear style) when not actively monitoring
+  const drawIdleCanvas = () => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let phase = 0;
+
+    const renderIdle = () => {
+      if (isMonitoring) return;
+      animationFrameRef.current = requestAnimationFrame(renderIdle);
+      phase += 0.025;
+
+      ctx.fillStyle = '#060a08';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Subtle Grid lines
+      ctx.strokeStyle = 'rgba(0, 229, 163, 0.05)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let y = 34; y < canvas.height; y += 34) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+      }
+      for (let x = 60; x < canvas.width; x += 60) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+      }
+      ctx.stroke();
+
+      // Ambient multi-layer sine waves
+      const layers = [
+        { color: 'rgba(0, 229, 163, 0.45)', amp: 14, freq: 0.012, speed: 1.0, width: 2 },
+        { color: 'rgba(20, 184, 166, 0.25)', amp: 18, freq: 0.009, speed: -0.6, width: 1.5 },
+        { color: 'rgba(56, 189, 248, 0.2)', amp: 10, freq: 0.018, speed: 1.2, width: 1.2 }
+      ];
+
+      layers.forEach(layer => {
+        ctx.strokeStyle = layer.color;
+        ctx.lineWidth = layer.width;
+        ctx.beginPath();
+        for (let x = 0; x < canvas.width; x++) {
+          const envelope = Math.sin((x / canvas.width) * Math.PI);
+          const y = (canvas.height / 2) + Math.sin(x * layer.freq + phase * layer.speed) * layer.amp * envelope;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      });
+    };
+
+    renderIdle();
+  };
+
+  useEffect(() => {
+    if (!isMonitoring) {
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      drawIdleCanvas();
+    }
+  }, [isMonitoring, activeSource]);
+
   useEffect(() => {
     if (isMonitoring && analyserRef.current && canvasRef.current) {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       drawCanvas();
     }
-  }, [visualizerMode]);
+  }, [visualizerMode, isMonitoring]);
 
   // Start Live Mic Stream
   const startLiveMic = async () => {
@@ -228,7 +279,6 @@ export default function GuardianHUD({ onIncidentRecorded }) {
 
       drawCanvas();
 
-      // Record chunks for sliding-window edge analysis
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorderRef.current = recorder;
 
@@ -307,14 +357,12 @@ export default function GuardianHUD({ onIncidentRecorded }) {
     }
   };
 
-  // Handle File Upload Drop
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     runLocalAnalysisOnBlob(file);
   };
 
-  // Pre-configured Test Attack Vectors
   const runDemoScenario = (type) => {
     stopLiveAudio();
     setAlertDismissed(false);
@@ -355,45 +403,54 @@ export default function GuardianHUD({ onIncidentRecorded }) {
   };
 
   return (
-    <div className="guardian-hud-shell">
-      {/* ─── Top Telemetry Ribbon ────────────────────────────────────── */}
-      <div className="guardian-telemetry-ribbon">
-        <div className="guardian-badge-cluster">
-          <div className="hud-status-badge">
-            <span
-              className="status-dot"
-              style={{ background: isOnline ? '#10b981' : '#00f0ff' }}
-            />
-            <strong>{isOnline ? 'NETWORK ONLINE // AUTO-SYNC ENABLED' : 'AIR-GAPPED DEFENSE // ZERO NETWORK DEPENDENCY'}</strong>
+    <div className="guardian-card-pro">
+      {/* ─── Top Telemetry Status Bar ───────────────────────────────── */}
+      <div className="telemetry-bar-pro">
+        <div className="telemetry-status-group">
+          <div className="connection-indicator">
+            <span className={`status-dot ${isOnline ? 'online' : 'local'}`} />
+            <span className="connection-title">
+              {isOnline ? 'Cloud Threat Network Connected' : 'Air-Gapped Local Protection'}
+            </span>
           </div>
-          <span className="ribbon-subtag">AES-256 VAULT</span>
-          <span className="ribbon-subtag">16kHz PCM</span>
+          <span className="defense-status-pill">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Active
+          </span>
         </div>
 
-        {/* Tactical Actions (Duress & 65B) */}
-        <div className="hud-action-strip">
+        <div className="telemetry-actions-group">
           <button 
-            className="duress-btn-hud"
+            className="action-btn secondary"
             onClick={() => setIsDuressOpen(true)}
-            title="Engage emergency cognitive challenge & acoustic countermeasures"
           >
-            DURESS INTERLOCK
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            Emergency Response
           </button>
 
           {lastIncidentDossier && (
             <button 
-              className="cert-btn-hud"
+              className="action-btn primary"
               onClick={() => setIsCertOpen(true)}
-              title="Generate court-admissible electronic evidence certificate"
             >
-              EVIDENCE 65B
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+                <polyline points="10 9 9 9 8 9" />
+              </svg>
+              View Forensic Certificate
             </button>
           )}
 
           {fusedRisk && (
-            <div className={`threat-indicator-pill ${fusedRisk.riskLevel.toLowerCase()}`}>
-              <span className="pill-pulse" />
-              <span>THREAT LEVEL: <strong>{fusedRisk.riskLevel} ({fusedRisk.finalScore}%)</strong></span>
+            <div className={`risk-status-pill ${fusedRisk.riskLevel.toLowerCase()}`}>
+              Threat Level: <strong>{fusedRisk.riskLevel} ({fusedRisk.finalScore}/100)</strong>
             </div>
           )}
         </div>
@@ -401,130 +458,213 @@ export default function GuardianHUD({ onIncidentRecorded }) {
 
       {/* ─── Imminent Attack Warning Banner ─────────────────────────── */}
       {fusedRisk && (fusedRisk.riskLevel === 'CRITICAL' || fusedRisk.riskLevel === 'HIGH') && !alertDismissed && (
-        <div className={`guardian-alert-banner ${fusedRisk.riskLevel.toLowerCase()}`}>
-          <div className="alert-banner-content">
-            <div className="alert-tag">ALERT</div>
-            <div className="alert-text">
-              <h4>{fusedRisk.isCloneAttack ? 'CRITICAL // TARGETED VOICE CLONE IMPERSONATION' : 'HIGH RISK // COERCION & EXTORTION THREAT'}</h4>
-              <p>{fusedRisk.recommendedAction}</p>
+        <div className="critical-alert-card">
+          <div className="alert-content">
+            <div className="alert-headline-row">
+              <div className="alert-title-wrap">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <h4>{fusedRisk.isCloneAttack ? 'Synthetic Voice Impersonation Detected' : 'High Probability Conversational Coercion'}</h4>
+              </div>
+              <button className="close-alert-btn" onClick={() => setAlertDismissed(true)} title="Dismiss alert">✕</button>
             </div>
-            <button className="dismiss-alert-btn" onClick={() => setAlertDismissed(true)}>✕</button>
+            <p>{fusedRisk.recommendedAction}</p>
           </div>
-          <div className="alert-banner-actions">
-            <button className="duress-btn-hud" onClick={() => setIsDuressOpen(true)}>
-              ACTIVATE DURESS CHALLENGE
+          <div className="alert-footer-actions">
+            <button className="btn-alert-primary" onClick={() => setIsDuressOpen(true)}>
+              Launch Emergency Protocol
             </button>
-            <button className="emergency-hangup-btn" onClick={stopLiveAudio}>
-              TERMINATE CALL STREAM
+            <button className="btn-alert-secondary" onClick={stopLiveAudio}>
+              Disconnect Audio Stream
             </button>
-            <div className="helpline-hint">
-              <span>CYBERCRIME HOTLINE: </span>
-              <strong>DIAL 1930</strong>
-            </div>
+            <span className="helpline-note">Cyber Helpline: <strong>1930</strong></span>
           </div>
         </div>
       )}
 
-      {/* ─── Main Grid: Visualizer & Meters ──────────────────────────── */}
-      <div className="guardian-grid-layout">
-        {/* Left: Waveform & Source Controls */}
-        <div className="guardian-visualizer-card">
-          <div className="card-top-row">
-            <h4>Real-Time Audio Spectrum Analyzer</h4>
-            <div className="source-tabs">
-              <button className={activeSource === 'mic' ? 'active' : ''} onClick={() => { stopLiveAudio(); setActiveSource('mic'); }}>MICROPHONE ARRAY</button>
-              <button className={activeSource === 'file' ? 'active' : ''} onClick={() => { stopLiveAudio(); setActiveSource('file'); }}>FILE ASSET</button>
-              <button className={activeSource === 'scenario' ? 'active' : ''} onClick={() => { stopLiveAudio(); setActiveSource('scenario'); }}>ATTACK VECTORS</button>
+      {/* ─── Main Two-Column Layout ──────────────────────────────────── */}
+      <div className="guardian-two-col-layout">
+        {/* Left: Visualizer & Stream Controls */}
+        <div className="visualizer-panel">
+          <div className="panel-header-row">
+            <div>
+              <h3>Forensic Audio Stream</h3>
+              <p className="panel-subtitle">Live edge signal capture and acoustic biomarker extraction</p>
+            </div>
+            <div className="tab-pill-group">
+              <button className={activeSource === 'mic' ? 'active' : ''} onClick={() => { stopLiveAudio(); setActiveSource('mic'); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+                Microphone
+              </button>
+              <button className={activeSource === 'file' ? 'active' : ''} onClick={() => { stopLiveAudio(); setActiveSource('file'); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                Upload Audio
+              </button>
+              <button className={activeSource === 'scenario' ? 'active' : ''} onClick={() => { stopLiveAudio(); setActiveSource('scenario'); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                Test Scenarios
+              </button>
             </div>
           </div>
 
-          {/* Visualizer Mode Switcher */}
-          <div className="visualizer-controls-row">
-            <div className="visualizer-mode-tabs">
+          {/* Visualizer Mode Bar */}
+          <div className="visualizer-mode-bar">
+            <div className="sub-tab-group">
               <button 
-                className={`vis-mode-btn ${visualizerMode === 'spectrogram' ? 'active' : ''}`}
+                className={`sub-tab ${visualizerMode === 'spectrogram' ? 'active' : ''}`}
                 onClick={() => setVisualizerMode('spectrogram')}
               >
-                MEL-SPECTROGRAM [0–8 kHz]
+                Mel Spectrogram
               </button>
               <button 
-                className={`vis-mode-btn ${visualizerMode === 'waveform' ? 'active' : ''}`}
+                className={`sub-tab ${visualizerMode === 'waveform' ? 'active' : ''}`}
                 onClick={() => setVisualizerMode('waveform')}
               >
-                OSCILLOSCOPE [TIME DOMAIN]
+                Oscilloscope Waveform
               </button>
             </div>
-            <span className="vis-meta-tag">
-              {visualizerMode === 'spectrogram' ? 'FFT: 512 | THERMAL HEATMAP' : '16,000 HZ PCM RESAMPLED'}
+            <span className="mode-caption">
+              {visualizerMode === 'spectrogram' ? 'Mel-Frequency FFT Filterbank (0–8 kHz)' : 'Real-time Time Domain Waveform'}
             </span>
           </div>
 
           {/* Canvas Waveform / Spectrogram */}
-          <div className="waveform-container">
-            <canvas ref={canvasRef} width="600" height="150" className="waveform-canvas" />
-
-            {/* Spectrogram overlay details */}
-            {visualizerMode === 'spectrogram' && isMonitoring && (
-              <div className="spectrogram-overlay-legend">
-                <span>FFT BINS: 512</span> • <span>CUTOFF THRESHOLD: 3.8 kHz</span>
-              </div>
-            )}
+          <div className="visualizer-screen">
+            <canvas ref={canvasRef} width="640" height="170" className="canvas-element" />
 
             {!isMonitoring && activeSource === 'mic' && (
-              <div className="waveform-overlay">
-                <span>MICROPHONE ARRAY STANDBY</span>
-                <button className="start-stream-btn" onClick={startLiveMic}>ENGAGE LIVE MONITORING</button>
+              <div className="canvas-standby-overlay">
+                <div className="standby-icon-ring">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                  </svg>
+                </div>
+                <div className="standby-text-block">
+                  <strong>Microphone Input Ready</strong>
+                  <span>Monitor live audio for synthetic speech artifacts and social engineering coercion</span>
+                </div>
+                <button className="start-monitor-btn" onClick={startLiveMic}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="5 3 19 12 5 21 5 3" />
+                  </svg>
+                  Start Live Audio Monitor
+                </button>
               </div>
             )}
+
             {isMonitoring && (
-              <div className="waveform-recording-indicator">
-                <span className="rec-dot" /> LIVE INFERENCE (16kHz PCM EDGE)
-                <button className="stop-mic-btn" onClick={stopLiveAudio}>DISENGAGE</button>
+              <div className="live-indicator-overlay">
+                <div className="live-pill">
+                  <span className="pulse-dot" />
+                  <span>LIVE 16kHz STREAM ACTIVE</span>
+                </div>
+                <button className="stop-monitor-btn" onClick={stopLiveAudio}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="6" y="6" width="12" height="12" rx="2" />
+                  </svg>
+                  Stop Stream
+                </button>
               </div>
             )}
           </div>
 
           {/* File Upload Zone */}
           {activeSource === 'file' && (
-            <div className="file-drop-zone">
-              <label htmlFor="offline-audio-file" className="file-label">
-                <span>SELECT OR DROP FORENSIC AUDIO ASSET (WAV, MP3, M4A, OGG)</span>
-                <input id="offline-audio-file" type="file" accept="audio/*" onChange={handleFileUpload} />
+            <div className="upload-drop-card">
+              <input id="offline-audio-file" type="file" accept="audio/*" onChange={handleFileUpload} className="file-hidden-input" />
+              <label htmlFor="offline-audio-file" className="upload-drop-label">
+                <div className="upload-icon-circle">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                </div>
+                <span className="drop-title">Select or Drop Audio File for Offline Inspection</span>
+                <span className="drop-hint">Supports WAV, MP3, M4A, OGG, WEBM · Processed entirely on-device</span>
               </label>
             </div>
           )}
 
-          {/* Quick Attack Threat Vectors */}
+          {/* Test Scenarios */}
           {activeSource === 'scenario' && (
-            <div className="demo-scenarios-bar">
-              <span className="scenario-label-bar">SIMULATE THREAT INJECTION:</span>
-              <div className="scenario-buttons">
-                <button onClick={() => runDemoScenario('digital_arrest')}>VECTOR 01: ARREST COERCION</button>
-                <button onClick={() => runDemoScenario('clone_otp_telugu')}>VECTOR 02: CLONE & OTP</button>
-                <button onClick={() => runDemoScenario('hindi_fake_kyc')}>VECTOR 03: REMOTE TAKEOVER</button>
-                <button onClick={() => runDemoScenario('benign_safety')}>VALIDATION: NEGATION FILTER</button>
+            <div className="scenarios-panel">
+              <span className="scenarios-heading">Interactive Attack & Verification Simulations:</span>
+              <div className="scenarios-grid">
+                <button className="scenario-card" onClick={() => runDemoScenario('digital_arrest')}>
+                  <div className="scenario-card-header">
+                    <span className="scenario-type-badge threat">Coercion Threat</span>
+                  </div>
+                  <strong>Police Digital Arrest</strong>
+                  <p>Simulated impersonation claiming active arrest warrant and demand for video settlement.</p>
+                </button>
+
+                <button className="scenario-card" onClick={() => runDemoScenario('clone_otp_telugu')}>
+                  <div className="scenario-card-header">
+                    <span className="scenario-type-badge clone">Voice Clone Attack</span>
+                  </div>
+                  <strong>Voice Clone & Emergency OTP</strong>
+                  <p>Cloned family distress scenario requesting immediate security OTP bypass.</p>
+                </button>
+
+                <button className="scenario-card" onClick={() => runDemoScenario('hindi_fake_kyc')}>
+                  <div className="scenario-card-header">
+                    <span className="scenario-type-badge fraud">Credential Scam</span>
+                  </div>
+                  <strong>Bank KYC Suspension Call</strong>
+                  <p>Urgent account deactivation threat soliciting payment credentials.</p>
+                </button>
+
+                <button className="scenario-card" onClick={() => runDemoScenario('benign_safety')}>
+                  <div className="scenario-card-header">
+                    <span className="scenario-type-badge safe">Benign Normal</span>
+                  </div>
+                  <strong>Legitimate Meeting Confirmation</strong>
+                  <p>Normal conversational speech without acoustic manipulation or pressure tactics.</p>
+                </button>
               </div>
             </div>
           )}
 
           {/* Spoken Transcript Input & Indicators */}
-          <div className="guardian-transcript-box">
-            <div className="transcript-box-header">
-              <label htmlFor="offline-transcript-input">Transcript Telemetry (Parsed for Extortion & Coercion Patterns):</label>
-              <span className="lang-support-tag">EN • HI • TE</span>
+          <div className="transcript-box-card">
+            <div className="transcript-header">
+              <label htmlFor="offline-transcript-input">Conversational Transcript Analysis</label>
+              <div className="transcript-header-meta">
+                <span className="badge-subtle">EN • HI • TE NLP</span>
+                <span className="transcript-counter">{transcriptText.length} chars</span>
+              </div>
             </div>
             <textarea
               id="offline-transcript-input"
               rows="3"
               value={transcriptText}
               onChange={(e) => setTranscriptText(e.target.value)}
-              placeholder="Live stream transcript text..."
+              placeholder="Spoken words detected during speech will stream here. You can also paste transcript text to evaluate fraud patterns offline..."
+              className="transcript-textarea"
             />
-            {fraudResult && fraudResult.indicators.length > 0 && (
-              <div className="detected-chips-row">
+            {fraudResult && fraudResult.indicators && fraudResult.indicators.length > 0 && (
+              <div className="fraud-chips-row">
                 {fraudResult.indicators.map((ind, i) => (
-                  <span key={i} className="threat-chip">
-                    {ind.label}: <em>"{ind.matchedText}"</em>
+                  <span key={i} className="fraud-chip">
+                    <strong>{ind.label}:</strong> <em>"{ind.matchedText}"</em>
                   </span>
                 ))}
               </div>
@@ -532,90 +672,118 @@ export default function GuardianHUD({ onIncidentRecorded }) {
           </div>
         </div>
 
-        {/* Right: Dual Meters & Biometric Check */}
-        <div className="guardian-metrics-card">
-          <h4>Edge Telemetrics Breakdown</h4>
+        {/* Right: Metrics & Telemetry Card */}
+        <div className="telemetry-panel">
+          <div className="panel-header-row">
+            <div>
+              <h3>Forensic Telemetry</h3>
+              <p className="panel-subtitle">Multi-signal acoustic & semantic indicators</p>
+            </div>
+          </div>
 
-          {/* Dual Sub-Meters */}
-          <div className="dual-meters-row">
-            {/* Synthetic Voice Meter */}
-            <div className="meter-card">
-              <span className="meter-label">VOICE AUTHENTICITY RISK</span>
-              <div className="meter-value-large">
-                {deepfakeResult ? `${deepfakeResult.score}%` : '0%'}
+          {/* Dual Score Cards */}
+          <div className="metrics-cards-grid">
+            <div className="metric-box">
+              <div className="metric-header-row">
+                <span className="metric-caption">Synthetic Voice Likelihood</span>
+                <span className={`metric-badge ${deepfakeResult?.classification?.toLowerCase() || 'idle'}`}>
+                  {deepfakeResult ? deepfakeResult.classification : 'Idle'}
+                </span>
               </div>
-              <div className="meter-bar-track">
+              <div className="metric-number-row">
+                <span className="metric-number">
+                  {deepfakeResult ? `${deepfakeResult.score}%` : '0%'}
+                </span>
+                <span className="metric-unit">cloned speech prob</span>
+              </div>
+              <div className="meter-track">
                 <div
-                  className="meter-bar-fill fake"
+                  className="meter-fill synthetic"
                   style={{ width: `${deepfakeResult ? deepfakeResult.score : 0}%` }}
                 />
               </div>
-              <span className="meter-status">
-                {deepfakeResult ? deepfakeResult.classification : 'IDLE'}
-              </span>
             </div>
 
-            {/* Scam Intent Meter */}
-            <div className="meter-card">
-              <span className="meter-label">CONVERSATIONAL FRAUD INTENT</span>
-              <div className="meter-value-large">
-                {fraudResult ? `${fraudResult.scamScore}%` : '0%'}
+            <div className="metric-box">
+              <div className="metric-header-row">
+                <span className="metric-caption">Social Engineering Intent</span>
+                <span className={`metric-badge ${fraudResult?.scamLevel?.toLowerCase() || 'idle'}`}>
+                  {fraudResult ? fraudResult.scamLevel : 'Idle'}
+                </span>
               </div>
-              <div className="meter-bar-track">
+              <div className="metric-number-row">
+                <span className="metric-number">
+                  {fraudResult ? `${fraudResult.scamScore}%` : '0%'}
+                </span>
+                <span className="metric-unit">coercion index</span>
+              </div>
+              <div className="meter-track">
                 <div
-                  className="meter-bar-fill scam"
+                  className="meter-fill scam"
                   style={{ width: `${fraudResult ? fraudResult.scamScore : 0}%` }}
                 />
               </div>
-              <span className="meter-status">
-                {fraudResult ? fraudResult.scamLevel : 'IDLE'}
-              </span>
             </div>
           </div>
 
           {/* Biometric Comparison Dropdown */}
-          <div className="biometric-match-box">
-            <div className="match-box-header">
-              <span>Biometric Verification Profile:</span>
-              <select
-                value={selectedContactId}
-                onChange={(e) => setSelectedContactId(e.target.value)}
-              >
-                <option value="">No reference profile selected</option>
-                {enrolledContacts.map(c => (
-                  <option key={c.id} value={c.id}>{c.displayName}</option>
-                ))}
-              </select>
+          <div className="biometric-card">
+            <div className="biometric-card-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              <span>Speaker Profile Verification</span>
             </div>
+            <select
+              value={selectedContactId}
+              onChange={(e) => setSelectedContactId(e.target.value)}
+              className="biometric-select"
+            >
+              <option value="">-- No reference profile selected --</option>
+              {enrolledContacts.map(c => (
+                <option key={c.id} value={c.id}>{c.displayName} (Enrolled Profile)</option>
+              ))}
+            </select>
             {biometricResult && (
-              <div className="biometric-result-pill">
-                <span>Profile: {biometricResult.displayName}</span>
-                <strong>SIMILARITY: {Math.round(biometricResult.similarity * 100)}% ({biometricResult.confidence} CONFIDENCE)</strong>
+              <div className={`biometric-match-pill ${biometricResult.isMatch ? 'match' : 'mismatch'}`}>
+                <div className="match-status-row">
+                  <span>Match with {biometricResult.displayName}:</span>
+                  <strong>{Math.round(biometricResult.similarity * 100)}%</strong>
+                </div>
+                <span className="confidence-text">{biometricResult.isMatch ? 'Acoustic signatures match enrolled contact' : 'Acoustic mismatch — possible impersonator'} ({biometricResult.confidence} confidence)</span>
               </div>
             )}
           </div>
 
-          {/* Explanations & Artifacts */}
+          {/* Acoustic Forensic Specs */}
           {deepfakeResult && deepfakeResult.features && (
-            <div className="acoustic-telemetry-tags">
-              <div className="telemetry-stat">
-                <span>ROLLOFF:</span> <strong>{deepfakeResult.features.spectralRolloffHz} Hz</strong>
-              </div>
-              <div className="telemetry-stat">
-                <span>FLUX:</span> <strong>{deepfakeResult.features.spectralFlux}</strong>
-              </div>
-              <div className="telemetry-stat">
-                <span>ZCR VAR:</span> <strong>{deepfakeResult.features.zcrVariance}</strong>
-              </div>
-              <div className="telemetry-stat">
-                <span>LATENCY:</span> <strong>{deepfakeResult.latencyMs} ms</strong>
+            <div className="forensic-specs-card">
+              <h4>Acoustic Feature Extraction</h4>
+              <div className="specs-grid">
+                <div className="spec-item">
+                  <span className="spec-label">Spectral Rolloff</span>
+                  <span className="spec-val">{deepfakeResult.features.spectralRolloffHz} Hz</span>
+                </div>
+                <div className="spec-item">
+                  <span className="spec-label">Spectral Flux</span>
+                  <span className="spec-val">{deepfakeResult.features.spectralFlux}</span>
+                </div>
+                <div className="spec-item">
+                  <span className="spec-label">ZCR Variance</span>
+                  <span className="spec-val">{deepfakeResult.features.zcrVariance}</span>
+                </div>
+                <div className="spec-item">
+                  <span className="spec-label">Edge Latency</span>
+                  <span className="spec-val">{deepfakeResult.latencyMs} ms</span>
+                </div>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* ─── Tactical Modals ───────────────────────────────────────── */}
+      {/* ─── Modals ─────────────────────────────────────────────────── */}
       <DuressProtocolModal
         isOpen={isDuressOpen}
         onClose={() => setIsDuressOpen(false)}

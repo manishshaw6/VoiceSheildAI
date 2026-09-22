@@ -1,25 +1,25 @@
 import React, { useState } from 'react';
 
-const COGNITIVE_CHALLENGES = [
+const VERIFICATION_QUESTIONS = [
   {
-    title: 'Secret Verification Safe-Word',
-    prompt: "Ask caller: 'What is our family secret safe-word, or what town did we travel to together in 2022?'",
-    rationale: 'Voice cloning attackers lack private familial contextual memories.'
+    title: 'Personal Context Question',
+    prompt: "Ask caller: 'What is our family secret safe-word, or where did we travel together last year?'",
+    rationale: 'Attackers using cloned voices lack personal contextual knowledge.'
   },
   {
-    title: 'Reverse Cognitive Reflection',
-    prompt: "Ask caller: 'Spell the word SECURE backwards, or say the number 9482 in reverse order right now.'",
-    rationale: 'Pre-recorded soundboards and real-time TTS vocoders cannot formulate reversed cognitive answers on the fly without severe latency.'
+    title: 'Direct Cognition Check',
+    prompt: "Ask caller: 'Spell your name backwards right now, or say the number 9482 in reverse order.'",
+    rationale: 'Automated soundboards and live text-to-speech tools struggle with unscripted reverse cognitive questions.'
   },
   {
     title: 'Official Authority Verification',
-    prompt: "Ask caller: 'Provide your official employee code, your supervisor's landline number, and station diary entry number immediately.'",
-    rationale: 'Legitimate police, CBI, or bank officials never conduct "digital arrests" over Skype or WhatsApp and will never demand UPI fund transfers.'
+    prompt: "Ask caller: 'Provide your official employee ID, police station jurisdiction, and your direct office landline.'",
+    rationale: 'Government agencies and banks never demand urgent money transfers or conduct digital arrests over video/voice calls.'
   },
   {
-    title: 'Unscripted Acoustic Nuance Challenge',
-    prompt: "Ask caller: 'Please whistle or hum a three-note melody for two seconds right now.'",
-    rationale: 'Current commercial voice synthesis diffusion models fail completely when tasked with melodic whistling or non-speech vocal tract modulations.'
+    title: 'Acoustic Whistle or Melody Check',
+    prompt: "Ask caller: 'Can you whistle or hum three distinct musical notes for two seconds right now?'",
+    rationale: 'Real-time neural voice cloning vocoders typically break down on non-verbal audio like whistling.'
   }
 ];
 
@@ -58,109 +58,104 @@ export default function DuressProtocolModal({ isOpen, onClose, currentIncident }
   };
 
   const nextChallenge = () => {
-    setChallengeIndex((prev) => (prev + 1) % COGNITIVE_CHALLENGES.length);
+    setChallengeIndex((prev) => (prev + 1) % VERIFICATION_QUESTIONS.length);
   };
 
-  const currentChallenge = COGNITIVE_CHALLENGES[challengeIndex];
+  const currentChallenge = VERIFICATION_QUESTIONS[challengeIndex];
 
   return (
     <div className="guardian-modal-overlay">
-      <div className="guardian-modal-container duress-modal-container">
+      <div className="guardian-modal-container">
         {/* Header */}
-        <div className="duress-modal-header">
-          <div className="duress-title-group">
-            <span className="duress-badge">TACTICAL INTERLOCK ACTIVE</span>
-            <h3>COUNTER-SPOOF PROTOCOL</h3>
+        <div className="clean-modal-header">
+          <div>
+            <span className="clean-modal-badge danger">Security Action</span>
+            <h3>Emergency Threat Response</h3>
           </div>
-          <button className="duress-close-btn" onClick={onClose}>✕</button>
+          <button className="clean-modal-close" onClick={onClose}>✕</button>
         </div>
 
-        <p className="duress-intro">
-          High-confidence impersonation or digital arrest coercion identified. Engage tactical countermeasures below to neutralize the attack vector.
+        <p className="clean-modal-desc">
+          Potential voice clone impersonation or pressure fraud was detected. Use the guidance below to verify the caller's identity or disengage safely.
         </p>
 
-        {/* Countermeasure 1: Cognitive Challenge */}
-        <div className="duress-card">
-          <div className="duress-card-header">
-            <span className="card-step">01</span>
+        {/* Action 1: Verification Question */}
+        <div className="clean-action-card">
+          <div className="action-card-header">
+            <span className="step-num">1</span>
             <div>
-              <h4>Cognitive Anti-AI Voice Challenge</h4>
-              <p className="card-subtext">Dynamic cognitive prompts designed to expose synthetic vocoder latency and soundboard limitations.</p>
+              <h4>Identity Verification Prompt</h4>
+              <p>Read this question aloud to the caller:</p>
             </div>
           </div>
 
-          <div className="challenge-quote-box">
-            <div className="challenge-tag">{currentChallenge.title}</div>
-            <div className="challenge-prompt">"{currentChallenge.prompt}"</div>
-            <div className="challenge-rationale">
-              <strong>Forensic Impact:</strong> {currentChallenge.rationale}
+          <div className="prompt-display-box">
+            <div className="prompt-title">{currentChallenge.title}</div>
+            <div className="prompt-text">"{currentChallenge.prompt}"</div>
+            <div className="prompt-tip">
+              <strong>Why it works:</strong> {currentChallenge.rationale}
             </div>
           </div>
 
-          <div className="challenge-actions">
-            <button className="duress-btn secondary" onClick={nextChallenge}>
-              NEXT COGNITIVE PROMPT
-            </button>
-          </div>
+          <button className="btn-small secondary" onClick={nextChallenge}>
+            Show Another Question
+          </button>
         </div>
 
-        {/* Countermeasure 2: Acoustic Probe */}
-        <div className="duress-card">
-          <div className="duress-card-header">
-            <span className="card-step">02</span>
+        {/* Action 2: Acoustic Probe */}
+        <div className="clean-action-card">
+          <div className="action-card-header">
+            <span className="step-num">2</span>
             <div>
-              <h4>Acoustic Liveness Probe Beacon</h4>
-              <p className="card-subtext">Emits a controlled dual-tone chirp into the room speaker to trip software-based audio routing and echo loops.</p>
+              <h4>Acoustic Liveness Probe</h4>
+              <p>Plays a brief dual-tone calibration sound into your speaker to detect microphone echo loops.</p>
             </div>
           </div>
 
-          <div className="probe-action-row">
+          <div className="probe-row">
             <button 
-              className={`duress-btn probe ${probeEmitted ? 'active' : ''}`}
+              className={`btn-small ${probeEmitted ? 'primary' : 'secondary'}`}
               onClick={emitAcousticProbe}
             >
-              {probeEmitted ? 'PROBE EMITTED (CALIBRATING...)' : 'TRANSMIT ACOUSTIC PROBE'}
+              {probeEmitted ? 'Sound Emitted (Listening...)' : 'Play Test Tone'}
             </button>
-            <span className="probe-note">Non-destructive 440Hz–880Hz calibration pulse.</span>
+            <span className="subtle-note">Safe 440Hz–880Hz audio chirp.</span>
           </div>
         </div>
 
-        {/* Countermeasure 3: Emergency Dispatch Actions */}
-        <div className="duress-card emergency-actions-card">
-          <div className="duress-card-header">
-            <span className="card-step">03</span>
+        {/* Action 3: Emergency Contacts */}
+        <div className="clean-action-card">
+          <div className="action-card-header">
+            <span className="step-num">3</span>
             <div>
-              <h4>Immediate Containment Escalation</h4>
-              <p className="card-subtext">Direct escalation channels for immediate fraud containment.</p>
+              <h4>Immediate Actions</h4>
+              <p>Direct options to prevent unauthorized transactions.</p>
             </div>
           </div>
 
-          <div className="emergency-buttons-grid">
-            <a href="tel:1930" className="duress-action-pill call-cyber">
-              <span className="action-tag-pill">HOTLINE</span>
-              <div>
-                <strong>National Cybercrime Helpline: 1930</strong>
-                <span>Immediate emergency freeze for financial cyber fraud</span>
-              </div>
+          <div className="emergency-options-grid">
+            <a href="tel:1930" className="emergency-option-item">
+              <strong>National Cybercrime Helpline: 1930</strong>
+              <span>Immediate emergency freeze for financial fraud</span>
             </a>
 
-            <div className="duress-action-pill hangup" onClick={() => {
-              alert('Hang up the call immediately. Do NOT call back on the incoming number. Dial the official number from your personal contact list.');
-              onClose();
-            }}>
-              <span className="action-tag-pill danger">HALT</span>
-              <div>
-                <strong>Force Terminate Call</strong>
-                <span>Break psychological coercion loop</span>
-              </div>
+            <div 
+              className="emergency-option-item danger"
+              onClick={() => {
+                alert('Hang up the call immediately. Do NOT call back on the incoming number. Dial the official number from your personal contact list.');
+                onClose();
+              }}
+            >
+              <strong>Hang Up Immediately</strong>
+              <span>Break the coercive pressure and call back via trusted number</span>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="duress-modal-footer">
-          <button className="duress-btn primary" onClick={onClose}>
-            RETURN TO TERMINAL
+        <div className="clean-modal-footer">
+          <button className="btn-small primary" onClick={onClose}>
+            Back to Audio Monitor
           </button>
         </div>
       </div>

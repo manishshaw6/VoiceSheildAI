@@ -5,7 +5,7 @@ export default function Section65BCertificateModal({ isOpen, onClose, incident }
 
   if (!isOpen || !incident) return null;
 
-  const certId = `CERT-VS-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  const certId = `REP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
   const timestamp = incident.timestamp ? new Date(incident.timestamp).toLocaleString() : new Date().toLocaleString();
   const sha256Hash = incident.clientSha256 || `sha256_${Math.random().toString(16).substring(2, 18)}${Math.random().toString(16).substring(2, 18)}`;
 
@@ -15,8 +15,8 @@ export default function Section65BCertificateModal({ isOpen, onClose, incident }
 
   const handleDownloadJson = () => {
     const data = {
-      standard: 'Section 65B Indian Evidence Act / IT Act 2000 Electronic Forensic Record',
-      certificateId: certId,
+      standard: 'Section 65B Electronic Evidence Record',
+      reportId: certId,
       issuedAt: new Date().toISOString(),
       incidentMetadata: incident,
       integritySignature: {
@@ -35,115 +35,106 @@ export default function Section65BCertificateModal({ isOpen, onClose, incident }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${certId}_Section65B_Dossier.json`;
+    a.download = `${certId}_Forensic_Report.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
     <div className="guardian-modal-overlay">
-      <div className="guardian-modal-container cert-modal-container">
+      <div className="guardian-modal-container">
         {/* Certificate Actions Top Bar */}
-        <div className="cert-modal-topbar">
-          <div className="cert-top-title">
-            <span className="cert-badge-legal">SECTION 65B COMPLIANT</span>
-            <h4>ELECTRONIC FORENSIC EVIDENCE CERTIFICATE</h4>
+        <div className="clean-modal-header">
+          <div>
+            <span className="clean-modal-badge">Evidence Report</span>
+            <h3>Forensic Voice Incident Report</h3>
           </div>
-          <div className="cert-top-actions">
-            <button className="duress-btn secondary" onClick={handleDownloadJson}>
-              EXPORT JSON-LD
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button className="btn-small secondary" onClick={handleDownloadJson}>
+              Export JSON
             </button>
-            <button className="duress-btn primary" onClick={handlePrint}>
-              PRINT CERTIFICATE
+            <button className="btn-small primary" onClick={handlePrint}>
+              Print Report
             </button>
-            <button className="duress-close-btn" onClick={onClose}>✕</button>
+            <button className="clean-modal-close" onClick={onClose}>✕</button>
           </div>
         </div>
 
         {/* Printable Certificate Body */}
         <div className="cert-printable-document" ref={printRef}>
-          <div className="cert-doc-header">
-            <div className="cert-seal-symbol">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#20ad7f" strokeWidth="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                <path d="m9 12 2 2 4-4" />
-              </svg>
-            </div>
-            <div className="cert-header-text">
-              <h3>CERTIFICATE OF ELECTRONIC EVIDENCE</h3>
-              <p>Under Section 65B of the Indian Evidence Act, 1872 & Information Technology Act, 2000</p>
-              <span className="cert-doc-id">RECORD ID: {certId}</span>
+          <div className="report-doc-header">
+            <div>
+              <h3>ELECTRONIC EVIDENCE FORENSIC RECORD</h3>
+              <p>Admissible under Section 65B of the Indian Evidence Act / IT Act 2000</p>
+              <div className="report-id-chip">Report ID: {certId}</div>
             </div>
           </div>
 
-          <div className="cert-divider-line"></div>
+          <hr className="report-divider" />
 
           {/* Section 1: System Attestation */}
-          <div className="cert-section">
-            <h5>1. Originating Workstation & System Attestation</h5>
-            <p className="cert-text">
-              This is to certify that the digital audio and telemetry records detailed below were captured,
-              computed, and encrypted autonomously by the <strong>VoiceShield AI Sovereign Edge Workstation</strong>.
-              During the monitoring interval, the system operated within legitimate hardware boundaries without external
-              packet injection or unauthorized data tampering.
+          <div className="report-section">
+            <h4>1. Capture & Device Attestation</h4>
+            <p className="report-text">
+              This document certifies that the digital audio and threat telemetry detailed below were captured and analyzed locally by the VoiceShield AI autonomous engine. The record was generated without external packet modification or data tampering.
             </p>
-            <div className="cert-grid-2">
-              <div><strong>Capture Timestamp:</strong> {timestamp}</div>
+            <div className="report-key-values">
+              <div><strong>Recorded At:</strong> {timestamp}</div>
               <div><strong>Cryptographic Hash:</strong> <code>{sha256Hash}</code></div>
-              <div><strong>Operating Mode:</strong> Air-Gapped / Sovereign Offline Edge</div>
-              <div><strong>Storage Standard:</strong> AES-GCM-256 Vault + SHA-256 Verification</div>
+              <div><strong>Execution Mode:</strong> Local On-Device Memory</div>
+              <div><strong>Integrity Seal:</strong> AES-GCM-256 Storage Hash</div>
             </div>
           </div>
 
           {/* Section 2: Forensic Acoustic Telemetry */}
-          <div className="cert-section">
-            <h5>2. Acoustic Biomarker & Synthesis Analysis</h5>
-            <table className="cert-telemetry-table">
+          <div className="report-section">
+            <h4>2. Acoustic & Synthesis Metrics</h4>
+            <table className="report-table">
               <thead>
                 <tr>
-                  <th>Forensic Metric</th>
+                  <th>Metric</th>
                   <th>Observed Value</th>
-                  <th>Normal Baseline</th>
-                  <th>Inference Interpretation</th>
+                  <th>Baseline</th>
+                  <th>Assessment</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>Synthetic Probability Score</td>
+                  <td>Synthetic Speech Probability</td>
                   <td><strong>{incident.deepfakeScore || incident.riskScore || 0}%</strong></td>
                   <td>&lt; 25%</td>
-                  <td>{incident.deepfakeScore > 50 ? 'Severe Vocoder Artifacts' : 'Within Baseline'}</td>
+                  <td>{incident.deepfakeScore > 50 ? 'Synthetic Artifacts Present' : 'Natural Speech Profile'}</td>
                 </tr>
                 <tr>
                   <td>Conversational Coercion Score</td>
                   <td><strong>{incident.scamScore || 0}%</strong></td>
                   <td>0%</td>
-                  <td>{incident.scamScore > 50 ? 'Coercion & Extortion Pattern' : 'Benign Discourse'}</td>
+                  <td>{incident.scamScore > 50 ? 'Extortion Pattern Detected' : 'Benign Discourse'}</td>
                 </tr>
                 <tr>
-                  <td>Composite Threat Classification</td>
-                  <td><span className="cert-threat-tag">{incident.riskLevel || 'HIGH'}</span></td>
+                  <td>Overall Threat Classification</td>
+                  <td><span className="risk-tag-inline">{incident.riskLevel || 'HIGH'}</span></td>
                   <td>SAFE</td>
-                  <td>{incident.isCloneAttack ? 'CRITICAL: Voice Clone Impersonation' : 'Autonomous Assessment'}</td>
+                  <td>{incident.isCloneAttack ? 'Targeted Voice Clone Impersonation' : 'Standard Assessment'}</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
           {/* Section 3: Extracted Speech Act & Evidence Transcript */}
-          <div className="cert-section">
-            <h5>3. Captured Extortion & Coercion Evidence Transcript</h5>
-            <div className="cert-transcript-box">
-              "{incident.transcript || 'Audio forensic stream captured directly via device microphone/input.'}"
+          <div className="report-section">
+            <h4>3. Captured Transcript & Identified Phrases</h4>
+            <div className="report-quote-box">
+              "{incident.transcript || 'Audio stream processed directly via local microphone or file asset.'}"
             </div>
 
             {incident.indicators && incident.indicators.length > 0 && (
-              <div className="cert-indicators-list">
-                <strong>Identified Fraud Intent Tokens:</strong>
+              <div className="report-indicators-list">
+                <strong>Flagged Fraud Tokens:</strong>
                 <ul>
                   {incident.indicators.map((ind, idx) => (
                     <li key={idx}>
-                      <strong>{ind.label}:</strong> "{ind.matchedText}" — <em>{ind.category}</em>
+                      <strong>{ind.label}:</strong> "{ind.matchedText}"
                     </li>
                   ))}
                 </ul>
@@ -152,31 +143,27 @@ export default function Section65BCertificateModal({ isOpen, onClose, incident }
           </div>
 
           {/* Section 4: Statutory Legal Declaration */}
-          <div className="cert-section cert-legal-declaration">
-            <h5>4. Statutory Evidentiary Declaration</h5>
-            <p className="cert-declaration-text">
-              "I hereby declare that the electronic records, acoustic spectrum measurements, and cryptographic hashes
-              contained in this dossier are a true and accurate output of the VoiceShield AI autonomous forensic engine.
-              The recording was produced by the computer system during the period over which the computer was used regularly
-              to store or process information for legitimate cybersecurity protection."
+          <div className="report-section legal-declaration-box">
+            <h4>4. Section 65B Certificate Declaration</h4>
+            <p className="declaration-body">
+              "I hereby declare that this electronic record was produced by the computer system during the period over which the computer was used regularly to store and process security information. The computer was operating properly throughout the period."
             </p>
-            <div className="cert-signature-row">
-              <div className="cert-sign-box">
-                <div className="cert-sig-line"></div>
-                <span>Autonomous Forensic Verification Officer / System Hash Seal</span>
+            <div className="report-signature-block">
+              <div>
+                <div className="signature-line"></div>
+                <span className="signature-caption">Authorized Forensic Seal</span>
               </div>
-              <div className="cert-seal-badge">
-                <span>VOICESHIELD SOVEREIGN SEAL</span>
-                <strong>VERIFIED AUTHENTIC</strong>
+              <div className="verified-seal-box">
+                <span>VOICESHIELD AUDIT</span>
+                <strong>TAMPER-VERIFIED</strong>
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="cert-modal-bottom">
-          <span>Compliant with CERT-In, RBI Cyber Security Framework, and IT Act Electronic Record standards.</span>
-          <button className="duress-btn secondary" onClick={onClose}>Close Window</button>
+        <div className="clean-modal-footer">
+          <button className="btn-small secondary" onClick={onClose}>Close Window</button>
         </div>
       </div>
     </div>
