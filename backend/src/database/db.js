@@ -101,29 +101,44 @@ function initSchema() {
     `);
 
     // Authenticated Users
+    // Merged schema:
+    // - Ayush branch: Google OAuth, sessions, Gmail permissions
+    // - main branch: username + bcrypt password authentication
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         google_id TEXT UNIQUE,
         email TEXT UNIQUE NOT NULL,
         name TEXT,
+        full_name TEXT,
+        username TEXT UNIQUE,
         picture TEXT,
         password_hash TEXT,
         password_salt TEXT,
         mail_password_encrypted TEXT,
         email_verified INTEGER NOT NULL DEFAULT 1,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         last_login_at DATETIME
       )
     `);
 
-    // Additive migrations for users table
+    // Additive migrations for existing users table.
+    // These allow databases created by either branch to continue working.
     for (const statement of [
+      'ALTER TABLE users ADD COLUMN google_id TEXT',
+      'ALTER TABLE users ADD COLUMN full_name TEXT',
+      'ALTER TABLE users ADD COLUMN username TEXT',
+      'ALTER TABLE users ADD COLUMN picture TEXT',
       'ALTER TABLE users ADD COLUMN password_hash TEXT',
       'ALTER TABLE users ADD COLUMN password_salt TEXT',
-      'ALTER TABLE users ADD COLUMN mail_password_encrypted TEXT'
-      ,'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1'
-    ]) db.run(statement, () => {});
+      'ALTER TABLE users ADD COLUMN mail_password_encrypted TEXT',
+      'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1',
+      'ALTER TABLE users ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+      'ALTER TABLE users ADD COLUMN last_login_at DATETIME'
+    ]) {
+      db.run(statement, () => {});
+    }
 
     // OAuth Tokens for Users (Encrypted at rest)
     db.run(`

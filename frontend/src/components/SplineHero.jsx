@@ -32,7 +32,7 @@ export default function SplineHero() {
     <section className="hero-spline" onWheelCapture={(event) => event.stopPropagation()}>
       <Spline scene="/Hero.splinecode" onLoad={handleLoad} />
       <Link
-        to="/scanner"
+        to="/auth"
         className="hero-join-hit-area"
         aria-label="Join VoxShield and launch the threat scanner"
       />

@@ -1,10 +1,16 @@
 import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+
 import './App.css';
 import './voxshield.css';
+
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import Footer from './components/Footer';
+
 import HomePage from './pages/HomePage';
 import ScannerPage from './pages/ScannerPage';
 import LiveShieldPage from './pages/LiveShieldPage';
@@ -12,10 +18,10 @@ import SpeakerGuardPage from './pages/SpeakerGuardPage';
 import AuditVaultPage from './pages/AuditVaultPage';
 import AboutPage from './pages/AboutPage';
 import ApiKeyPortalPage from './pages/ApiKeyPortalPage';
-import { generateCyberCrimePdfReport } from './services/pdfReportGenerator';
-
-import { AuthProvider } from './context/AuthContext';
+import AuthPage from './pages/AuthPage';
 import ReportVerificationPage from './pages/ReportVerificationPage';
+
+import { generateCyberCrimePdfReport } from './services/pdfReportGenerator';
 
 function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -62,19 +68,40 @@ function App() {
     try {
       const res = await fetch(`/api/analysis/${analysisId}/report`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Report export failed');
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Report export failed');
+      }
 
       const report = data.report;
 
       if (format === 'pdf') {
-        window.open(`/api/v1/reports/${analysisId}/pdf`, '_blank');
+        window.open(
+          `/api/v1/reports/${analysisId}/pdf`,
+          '_blank'
+        );
       } else if (format === 'markdown') {
         const md = generateMarkdownReport(report);
-        const blob = new Blob([md], { type: 'text/markdown' });
-        downloadBlob(blob, `VoxShieldAI_Report_${analysisId}.md`);
+
+        const blob = new Blob(
+          [md],
+          { type: 'text/markdown' }
+        );
+
+        downloadBlob(
+          blob,
+          `VoxShieldAI_Report_${analysisId}.md`
+        );
       } else {
-        const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-        downloadBlob(blob, `VoxShieldAI_Report_${analysisId}.json`);
+        const blob = new Blob(
+          [JSON.stringify(report, null, 2)],
+          { type: 'application/json' }
+        );
+
+        downloadBlob(
+          blob,
+          `VoxShieldAI_Report_${analysisId}.json`
+        );
       }
     } catch (err) {
       alert('Could not export report: ' + err.message);
@@ -83,12 +110,15 @@ function App() {
 
   const downloadBlob = (blob, filename) => {
     const url = URL.createObjectURL(blob);
+
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+
     URL.revokeObjectURL(url);
   };
 
@@ -135,18 +165,30 @@ function App() {
     ];
 
     if (r.suspiciousTranscriptPhrases?.length) {
-      lines.push('## Suspicious Phrases Detected', '');
+      lines.push(
+        '## Suspicious Phrases Detected',
+        ''
+      );
+
       for (const p of r.suspiciousTranscriptPhrases) {
-        lines.push(`- **${p.type}** (${p.severity}): _"${p.evidence}"_`);
+        lines.push(
+          `- **${p.type}** (${p.severity}): _"${p.evidence}"_`
+        );
       }
+
       lines.push('');
     }
 
     if (r.risk?.reasonsFlagged?.length) {
-      lines.push('## Explainable Risk Factors', '');
+      lines.push(
+        '## Explainable Risk Factors',
+        ''
+      );
+
       for (const reason of r.risk.reasonsFlagged) {
         lines.push(`- ${reason}`);
       }
+
       lines.push('');
     }
 
@@ -194,13 +236,73 @@ function App() {
             <div className="app-main-viewport">
               <main className="main-content-pro">
                 <Routes>
+                  {/* Public Landing Page */}
                   <Route path="/" element={<HomePage />} />
-                  <Route path="/scanner" element={<ScannerPage onExportReport={handleExportReport} />} />
-                  <Route path="/live" element={<LiveShieldPage onExportReport={handleExportReport} />} />
-                  <Route path="/speaker-guard" element={<SpeakerGuardPage />} />
-                  <Route path="/history" element={<AuditVaultPage onExportReport={handleExportReport} />} />
-                  <Route path="/api-keys" element={<ApiKeyPortalPage />} />
-                  <Route path="/about" element={<AboutPage />} />
+
+                  {/* Public Authentication Routes */}
+                  <Route path="/auth" element={<AuthPage />} />
+                  <Route path="/login" element={<AuthPage />} />
+                  <Route path="/register" element={<AuthPage />} />
+
+                  {/* Protected Operations & Tools */}
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <ProtectedRoute>
+                        <ScannerPage onExportReport={handleExportReport} />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/scanner"
+                    element={
+                      <ProtectedRoute>
+                        <ScannerPage onExportReport={handleExportReport} />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/live"
+                    element={
+                      <ProtectedRoute>
+                        <LiveShieldPage onExportReport={handleExportReport} />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/speaker-guard"
+                    element={
+                      <ProtectedRoute>
+                        <SpeakerGuardPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/history"
+                    element={
+                      <ProtectedRoute>
+                        <AuditVaultPage onExportReport={handleExportReport} />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/api-keys"
+                    element={
+                      <ProtectedRoute>
+                        <ApiKeyPortalPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/about"
+                    element={
+                      <ProtectedRoute>
+                        <AboutPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Report Verification */}
                   <Route path="/reports/:id/verify" element={<ReportVerificationPage />} />
                   <Route path="/reports/verify/:id" element={<ReportVerificationPage />} />
                 </Routes>
