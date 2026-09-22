@@ -23,6 +23,12 @@ if (!validModes.includes(APP_MODE)) {
   console.warn(`[Config] Invalid APP_MODE '${APP_MODE}', falling back to 'development'`);
 }
 
+const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+const corsOrigins = (process.env.CORS_ORIGINS || frontendUrl)
+  .split(',')
+  .map(origin => origin.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
 // ─── Configuration Object ───────────────────────────────────────────────────
 
 export const config = {
@@ -35,10 +41,11 @@ export const config = {
 
   // Server
   port: parseInt(process.env.PORT, 10) || 5000,
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+  frontendUrl,
+  corsOrigins,
 
   // Auth JWT
-  jwtSecret: process.env.JWT_SECRET || 'voxshield_jwt_secret_key_2026_secure',
+  jwtSecret: process.env.JWT_SECRET || (APP_MODE === 'production' ? '' : 'voxshield_jwt_secret_key_2026_secure'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
 
   // Provider API keys (never log these)
@@ -150,8 +157,8 @@ export const config = {
   enableDemoMode: process.env.ENABLE_DEMO_MODE === 'true' || APP_MODE === 'demo',
 
   // Security & OAuth Configuration
-  sessionSecret: process.env.SESSION_SECRET || 'voxshield-dev-session-secret-change-in-prod-2026',
-  reportSigningSecret: process.env.REPORT_SIGNING_SECRET || 'voxshield-dev-report-signing-key-hmac-sha256',
+  sessionSecret: process.env.SESSION_SECRET || (APP_MODE === 'production' ? '' : 'voxshield-dev-session-secret-change-in-prod-2026'),
+  reportSigningSecret: process.env.REPORT_SIGNING_SECRET || (APP_MODE === 'production' ? '' : 'voxshield-dev-report-signing-key-hmac-sha256'),
   publicReportVerifyBaseUrl: (process.env.PUBLIC_REPORT_VERIFY_BASE_URL || 'http://localhost:5173/reports/verify').replace(/\/$/, ''),
 
   // Google OAuth (Separate OpenID login and incremental Mail Send scopes)
@@ -190,6 +197,9 @@ export function validateConfig() {
   if (!config.sendgrid.apiKey || !config.sendgrid.fromEmail) {
     warnings.push('SENDGRID_API_KEY and SENDGRID_FROM_EMAIL are not configured. Incident email delivery is unavailable.');
   }
+  if (config.isProduction && !config.jwtSecret) warnings.push('JWT_SECRET must be configured in production.');
+  if (config.isProduction && !config.sessionSecret) warnings.push('SESSION_SECRET must be configured in production.');
+  if (config.isProduction && !config.reportSigningSecret) warnings.push('REPORT_SIGNING_SECRET must be configured in production.');
 
   // Validate weight sum is approximately 1.0
   const weightSum = Object.values(config.riskWeights).reduce((s, w) => s + w, 0);
@@ -198,4 +208,10 @@ export function validateConfig() {
   }
 
   return warnings;
+}
+
+export function validateProductionConfig() {
+  if (!config.isProduction) return [];
+  return ['JWT_SECRET', 'SESSION_SECRET', 'REPORT_SIGNING_SECRET']
+    .filter((name) => !({ JWT_SECRET: config.jwtSecret, SESSION_SECRET: config.sessionSecret, REPORT_SIGNING_SECRET: config.reportSigningSecret }[name]));
 }

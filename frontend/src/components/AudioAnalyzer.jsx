@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { VoicePoweredOrb } from './ui/voice-powered-orb';
+import { apiUrl } from '../config/api';
 
 export default function AudioAnalyzer({ onAnalysisComplete, onAnalysisReset, selectedSpeakerId, enrolledSpeakers }) {
   const [activeMode, setActiveMode] = useState('upload'); // 'upload' | 'mic'
@@ -150,7 +151,7 @@ export default function AudioAnalyzer({ onAnalysisComplete, onAnalysisReset, sel
 
     try {
       setCurrentStep('Transcribing speech and extracting acoustic signatures...');
-      const response = await fetch('/api/audio/analyze', {
+      const response = await fetch(apiUrl('/api/audio/analyze'), {
         method: 'POST',
         body: formData
       });

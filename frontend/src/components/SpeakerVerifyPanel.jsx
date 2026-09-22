@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiUrl } from '../config/api';
 
 export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles }) {
   const [speakerId, setSpeakerId] = useState('');
@@ -26,7 +27,7 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
 
     try {
       setEnrollStatus('Generating acoustic embedding & enrolling profile...');
-      const res = await fetch('/api/speaker/enroll', {
+      const res = await fetch(apiUrl('/api/speaker/enroll'), {
         method: 'POST',
         body: formData
       });
@@ -67,7 +68,7 @@ export default function SpeakerVerifyPanel({ enrolledSpeakers, onRefreshProfiles
     setVerifyResult(null);
 
     try {
-      const res = await fetch('/api/speaker/verify', {
+      const res = await fetch(apiUrl('/api/speaker/verify'), {
         method: 'POST',
         body: formData
       });

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { apiUrl } from '../config/api';
 
 export default function IncidentReportModal({ analysis, isOpen, onClose }) {
   const { user, authenticated, mailStatus, openAuthModal, saveMailPassword } = useAuth();
@@ -44,7 +45,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
   useEffect(() => {
     async function loadContacts() {
       try {
-        const res = await fetch('/api/v1/organizations');
+        const res = await fetch(apiUrl('/api/v1/organizations'));
         const data = await res.json();
         const allContacts = [];
         if (data.organizations?.length) {
@@ -102,7 +103,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/v1/reports/generate', {
+      const res = await fetch(apiUrl('/api/v1/reports/generate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -135,7 +136,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
       setError(null);
 
       // 1. Approve report with explicit consent
-      const apprRes = await fetch(`/api/v1/reports/${reportData.reportId}/approve`, {
+      const apprRes = await fetch(apiUrl(`/api/v1/reports/${reportData.reportId}/approve`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -147,7 +148,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
       }
 
       // 2. Dispatch through the VoxShield SendGrid relay
-      const sendRes = await fetch(`/api/v1/reports/${reportData.reportId}/send`, {
+      const sendRes = await fetch(apiUrl(`/api/v1/reports/${reportData.reportId}/send`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

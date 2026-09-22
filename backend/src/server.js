@@ -7,7 +7,7 @@
 import http from 'http';
 import { WebSocketServer } from 'ws';
 import app from './app.js';
-import { config, validateConfig } from './config/index.js';
+import { config, validateConfig, validateProductionConfig } from './config/index.js';
 import { setupLiveAnalysisWebSocket } from './websocket/liveAnalysisHandler.js';
 import logger from './core/logger.js';
 
@@ -16,6 +16,11 @@ import logger from './core/logger.js';
 const configWarnings = validateConfig();
 for (const warning of configWarnings) {
   logger.warn('startup.config_warning', { message: warning });
+}
+
+const productionConfigErrors = validateProductionConfig();
+if (productionConfigErrors.length) {
+  throw new Error(`Missing required production environment variables: ${productionConfigErrors.join(', ')}`);
 }
 
 logger.info('startup.mode', { mode: config.mode, demo: config.enableDemoMode });
@@ -35,7 +40,7 @@ setupLiveAnalysisWebSocket(wss);
 
 // ─── Listen ─────────────────────────────────────────────────────────────────
 
-server.listen(config.port, () => {
+server.listen(config.port, '0.0.0.0', () => {
   logger.info('startup.ready', {
     port: config.port,
     http_url: `http://localhost:${config.port}/api`,

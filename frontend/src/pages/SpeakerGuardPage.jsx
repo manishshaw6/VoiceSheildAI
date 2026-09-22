@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import SpeakerVerifyPanel from '../components/SpeakerVerifyPanel';
+import { apiUrl } from '../config/api';
 
 export default function SpeakerGuardPage() {
   const [enrolledSpeakers, setEnrolledSpeakers] = useState([]);
 
   const fetchSpeakers = async () => {
     try {
-      const res = await fetch('/api/speaker/profiles');
+      const res = await fetch(apiUrl('/api/speaker/profiles'));
       const data = await res.json();
       if (data.success) setEnrolledSpeakers(data.profiles || []);
     } catch (_) {}

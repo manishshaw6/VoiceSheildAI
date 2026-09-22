@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { apiUrl } from '../config/api';
 
 export default function ReportVerificationPage() {
   const { id } = useParams();
@@ -11,7 +12,7 @@ export default function ReportVerificationPage() {
     async function verify() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/v1/reports/${id}/verify`);
+        const res = await fetch(apiUrl(`/api/v1/reports/${id}/verify`));
         const json = await res.json();
         setData(json);
       } catch (err) {

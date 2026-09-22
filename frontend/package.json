@@ -10,6 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
     "@splinetool/react-spline": "^4.1.0",
     "jspdf": "^4.2.1",
     "ogl": "^1.0.11",

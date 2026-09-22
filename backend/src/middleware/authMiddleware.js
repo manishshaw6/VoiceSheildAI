@@ -1,4 +1,3 @@
-```js
 /**
  * VoxShield AI — Authentication Middleware
  * Supports both:
@@ -13,20 +12,11 @@ import { config } from '../config/index.js';
 import { ApiError } from '../schemas/errors.js';
 import { query } from '../database/db.js';
 
-/**
- * Attach authenticated user if a valid session or JWT exists.
- *
- * Priority:
- * 1. Session cookie
- * 2. Authorization: Bearer <JWT>
- */
 export async function attachUser(req, res, next) {
   try {
     let sessionId = req.cookies?.voxshield_session;
 
-    // --------------------------------------------------
     // 1. Try HTTP-only session cookie
-    // --------------------------------------------------
     if (sessionId) {
       try {
         const user = await getUserFromSession(sessionId);
@@ -36,14 +26,11 @@ export async function attachUser(req, res, next) {
           return next();
         }
       } catch {
-        // Session invalid/expired.
-        // Continue and try JWT authentication.
+        // Continue with JWT authentication
       }
     }
 
-    // --------------------------------------------------
     // 2. Try JWT Bearer token
-    // --------------------------------------------------
     const authHeader = req.headers.authorization;
 
     if (authHeader?.startsWith('Bearer ')) {
@@ -51,10 +38,7 @@ export async function attachUser(req, res, next) {
 
       if (token) {
         try {
-          const decoded = jwt.verify(
-            token,
-            config.jwtSecret
-          );
+          const decoded = jwt.verify(token, config.jwtSecret);
 
           const user = await query.get(
             `SELECT
@@ -86,28 +70,20 @@ export async function attachUser(req, res, next) {
             return next();
           }
         } catch {
-          // Invalid JWT — treat as unauthenticated.
+          // Invalid JWT — continue unauthenticated
         }
       }
     }
 
-    // No valid authentication found.
     req.user = null;
-
     next();
+
   } catch {
     req.user = null;
     next();
   }
 }
 
-/**
- * Require authentication.
- *
- * Works with either:
- * - voxshield_session cookie
- * - Authorization: Bearer <JWT>
- */
 export function requireAuth(req, res, next) {
   if (!req.user) {
     return next(
@@ -122,12 +98,6 @@ export function requireAuth(req, res, next) {
   next();
 }
 
-/**
- * Optional authentication.
- *
- * Does not reject the request when the user is unauthenticated.
- */
 export function optionalAuth(req, res, next) {
   return attachUser(req, res, next);
 }
-```

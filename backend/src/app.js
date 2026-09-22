@@ -33,8 +33,12 @@ app.use((req, res, next) => {
 // ─── CORS ───────────────────────────────────────────────────────────────────
 
 const corsOrigin = config.isProduction
-  ? config.frontendUrl
-  : (origin, callback) => callback(null, true); // Allow all in dev while supporting credentials
+  ? (origin, callback) => {
+      // Requests without an Origin header are non-browser health checks/native clients.
+      if (!origin || config.corsOrigins.includes(origin.replace(/\/$/, ''))) return callback(null, true);
+      return callback(new Error('CORS origin not allowed'));
+    }
+  : (origin, callback) => callback(null, true); // Development only: supports Vite and local native clients.
 
 app.use(cors({
   origin: corsOrigin,

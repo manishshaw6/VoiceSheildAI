@@ -22,6 +22,7 @@ import AuthPage from './pages/AuthPage';
 import ReportVerificationPage from './pages/ReportVerificationPage';
 
 import { generateCyberCrimePdfReport } from './services/pdfReportGenerator';
+import { apiUrl } from './config/api';
 
 function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -66,7 +67,7 @@ function App() {
   }, []);
   const handleExportReport = async (analysisId, format = 'pdf') => {
     try {
-      const res = await fetch(`/api/analysis/${analysisId}/report`);
+      const res = await fetch(apiUrl(`/api/analysis/${analysisId}/report`));
       const data = await res.json();
 
       if (!res.ok) {
@@ -77,7 +78,7 @@ function App() {
 
       if (format === 'pdf') {
         window.open(
-          `/api/v1/reports/${analysisId}/pdf`,
+          apiUrl(`/api/v1/reports/${analysisId}/pdf`),
           '_blank'
         );
       } else if (format === 'markdown') {

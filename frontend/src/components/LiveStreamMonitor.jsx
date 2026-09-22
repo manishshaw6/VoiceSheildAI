@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { VoicePoweredOrb } from './ui/voice-powered-orb';
+import { webSocketUrl } from '../config/api';
 
 export default function LiveStreamMonitor({
   onSessionComplete,
@@ -170,19 +171,11 @@ export default function LiveStreamMonitor({
     };
   }, [liveAudioStream, isStreaming]);
 
-  const getWsUrl = () => {
-    if (window.location.port === '5173') {
-      return `ws://${window.location.hostname || 'localhost'}:5000/ws/live-analysis`;
-    }
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/ws/live-analysis`;
-  };
-
   const startLiveMonitor = async () => {
     try {
       setWsStatus('Connecting to WebSocket...');
 
-      const socket = new WebSocket(getWsUrl());
+      const socket = new WebSocket(webSocketUrl());
       wsRef.current = socket;
 
       socket.onopen = async () => {

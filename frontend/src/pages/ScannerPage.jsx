@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AudioAnalyzer from '../components/AudioAnalyzer';
 import SecurityDashboard from '../components/SecurityDashboard';
+import { apiUrl } from '../config/api';
 
 export default function ScannerPage({ onExportReport }) {
   const [analysis, setAnalysis] = useState(null);
@@ -9,7 +10,7 @@ export default function ScannerPage({ onExportReport }) {
 
   const fetchSpeakers = async () => {
     try {
-      const res = await fetch('/api/speaker/profiles');
+      const res = await fetch(apiUrl('/api/speaker/profiles'));
       const data = await res.json();
       if (data.success) setEnrolledSpeakers(data.profiles || []);
     } catch (_) {}

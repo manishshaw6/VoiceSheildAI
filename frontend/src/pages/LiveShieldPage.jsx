@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LiveStreamMonitor from '../components/LiveStreamMonitor';
 import SecurityDashboard from '../components/SecurityDashboard';
+import { apiUrl } from '../config/api';
 
 export default function LiveShieldPage({ onExportReport }) {
   const [enrolledSpeakers, setEnrolledSpeakers] = useState([]);
@@ -9,7 +10,7 @@ export default function LiveShieldPage({ onExportReport }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch('/api/speaker/profiles')
+    fetch(apiUrl('/api/speaker/profiles'))
       .then(res => res.json())
       .then(data => {
         if (data.success) setEnrolledSpeakers(data.profiles || []);
@@ -31,7 +32,7 @@ export default function LiveShieldPage({ onExportReport }) {
       }, 150);
     } else if (sessionData?.sessionId) {
       try {
-        const res = await fetch(`/api/history/${sessionData.sessionId}`);
+        const res = await fetch(apiUrl(`/api/history/${sessionData.sessionId}`));
         const data = await res.json();
         if (data.success && data.analysis) {
           const raw = data.analysis.raw_result || {};

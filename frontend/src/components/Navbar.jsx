@@ -4,11 +4,14 @@ import { useAuth } from '../context/AuthContext';
 
 import voxShieldMark from '../assets/voxshield-mark.svg';
 import AuthModal from './AuthModal';
+import { apiUrl } from '../config/api';
 
 export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
   const [health, setHealth] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 700px)').matches);
 
   const profileMenuRef = useRef(null);
 
@@ -22,10 +25,21 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch('/api/health')
+    fetch(apiUrl('/api/health'))
       .then((res) => res.json())
       .then((data) => setHealth(data))
       .catch(() => setHealth(null));
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 700px)');
+    const updateViewport = () => {
+      setIsMobile(media.matches);
+      if (!media.matches) setMobileMenuOpen(false);
+    };
+    updateViewport();
+    media.addEventListener('change', updateViewport);
+    return () => media.removeEventListener('change', updateViewport);
   }, []);
 
   useEffect(() => {
@@ -84,9 +98,10 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
             {/* ChatGPT-style Sidebar Toggle Button */}
             <button
               className="navbar-sidebar-toggle-btn"
-              onClick={onToggleSidebar}
-              title={isSidebarCollapsed ? "Open Sidebar (Ctrl + B)" : "Close Sidebar (Ctrl + B)"}
-              aria-label="Toggle Sidebar"
+              onClick={() => isMobile ? setMobileMenuOpen((open) => !open) : onToggleSidebar()}
+              title={isMobile ? (mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu') : (isSidebarCollapsed ? "Open Sidebar (Ctrl + B)" : "Close Sidebar (Ctrl + B)")}
+              aria-label={isMobile ? (mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu') : 'Toggle Sidebar'}
+              aria-expanded={isMobile ? mobileMenuOpen : undefined}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -327,6 +342,22 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
           </div>
         </div>
       </header>
+
+      {mobileMenuOpen && (
+        <>
+          <button className="mobile-nav-scrim" aria-label="Close navigation menu" onClick={() => setMobileMenuOpen(false)} />
+          <nav className="mobile-nav-drawer" aria-label="Mobile navigation">
+            <div className="mobile-nav-title">Security operations</div>
+            {[
+              ['/', 'Overview'], ['/scanner', 'Threat Scanner'], ['/live', 'Live Call Shield'],
+              ['/speaker-guard', 'Voice ID Guard'], ['/history', 'Audit Vault'],
+              ['/api-keys', 'API Keys & Integration'], ['/about', 'Methodology & Docs']
+            ].map(([to, label]) => (
+              <NavLink key={to} to={to} end={to === '/'} className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>{label}</NavLink>
+            ))}
+          </nav>
+        </>
+      )}
 
 
       {/* =========================================

@@ -37,7 +37,7 @@ import {
 
 import {
   getMe,
-  signup,
+  register,
   login,
   demoLoginEndpoint,
   saveMailPasswordEndpoint,
@@ -83,8 +83,8 @@ router.use('/api-keys', apiKeyRoutes);
 
 router.get('/auth/me', requireAuth, getMe);
 
-router.post('/auth/signup', signup);
-router.post('/auth/register', signup);
+router.post('/auth/signup', register);
+router.post('/auth/register', register);
 
 router.post('/auth/login', login);
 
@@ -110,7 +110,6 @@ router.get('/ready', getReadiness);
 router.get('/system/providers', getProviderStatus);
 router.get('/system/preflight', getPreflight);
 
-
 // =====================================================
 // Audio Pipeline Analysis
 // =====================================================
@@ -120,7 +119,6 @@ router.post(
   uploadAudio.single('audio'),
   analyzeAudio
 );
-
 
 // =====================================================
 // Speaker Identity Verification & Enrollment
@@ -152,7 +150,6 @@ router.post(
   verify
 );
 
-
 // =====================================================
 // History & Auditing
 // =====================================================
@@ -160,7 +157,6 @@ router.post(
 router.get('/history', getHistory);
 router.get('/history/:id', getHistoryById);
 router.delete('/history/:id', deleteHistory);
-
 
 // =====================================================
 // Security Reports (Legacy & Native)
@@ -170,7 +166,6 @@ router.get('/analysis/:id/report', getSecurityReport);
 router.get('/analysis/:id/forensics', getAnalysisForensics);
 router.get('/incidents/:id', getIncident);
 router.get('/audit', getAuditTrail);
-
 
 // =====================================================
 // Incremental Mail-Send Authorization
@@ -195,7 +190,6 @@ router.post(
   disconnectMail
 );
 
-
 // =====================================================
 // Trusted Organization Directory
 // =====================================================
@@ -211,7 +205,6 @@ router.get(
   '/organizations/:id',
   getOrganization
 );
-
 
 // =====================================================
 // Digitally Verifiable Incident Reports
@@ -260,6 +253,5 @@ router.get(
   '/reports/:id/status',
   getReportStatus
 );
-
 
 export default router;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiUrl } from '../config/api';
 
 export default function HistoryReports({ onSelectAnalysis, onExportReport }) {
   const [history, setHistory] = useState([]);
@@ -8,7 +9,7 @@ export default function HistoryReports({ onSelectAnalysis, onExportReport }) {
   const fetchHistory = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/history');
+      const res = await fetch(apiUrl('/api/history'));
       const data = await res.json();
       if (data.success) {
         setHistory(data.history || []);
@@ -30,7 +31,7 @@ export default function HistoryReports({ onSelectAnalysis, onExportReport }) {
     if (!window.confirm('Delete this analysis record from audit history?')) return;
 
     try {
-      const res = await fetch(`/api/history/${id}`, { method: 'DELETE' });
+      const res = await fetch(apiUrl(`/api/history/${id}`), { method: 'DELETE' });
       if (res.ok) {
         setHistory(prev => prev.filter(item => item.id !== id));
       }
@@ -41,7 +42,7 @@ export default function HistoryReports({ onSelectAnalysis, onExportReport }) {
 
   const handleInspect = async (id) => {
     try {
-      const res = await fetch(`/api/history/${id}`);
+      const res = await fetch(apiUrl(`/api/history/${id}`));
       const data = await res.json();
       if (data.success && data.analysis) {
         const raw = data.analysis.raw_result || {};

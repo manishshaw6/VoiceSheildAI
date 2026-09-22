@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useCallback
 } from 'react';
+import { apiUrl } from '../config/api';
 
 const AuthContext = createContext(null);
 
@@ -82,7 +83,7 @@ export function AuthProvider({ children }) {
         headers.Authorization = `Bearer ${storedToken}`;
       }
 
-      const res = await fetch('/api/v1/auth/me', {
+      const res = await fetch(apiUrl('/api/v1/auth/me'), {
         method: 'GET',
         headers,
         credentials: 'include'
@@ -105,7 +106,7 @@ export function AuthProvider({ children }) {
         // Fetch mail status
         try {
           const mailRes = await fetch(
-            '/api/v1/mail/status',
+            apiUrl('/api/v1/mail/status'),
             {
               credentials: 'include',
               headers
@@ -178,7 +179,7 @@ export function AuthProvider({ children }) {
     password
   ) => {
     const res = await fetch(
-      '/api/v1/auth/login',
+      apiUrl('/api/v1/auth/login'),
       {
         method: 'POST',
         headers: {
@@ -245,7 +246,7 @@ export function AuthProvider({ children }) {
       name || fullName || '';
 
     const res = await fetch(
-      '/api/v1/auth/signup',
+      apiUrl('/api/v1/auth/signup'),
       {
         method: 'POST',
         headers: {
@@ -323,7 +324,7 @@ export function AuthProvider({ children }) {
 
   const demoLogin = async () => {
     const res = await fetch(
-      '/api/v1/auth/demo-login',
+      apiUrl('/api/v1/auth/demo-login'),
       {
         method: 'POST',
         headers: {
@@ -378,7 +379,7 @@ export function AuthProvider({ children }) {
     }
 
     const res = await fetch(
-      '/api/v1/auth/mail-password',
+      apiUrl('/api/v1/auth/mail-password'),
       {
         method: 'POST',
         headers,
@@ -415,7 +416,7 @@ export function AuthProvider({ children }) {
     returnTo = window.location.pathname
   ) => {
     window.location.href =
-      `/api/v1/auth/google?returnTo=${encodeURIComponent(
+      `${apiUrl('/api/v1/auth/google')}?returnTo=${encodeURIComponent(
         returnTo
       )}`;
   };
@@ -429,7 +430,7 @@ export function AuthProvider({ children }) {
     returnTo = window.location.pathname
   ) => {
     window.location.href =
-      `/api/v1/mail/google/connect?returnTo=${encodeURIComponent(
+      `${apiUrl('/api/v1/mail/google/connect')}?returnTo=${encodeURIComponent(
         returnTo
       )}`;
   };
@@ -449,7 +450,7 @@ export function AuthProvider({ children }) {
       }
 
       const res = await fetch(
-        '/api/v1/mail/disconnect',
+        apiUrl('/api/v1/mail/disconnect'),
         {
           method: 'POST',
           headers,
@@ -484,7 +485,7 @@ export function AuthProvider({ children }) {
       }
 
       await fetch(
-        '/api/v1/auth/logout',
+        apiUrl('/api/v1/auth/logout'),
         {
           method: 'POST',
           headers,

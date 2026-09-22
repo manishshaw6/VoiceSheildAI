@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { apiUrl, webSocketUrl } from '../config/api';
 
 export default function ApiKeyPortalPage() {
   const { user, authenticated, openAuthModal } = useAuth();
@@ -31,7 +32,7 @@ export default function ApiKeyPortalPage() {
     try {
       setLoading(true);
       setError('');
-      const res = await fetch('/api/v1/api-keys');
+      const res = await fetch(apiUrl('/api/v1/api-keys'));
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to fetch API keys');
       setKeys(data.keys || []);
@@ -55,7 +56,7 @@ export default function ApiKeyPortalPage() {
 
     try {
       setCreating(true);
-      const res = await fetch('/api/v1/api-keys', {
+      const res = await fetch(apiUrl('/api/v1/api-keys'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -85,7 +86,7 @@ export default function ApiKeyPortalPage() {
     if (!confirm) return;
 
     try {
-      const res = await fetch(`/api/v1/api-keys/${keyId}/revoke`, {
+      const res = await fetch(apiUrl(`/api/v1/api-keys/${keyId}/revoke`), {
         method: 'POST'
       });
       const data = await res.json();
@@ -104,7 +105,7 @@ export default function ApiKeyPortalPage() {
     if (!confirm) return;
 
     try {
-      const res = await fetch(`/api/v1/api-keys/${keyId}`, {
+      const res = await fetch(apiUrl(`/api/v1/api-keys/${keyId}`), {
         method: 'DELETE'
       });
       const data = await res.json();
@@ -123,7 +124,7 @@ export default function ApiKeyPortalPage() {
     if (!confirm) return;
 
     try {
-      const res = await fetch('/api/v1/api-keys/purge-revoked', {
+      const res = await fetch(apiUrl('/api/v1/api-keys/purge-revoked'), {
         method: 'POST'
       });
       const data = await res.json();
@@ -145,10 +146,12 @@ export default function ApiKeyPortalPage() {
   };
 
   const activeKeyPlaceholder = createdSecretData?.secretKey || 'vx_live_9a4f7e21b8c63d5012e87a4bc3109df4';
+  const apiEndpoint = apiUrl('/api/v1/audio/analyze');
+  const liveStreamEndpoint = webSocketUrl('/ws/live-analysis');
 
   const codeSnippets = {
     curl: `# 1. Audio Forensic & Deepfake Threat Analysis via cURL
-curl -X POST "http://localhost:5000/api/v1/audio/analyze" \\
+curl -X POST "${apiEndpoint}" \\
   -H "X-API-Key: ${activeKeyPlaceholder}" \\
   -F "audio=@/path/to/incoming_call_recording.wav"
 
@@ -159,7 +162,7 @@ curl -X POST "http://localhost:5000/api/v1/audio/analyze" \\
 
 # VoiceShield AI Python Client Integration Layer
 API_KEY = "${activeKeyPlaceholder}"
-ENDPOINT = "http://localhost:5000/api/v1/audio/analyze"
+ENDPOINT = "${apiEndpoint}"
 
 def inspect_voice_call(audio_file_path):
     headers = {
@@ -191,7 +194,7 @@ import FormData from 'form-data';
 import fs from 'fs';
 
 const VOXSHIELD_API_KEY = '${activeKeyPlaceholder}';
-const VOXSHIELD_URL = 'http://localhost:5000/api/v1/audio/analyze';
+const VOXSHIELD_URL = '${apiEndpoint}';
 
 export async function verifyIncomingVoice(audioStreamBuffer, filename = 'voice_stream.wav') {
   const form = new FormData();
@@ -219,7 +222,7 @@ export async function verifyIncomingVoice(audioStreamBuffer, filename = 'voice_s
 }`,
 
     websocket: `// VoiceShield AI Live Stream Real-Time WebSocket Interceptor
-const wsUrl = "ws://localhost:5000/ws/live-analysis";
+const wsUrl = "${liveStreamEndpoint}";
 const socket = new WebSocket(wsUrl);
 
 socket.onopen = () => {
