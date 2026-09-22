@@ -69,14 +69,14 @@ export default function DuressProtocolModal({ isOpen, onClose, currentIncident }
         {/* Header */}
         <div className="duress-modal-header">
           <div className="duress-title-group">
-            <span className="duress-badge">ACTIVE DURESS PROTOCOL</span>
-            <h3>Sovereign Counter-Spoof Interlock</h3>
+            <span className="duress-badge">TACTICAL INTERLOCK ACTIVE</span>
+            <h3>COUNTER-SPOOF PROTOCOL</h3>
           </div>
           <button className="duress-close-btn" onClick={onClose}>✕</button>
         </div>
 
         <p className="duress-intro">
-          High-confidence impersonation or digital arrest coercion has been detected. Engage the tactical countermeasures below to neutralize the attack.
+          High-confidence impersonation or digital arrest coercion identified. Engage tactical countermeasures below to neutralize the attack vector.
         </p>
 
         {/* Countermeasure 1: Cognitive Challenge */}
@@ -85,7 +85,7 @@ export default function DuressProtocolModal({ isOpen, onClose, currentIncident }
             <span className="card-step">01</span>
             <div>
               <h4>Cognitive Anti-AI Voice Challenge</h4>
-              <p className="card-subtext">Dynamic prompts designed to expose synthetic vocoder lag and soundboard limitations.</p>
+              <p className="card-subtext">Dynamic cognitive prompts designed to expose synthetic vocoder latency and soundboard limitations.</p>
             </div>
           </div>
 
@@ -99,7 +99,7 @@ export default function DuressProtocolModal({ isOpen, onClose, currentIncident }
 
           <div className="challenge-actions">
             <button className="duress-btn secondary" onClick={nextChallenge}>
-              🎲 Next Cognitive Challenge
+              NEXT COGNITIVE PROMPT
             </button>
           </div>
         </div>
@@ -110,7 +110,7 @@ export default function DuressProtocolModal({ isOpen, onClose, currentIncident }
             <span className="card-step">02</span>
             <div>
               <h4>Acoustic Liveness Probe Beacon</h4>
-              <p className="card-subtext">Emits a controlled dual-tone chirp into the room speaker to trip software-based audio hijacking and echo loops.</p>
+              <p className="card-subtext">Emits a controlled dual-tone chirp into the room speaker to trip software-based audio routing and echo loops.</p>
             </div>
           </div>
 
@@ -119,9 +119,9 @@ export default function DuressProtocolModal({ isOpen, onClose, currentIncident }
               className={`duress-btn probe ${probeEmitted ? 'active' : ''}`}
               onClick={emitAcousticProbe}
             >
-              {probeEmitted ? '🔊 Acoustic Probe Emitted (Measuring)' : '🔊 Emit Acoustic Liveness Probe'}
+              {probeEmitted ? 'PROBE EMITTED (CALIBRATING...)' : 'TRANSMIT ACOUSTIC PROBE'}
             </button>
-            <span className="probe-note">Safe, non-destructive 440Hz–880Hz calibration pulse.</span>
+            <span className="probe-note">Non-destructive 440Hz–880Hz calibration pulse.</span>
           </div>
         </div>
 
@@ -130,17 +130,17 @@ export default function DuressProtocolModal({ isOpen, onClose, currentIncident }
           <div className="duress-card-header">
             <span className="card-step">03</span>
             <div>
-              <h4>Immediate Emergency & Incident Action</h4>
+              <h4>Immediate Containment Escalation</h4>
               <p className="card-subtext">Direct escalation channels for immediate fraud containment.</p>
             </div>
           </div>
 
           <div className="emergency-buttons-grid">
             <a href="tel:1930" className="duress-action-pill call-cyber">
-              <span className="action-icon">📞</span>
+              <span className="action-tag-pill">HOTLINE</span>
               <div>
                 <strong>National Cybercrime Helpline: 1930</strong>
-                <span>Direct emergency freeze for cyber fraud</span>
+                <span>Immediate emergency freeze for financial cyber fraud</span>
               </div>
             </a>
 
@@ -148,9 +148,9 @@ export default function DuressProtocolModal({ isOpen, onClose, currentIncident }
               alert('Hang up the call immediately. Do NOT call back on the incoming number. Dial the official number from your personal contact list.');
               onClose();
             }}>
-              <span className="action-icon">🛑</span>
+              <span className="action-tag-pill danger">HALT</span>
               <div>
-                <strong>Force Disconnect Call</strong>
+                <strong>Force Terminate Call</strong>
                 <span>Break psychological coercion loop</span>
               </div>
             </div>
@@ -160,7 +160,7 @@ export default function DuressProtocolModal({ isOpen, onClose, currentIncident }
         {/* Footer */}
         <div className="duress-modal-footer">
           <button className="duress-btn primary" onClick={onClose}>
-            Return to Guardian HUD
+            RETURN TO TERMINAL
           </button>
         </div>
       </div>

@@ -46,15 +46,15 @@ export default function Section65BCertificateModal({ isOpen, onClose, incident }
         {/* Certificate Actions Top Bar */}
         <div className="cert-modal-topbar">
           <div className="cert-top-title">
-            <span className="cert-badge-legal">LEGAL COMPLIANCE READY</span>
-            <h4>Section 65B Electronic Forensic Dossier Certificate</h4>
+            <span className="cert-badge-legal">SECTION 65B COMPLIANT</span>
+            <h4>ELECTRONIC FORENSIC EVIDENCE CERTIFICATE</h4>
           </div>
           <div className="cert-top-actions">
             <button className="duress-btn secondary" onClick={handleDownloadJson}>
-              💾 Export JSON-LD
+              EXPORT JSON-LD
             </button>
             <button className="duress-btn primary" onClick={handlePrint}>
-              🖨️ Print Certificate
+              PRINT CERTIFICATE
             </button>
             <button className="duress-close-btn" onClick={onClose}>✕</button>
           </div>
@@ -63,11 +63,16 @@ export default function Section65BCertificateModal({ isOpen, onClose, incident }
         {/* Printable Certificate Body */}
         <div className="cert-printable-document" ref={printRef}>
           <div className="cert-doc-header">
-            <div className="cert-crest">🛡️</div>
+            <div className="cert-seal-symbol">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#20ad7f" strokeWidth="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                <path d="m9 12 2 2 4-4" />
+              </svg>
+            </div>
             <div className="cert-header-text">
               <h3>CERTIFICATE OF ELECTRONIC EVIDENCE</h3>
               <p>Under Section 65B of the Indian Evidence Act, 1872 & Information Technology Act, 2000</p>
-              <span className="cert-doc-id">Certificate ID: {certId}</span>
+              <span className="cert-doc-id">RECORD ID: {certId}</span>
             </div>
           </div>
 
@@ -75,7 +80,7 @@ export default function Section65BCertificateModal({ isOpen, onClose, incident }
 
           {/* Section 1: System Attestation */}
           <div className="cert-section">
-            <h5>1. Originating Device & Autonomous System Attestation</h5>
+            <h5>1. Originating Workstation & System Attestation</h5>
             <p className="cert-text">
               This is to certify that the digital audio and telemetry records detailed below were captured,
               computed, and encrypted autonomously by the <strong>VoiceShield AI Sovereign Edge Workstation</strong>.

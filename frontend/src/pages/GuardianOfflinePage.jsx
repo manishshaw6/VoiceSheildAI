@@ -50,7 +50,6 @@ export default function GuardianOfflinePage() {
       setNewContactName('');
       setEnrollFile(null);
       await refreshContacts();
-      alert(`Enrolled voice profile for ${newContactName.trim()} into offline vault.`);
     } catch (err) {
       alert('Enrollment failed: ' + err.message);
     } finally {
@@ -78,13 +77,13 @@ export default function GuardianOfflinePage() {
   const handleSyncWithCloud = async () => {
     try {
       setIsSyncing(true);
-      setSyncStatus('Connecting and synchronizing...');
+      setSyncStatus('Establishing secure handshake...');
       const res = await offlineSyncManager.syncPendingIncidents();
       if (res.success) {
-        setSyncStatus(`Sync complete: ${res.synced} incident(s) uploaded.`);
+        setSyncStatus(`Sync successful: ${res.synced} incident record(s) committed.`);
         await refreshVault();
       } else {
-        setSyncStatus(`Sync issue: ${res.error || 'Check network connection'}`);
+        setSyncStatus(`Sync unready: ${res.error || 'Check network connection'}`);
       }
     } catch (err) {
       setSyncStatus('Sync failed: ' + err.message);
@@ -111,26 +110,39 @@ export default function GuardianOfflinePage() {
   };
 
   return (
-    <div className="page-view-wrapper guardian-page-container">
-      {/* ─── Breadcrumb & Title ────────────────────────────────────── */}
-      <div className="page-header-pro">
-        <div className="page-breadcrumb">
-          <span>VoiceShield AI</span> / <span>Guardian Offline</span>
-        </div>
-        <div className="guardian-title-row">
-          <h2>VoiceShield Guardian Offline</h2>
-          <span className="guardian-defense-tag">SOVEREIGN AIR-GAPPED DEFENSE</span>
-        </div>
-        <p className="guardian-description">
-          Autonomous, privacy-first edge voice-cloning detection & contextual fraud prevention platform.
-          Operates with zero cloud dependency during network isolation or cellular failure.
-        </p>
-
-        {/* Operating Environment Notice */}
-        <div className="guardian-platform-notice">
-          <span className="notice-icon">🛡️</span>
+    <div className="guardian-workstation-wrapper">
+      {/* ─── High-Tech Command Bar ──────────────────────────────────── */}
+      <div className="guardian-command-bar">
+        <div className="command-brand">
+          <div className="radar-sweep-icon">
+            <span className="radar-core" />
+            <span className="radar-ring" />
+          </div>
           <div>
-            <strong>Operational Boundaries & Platform Integrity:</strong> VoiceShield Guardian operates within standard operating system security perimeters. The engine monitors <em>user-supplied forensic audio assets</em>, <em>live ambient microphone capture (speakerphone)</em>, and <em>permitted in-app VoIP interfaces</em>.
+            <div className="command-title-row">
+              <h2 className="command-title">GUARDIAN // AIR-GAPPED WORKSTATION</h2>
+              <span className="defense-state-pill">STANDALONE HARDENED</span>
+            </div>
+            <div className="command-telemetry-strip">
+              <span>ENGINE: <strong>EDGE-DSP v2.4</strong></span>
+              <span className="telemetry-sep">•</span>
+              <span>SAMPLING: <strong>16,000 HZ FLOAT32</strong></span>
+              <span className="telemetry-sep">•</span>
+              <span>CIPHER: <strong>AES-GCM-256</strong></span>
+              <span className="telemetry-sep">•</span>
+              <span>INTEGRITY: <strong>SHA-256 SEALED</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <div className="command-meta-right">
+          <div className="command-stat-box">
+            <span className="stat-label">VAULT DOSSIERS</span>
+            <span className="stat-value">{incidents.length}</span>
+          </div>
+          <div className="command-stat-box">
+            <span className="stat-label">ENROLLED VOICES</span>
+            <span className="stat-value">{contacts.length}</span>
           </div>
         </div>
       </div>
@@ -143,25 +155,27 @@ export default function GuardianOfflinePage() {
         {/* Trusted Contact Voice Enrollment */}
         <div className="guardian-subcard">
           <div className="subcard-header">
-            <h4>Trusted Voice Biometric Enrollment</h4>
-            <span className="subcard-tag">IndexedDB Encrypted</span>
+            <div>
+              <h4>Trusted Voice Biometric Profiles</h4>
+              <p className="subcard-hint">
+                Enrolled reference embeddings for real-time impersonation clone detection.
+              </p>
+            </div>
+            <span className="subcard-tag">LOCAL EMBEDDINGS</span>
           </div>
-          <p className="subcard-hint">
-            Enroll family members or executive authorization voices locally to detect targeted voice clone attacks.
-          </p>
 
           <form onSubmit={handleEnrollSubmit} className="enroll-form">
             <div className="input-group">
-              <label>Contact Display Name:</label>
+              <label>Profile Identifier / Label</label>
               <input
                 type="text"
                 value={newContactName}
                 onChange={(e) => setNewContactName(e.target.value)}
-                placeholder="e.g. Chief Financial Officer / Mother"
+                placeholder="e.g. Executive Officer / Family Member"
               />
             </div>
             <div className="input-group">
-              <label>Reference Audio Sample (16kHz WAV or MP3):</label>
+              <label>Reference Audio File (16kHz WAV or MP3)</label>
               <input
                 type="file"
                 accept="audio/*"
@@ -169,22 +183,25 @@ export default function GuardianOfflinePage() {
               />
             </div>
             <button type="submit" disabled={isEnrolling} className="enroll-submit-btn">
-              {isEnrolling ? 'Extracting Acoustic Vectors...' : 'Enroll Trusted Voice Profile'}
+              {isEnrolling ? 'EXTRACTING ACOUSTIC VECTORS...' : 'ENROLL VOICE PROFILE'}
             </button>
           </form>
 
           {/* Enrolled Contacts List */}
           <div className="enrolled-list">
-            <h5>Enrolled Profiles ({contacts.length}):</h5>
+            <div className="list-title-row">
+              <h5>Registered Biometric Profiles</h5>
+              <span className="count-pill">{contacts.length} ACTIVE</span>
+            </div>
             {contacts.length === 0 ? (
-              <span className="empty-hint">No contacts enrolled yet. Add a profile above to enable clone detection.</span>
+              <div className="empty-hint">No voice profiles enrolled. Add reference audio above to activate clone identification.</div>
             ) : (
               <ul>
                 {contacts.map(c => (
                   <li key={c.id}>
                     <div>
                       <strong>{c.displayName}</strong>
-                      <small>80-dim embedding • {c.sampleDurationSec}s sample</small>
+                      <small>80-band filterbank vector • {c.sampleDurationSec}s baseline</small>
                     </div>
                     <button onClick={() => handleDeleteContact(c.id)} className="delete-contact-btn">Remove</button>
                   </li>
@@ -197,19 +214,21 @@ export default function GuardianOfflinePage() {
         {/* Encrypted Offline Incident Vault */}
         <div className="guardian-subcard">
           <div className="subcard-header">
-            <h4>Encrypted Offline Incident Vault</h4>
+            <div>
+              <h4>Air-Gapped Incident Vault</h4>
+              <p className="subcard-hint">
+                AES-GCM-256 encrypted forensic dossiers stored on-device with SHA-256 hashes.
+              </p>
+            </div>
             <span className="subcard-tag">AES-GCM-256</span>
           </div>
-          <p className="subcard-hint">
-            Tamper-resistant local evidence store. Derived threat telemetry is encrypted with a device-bound key.
-          </p>
 
           <div className="vault-actions-bar">
             <button onClick={handleSyncWithCloud} disabled={isSyncing} className="sync-cloud-btn">
-              {isSyncing ? 'Synchronizing...' : '🔄 Sync Incidents to Central Vault'}
+              {isSyncing ? 'SYNCHRONIZING...' : 'SYNC WITH CENTRAL DATABASE'}
             </button>
             {incidents.length > 0 && (
-              <button onClick={handlePurgeVault} className="purge-vault-btn">Purge Vault</button>
+              <button onClick={handlePurgeVault} className="purge-vault-btn">PURGE LOGS</button>
             )}
           </div>
           {syncStatus && <div className="sync-status-message">{syncStatus}</div>}
@@ -218,7 +237,7 @@ export default function GuardianOfflinePage() {
           <div className="vault-incidents-list">
             {incidents.length === 0 ? (
               <div className="empty-vault-state">
-                <span>No high-risk incidents recorded in offline vault.</span>
+                <span>Zero elevated threats recorded. System operating securely.</span>
               </div>
             ) : (
               incidents.map(inc => (
@@ -234,18 +253,18 @@ export default function GuardianOfflinePage() {
                   </div>
 
                   <p className="incident-transcript">
-                    {inc.transcript || inc.summary || 'Acoustic deepfake indicators flagged without spoken transcript.'}
+                    {inc.transcript || inc.summary || 'Acoustic vocoder anomalies flagged without spoken transcript.'}
                   </p>
 
                   <div className="incident-card-footer">
                     <button onClick={() => openCertModal(inc)} className="cert-btn-hud" style={{ padding: '0.2rem 0.5rem', fontSize: '0.68rem' }}>
-                      📜 Section 65B Cert
+                      EVIDENCE 65B
                     </button>
                     <button onClick={() => exportDossier(inc)} className="export-dossier-btn">
-                      Export JSON
+                      EXPORT JSON
                     </button>
                     <button onClick={() => handleDeleteIncident(inc.id)} className="delete-inc-btn">
-                      Delete
+                      DELETE
                     </button>
                   </div>
                 </div>
