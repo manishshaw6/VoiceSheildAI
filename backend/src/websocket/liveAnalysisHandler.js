@@ -24,25 +24,34 @@ function liveRisk(session) {
   const speaker = session.speakerResult || null;
   const risk = calculateFusedRisk({ deepfakeResult: deepfake, threatRulesResult: rules, speakerResult: speaker });
   const elapsedSec = Number(((Date.now() - new Date(session.startedAt).getTime()) / 1000).toFixed(1));
-  const temporal = sessions.updateRisk(session.callId, risk.score, elapsedSec);
 
-  // Fast threat escalation: When high-severity fraud keywords or voice clone patterns are detected,
-  // ensure risk surges immediately without lag
-  const hasCriticalIndicators = rules.indicators.some(i =>
-    ['OTP_REQUEST', 'CREDENTIAL_REQUEST', 'REMOTE_ACCESS', 'PAYMENT_FRAUD'].includes(i.type) || i.weight >= 40
-  );
-  const hasVoiceThreat = (deepfake?.score != null && deepfake.score >= 0.70) || risk.cloneSuspicion;
+  // Determine if there is confirmed critical fraud evidence that warrants safety floor latching
+  const hasConfirmedCriticalAttack = rules.semanticEvents?.some(e =>
+    e.isAttack && ['CRITICAL', 'HIGH'].includes(e.severity) &&
+    ['COMMAND', 'THREAT'].includes(e.semantic_role)
+  ) || risk.cloneSuspicion || (risk.interactionDeltas && risk.interactionDeltas.length > 0 && risk.score >= 70);
 
-  if (hasCriticalIndicators || hasVoiceThreat || rules.score >= 40) {
-    const rawElevated = Math.max(risk.score, rules.score);
-    temporal.currentRisk = Math.max(temporal.currentRisk, rawElevated);
-    temporal.peakRisk = Math.max(temporal.peakRisk, temporal.currentRisk);
+  if (hasConfirmedCriticalAttack) {
+    session.confirmedFraudFloor = Math.max(session.confirmedFraudFloor || 0, Math.min(85, risk.score));
   }
 
-  risk.score = temporal.currentRisk;
+  const temporal = sessions.updateRisk(session.callId, risk.score, elapsedSec);
+
+  // Apply protective floor for confirmed attacks while allowing transient signals to decay
+  if (session.confirmedFraudFloor && session.confirmedFraudFloor > 0) {
+    temporal.currentRisk = Number(Math.max(session.confirmedFraudFloor, temporal.currentRisk).toFixed(2));
+    temporal.peakRisk = Number(Math.max(temporal.peakRisk, temporal.currentRisk).toFixed(2));
+  } else if (risk.score > 0) {
+    // Normal smoothed update with ceiling
+    temporal.currentRisk = Number(Math.min(96.00, Math.max(temporal.currentRisk, risk.score)).toFixed(2));
+    temporal.peakRisk = Number(Math.min(96.00, Math.max(temporal.peakRisk, temporal.currentRisk)).toFixed(2));
+  }
+
+  risk.score = Number(Math.min(96.00, temporal.currentRisk).toFixed(2));
   risk.level = temporal.currentRisk >= 80 ? 'CRITICAL' : temporal.currentRisk >= 60 ? 'HIGH' : temporal.currentRisk >= 30 ? 'SUSPICIOUS' : 'SAFE';
   risk.trend = temporal.trend;
-  return { rules, risk, temporal, elapsedSec, policy: evaluatePolicy(risk) };
+  const policy = evaluatePolicy(risk);
+  return { rules, risk, temporal, elapsedSec, policy };
 }
 
 export function setupLiveAnalysisWebSocket(wss) {
@@ -73,8 +82,9 @@ export function setupLiveAnalysisWebSocket(wss) {
         const fullBuffer = Buffer.concat(session.audioChunks);
         if (fullBuffer.length >= config.ws.minAudioBytes) {
           if (!session.deepfake) {
-            tempPath = path.join(config.tempDir, `live_${crypto.randomUUID()}.webm`);
-            await fs.writeFile(tempPath, fullBuffer);
+            const pcmBuffer = ensurePcmWav(fullBuffer);
+            tempPath = path.join(config.tempDir, `live_${crypto.randomUUID()}.wav`);
+            await fs.writeFile(tempPath, pcmBuffer);
             session.deepfake = await getIntelligenceProvider('deepfake').analyze(tempPath);
           }
           if (session.speakerProfile && !session.speakerResult) {
@@ -93,8 +103,12 @@ export function setupLiveAnalysisWebSocket(wss) {
           timestamp: update.elapsedSec, transcript: session.transcript, score: update.risk.score,
           riskLevel: update.risk.level, deepfakeProbability: session.deepfake?.score ?? null,
           indicators: update.rules.indicators, reasons: update.risk.reasons,
-          recommendedAction: update.risk.recommendedAction, confidence: update.risk.confidence,
-          trend: update.risk.trend, policy: update.policy, temporalRisk: update.temporal
+          recommendedAction: update.policy.recommendedAction || update.risk.recommendedAction, confidence: update.risk.confidence,
+          trend: update.risk.trend, policy: update.policy, temporalRisk: update.temporal,
+          trustScore: update.risk.trustScore, trustLevel: update.risk.trustLevel,
+          subScores: update.risk.subScores, evidenceCoverage: update.risk.evidenceCoverage,
+          evidenceContributions: update.risk.evidenceContributions,
+          interactionEffects: (update.risk.interactionDeltas || []).map(d => d.pattern)
         }});
       } catch (error) {
         logger.error('live.analysis_failed', { call_id: callId, error: error.message });
@@ -119,13 +133,28 @@ export function setupLiveAnalysisWebSocket(wss) {
         }
         const msg = JSON.parse(data.toString());
         if (msg.type === 'start') session.speakerProfile = msg.speakerId || null;
-        else if (msg.type === 'transcript_chunk' && typeof msg.text === 'string') {
+        else if (msg.type === 'transcript_update' && typeof msg.text === 'string') {
+          session.transcript = msg.text.slice(0, 5000).trim();
+          const update = liveRisk(session);
+          await eventBus.emit(DomainEvent.RISK_UPDATED, { callId, data: { timestamp: update.elapsedSec,
+            transcript: session.transcript, score: update.risk.score, riskLevel: update.risk.level,
+            indicators: update.rules.indicators, reasons: update.risk.reasons, trend: update.risk.trend,
+            policy: update.policy, temporalRisk: update.temporal,
+            trustScore: update.risk.trustScore, trustLevel: update.risk.trustLevel,
+            subScores: update.risk.subScores, evidenceCoverage: update.risk.evidenceCoverage,
+            evidenceContributions: update.risk.evidenceContributions,
+            interactionEffects: (update.risk.interactionDeltas || []).map(d => d.pattern) } });
+        } else if (msg.type === 'transcript_chunk' && typeof msg.text === 'string') {
           session.transcript = `${session.transcript} ${msg.text.slice(0, 2000)}`.trim();
           const update = liveRisk(session);
           await eventBus.emit(DomainEvent.RISK_UPDATED, { callId, data: { timestamp: update.elapsedSec,
             transcript: session.transcript, score: update.risk.score, riskLevel: update.risk.level,
             indicators: update.rules.indicators, reasons: update.risk.reasons, trend: update.risk.trend,
-            policy: update.policy, temporalRisk: update.temporal } });
+            policy: update.policy, temporalRisk: update.temporal,
+            trustScore: update.risk.trustScore, trustLevel: update.risk.trustLevel,
+            subScores: update.risk.subScores, evidenceCoverage: update.risk.evidenceCoverage,
+            evidenceContributions: update.risk.evidenceContributions,
+            interactionEffects: (update.risk.interactionDeltas || []).map(d => d.pattern) } });
         } else if (msg.type === 'stop') await finish();
       } catch (error) {
         logger.warn('live.invalid_message', { call_id: callId, error: error.message });
@@ -164,8 +193,13 @@ export function setupLiveAnalysisWebSocket(wss) {
         }
       }
 
-      const storedScore = finalAnalysis?.risk?.score ?? update.risk.score;
-      const storedLevel = finalAnalysis?.risk?.level ?? update.risk.level;
+      const storedScore = Number(Math.min(96.00, Math.max(
+        finalAnalysis?.risk?.score ?? 0,
+        update.risk?.score ?? 0,
+        update.rules?.score ?? 0,
+        finalAnalysis?.final_score ?? 0
+      )).toFixed(2));
+      const storedLevel = storedScore >= 80 ? 'CRITICAL' : storedScore >= 60 ? 'HIGH' : storedScore >= 30 ? 'SUSPICIOUS' : 'SAFE';
       const storedTranscript = finalAnalysis?.transcription?.text || session.transcript || '';
       const storedDeepfake = finalAnalysis?.deepfake?.score != null
         ? Math.round(finalAnalysis.deepfake.score * 100)
@@ -176,26 +210,63 @@ export function setupLiveAnalysisWebSocket(wss) {
       const storedSpeaker = finalAnalysis?.speaker?.similarity != null
         ? Math.round(finalAnalysis.speaker.similarity * 100)
         : null;
-      const storedCategory = finalAnalysis?.context?.category || update.rules.indicators[0]?.label || 'Live Call';
-      const storedIndicators = JSON.stringify(finalAnalysis?.indicators || update.rules.indicators);
-      const storedRaw = JSON.stringify(finalAnalysis || { risk: update.risk, temporalRisk: update.temporal });
+      const storedCategory = finalAnalysis?.context?.category || update.rules.indicators[0]?.label || 'Live Call Security Intercept';
+      const allIndicators = [
+        ...(update.rules.indicators || []),
+        ...(finalAnalysis?.indicators || []).filter(fi => !update.rules.indicators.some(ri => ri.label === fi.label))
+      ];
+      const storedIndicators = JSON.stringify(allIndicators);
+
+      const completeLiveDossier = {
+        ...(finalAnalysis || {}),
+        analysisId: callId,
+        requestId: `req_${callId}`,
+        timestamp: new Date().toISOString(),
+        filename: 'live_call_recording.webm',
+        duration: finalAnalysis?.duration || update.elapsedSec,
+        final_score: storedScore,
+        risk_level: storedLevel,
+        threat_category: storedCategory,
+        transcript: storedTranscript,
+        transcription: { text: storedTranscript, available: true },
+        risk: {
+          ...(finalAnalysis?.risk || update.risk),
+          score: storedScore,
+          level: storedLevel,
+          confidence: update.risk.confidence,
+          evidenceContributions: update.risk.evidenceContributions || [],
+          reasons: update.risk.reasons || []
+        },
+        threatRules: update.rules,
+        indicators: allIndicators,
+        temporalRisk: update.temporal,
+        deepfake: session.deepfake || finalAnalysis?.deepfake || { available: false, score: null },
+        speaker: session.speakerResult || finalAnalysis?.speaker || { enrolled: Boolean(session.speakerProfile), similarity: null },
+        policy: finalAnalysis?.policy || update.policy,
+        forensic: {
+          sha256: crypto.createHash('sha256').update(fullBuffer.length > 0 ? fullBuffer : Buffer.from(storedTranscript)).digest('hex')
+        },
+        forensics: finalAnalysis?.forensics || extractJsForensics(new Float32Array(Math.max(16000, session.audioChunks.length * 500)), 16000)
+      };
+
+      const storedRaw = JSON.stringify(completeLiveDossier);
 
       await query.run(`INSERT INTO analyses (id, audio_filename, duration, transcript, deepfake_score,
         scam_score, speaker_score, final_score, risk_level, threat_category, indicators, raw_result)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [callId, 'live_recording.webm', finalAnalysis?.duration || update.elapsedSec,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [callId, 'live_recording.webm', completeLiveDossier.duration,
         storedTranscript, storedDeepfake, storedScam, storedSpeaker, storedScore, storedLevel, storedCategory,
         storedIndicators, storedRaw]);
 
       send('session_complete', {
         sessionId: callId,
-        duration: finalAnalysis?.duration || update.elapsedSec,
+        duration: completeLiveDossier.duration,
         finalScore: storedScore,
         finalLevel: storedLevel,
-        indicators: finalAnalysis?.indicators || update.rules.indicators,
+        indicators: allIndicators,
         temporalRisk: update.temporal,
-        analysis: finalAnalysis
+        analysis: completeLiveDossier
       });
-      eventBus.emit(DomainEvent.CALL_ENDED, { callId, data: { risk: finalAnalysis?.risk || update.risk } });
+      eventBus.emit(DomainEvent.CALL_ENDED, { callId, data: { risk: completeLiveDossier.risk } });
     }
 
     ws.on('close', () => {

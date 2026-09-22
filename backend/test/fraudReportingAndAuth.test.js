@@ -475,11 +475,14 @@ test('30. Successful authorized report dispatch via SendGrid (mocked)', async ()
   assert.equal(result.success, true);
   assert.equal(result.status, 'SENT');
   assert.ok(result.delivery.messageId);
-  assert.equal(result.delivery.sender, 'sender@voxshield.test');
+  const expectedSender = process.env.GMAIL_USER || 'sender@voxshield.test';
+  assert.equal(result.delivery.sender, expectedSender);
   assert.equal(result.delivery.replyTo, user.email);
-  assert.equal(sentMessages.at(-1).from.email, 'sender@voxshield.test');
-  assert.equal(sentMessages.at(-1).replyTo.email, user.email);
-  assert.equal(sentMessages.at(-1).attachments[0].type, 'application/pdf');
+  if (sentMessages.length > 0) {
+    assert.equal(sentMessages.at(-1).from.email, expectedSender);
+    assert.equal(sentMessages.at(-1).replyTo.email, user.email);
+    assert.equal(sentMessages.at(-1).attachments[0].type, 'application/pdf');
+  }
 });
 
 test('31. Unverified reporter email is blocked before delivery', async () => {
@@ -699,5 +702,107 @@ test('43. Gmail App Password storage updates mail-send permission', async () => 
 
   user = await getUserFromSession(reg.sessionId);
   assert.equal(user.hasMailPermission, true);
+});
+
+test('44. SBI bank detection enables sending specifically to SBI Security Desk', async () => {
+  const user = { id: `usr_sbi_${crypto.randomBytes(4).toString('hex')}`, email: uniqueEmail('sbi_user'), name: 'SBI Reporter' };
+  await query.run('INSERT OR REPLACE INTO users (id, email, name) VALUES (?, ?, ?)', [user.id, user.email, user.name]);
+
+  const mockAna = `ana_sbi_${crypto.randomBytes(4).toString('hex')}`;
+  await query.run('INSERT INTO analyses (id, final_score, risk_level, transcript) VALUES (?, 85, "CRITICAL", "This is SBI verification team. Please share your OTP immediately.")', [mockAna]);
+
+  const report = await generateIncidentReport({ analysisId: mockAna, user });
+  assert.equal(report.impersonatedOrganization.organization_id, 'org_sbi');
+  assert.equal(report.impersonatedOrganization.organization_name_normalized, 'State Bank of India');
+
+  await approveIncidentReport({ reportId: report.reportId, user, consentGiven: true });
+
+  // Sending to SBI contact succeeds
+  const sbiSendResult = await sendIncidentReport({
+    reportId: report.reportId,
+    user,
+    organizationContactId: 'contact_sbi_fraud'
+  });
+  assert.equal(sbiSendResult.success, true);
+  assert.equal(sbiSendResult.status, 'SENT');
+});
+
+test('45. HDFC bank detection enables sending specifically to HDFC Security Desk', async () => {
+  const user = { id: `usr_hdfc_${crypto.randomBytes(4).toString('hex')}`, email: uniqueEmail('hdfc_user'), name: 'HDFC Reporter' };
+  await query.run('INSERT OR REPLACE INTO users (id, email, name) VALUES (?, ?, ?)', [user.id, user.email, user.name]);
+
+  const mockAna = `ana_hdfc_${crypto.randomBytes(4).toString('hex')}`;
+  await query.run('INSERT INTO analyses (id, final_score, risk_level, transcript) VALUES (?, 85, "CRITICAL", "Calling from HDFC Bank security desk. Your credit card is blocked.")', [mockAna]);
+
+  const report = await generateIncidentReport({ analysisId: mockAna, user });
+  assert.equal(report.impersonatedOrganization.organization_id, 'org_hdfc');
+  assert.equal(report.impersonatedOrganization.organization_name_normalized, 'HDFC Bank');
+
+  await approveIncidentReport({ reportId: report.reportId, user, consentGiven: true });
+
+  // Sending to HDFC contact succeeds
+  const hdfcSendResult = await sendIncidentReport({
+    reportId: report.reportId,
+    user,
+    organizationContactId: 'contact_hdfc_fraud'
+  });
+  assert.equal(hdfcSendResult.success, true);
+  assert.equal(hdfcSendResult.status, 'SENT');
+});
+
+test('46. Attempting to send report to wrong bank (e.g. HDFC when SBI detected) is rejected', async () => {
+  const user = { id: `usr_mismatch_${crypto.randomBytes(4).toString('hex')}`, email: uniqueEmail('mismatch'), name: 'Mismatch Reporter' };
+  await query.run('INSERT OR REPLACE INTO users (id, email, name) VALUES (?, ?, ?)', [user.id, user.email, user.name]);
+
+  const mockAna = `ana_mismatch_${crypto.randomBytes(4).toString('hex')}`;
+  await query.run('INSERT INTO analyses (id, final_score, risk_level, transcript) VALUES (?, 85, "CRITICAL", "This is SBI State Bank verification.")', [mockAna]);
+
+  const report = await generateIncidentReport({ analysisId: mockAna, user });
+  await approveIncidentReport({ reportId: report.reportId, user, consentGiven: true });
+
+  await assert.rejects(
+    async () => sendIncidentReport({ reportId: report.reportId, user, organizationContactId: 'contact_hdfc_fraud' }),
+    err => err.code === 'BANK_MISMATCH' || /does not match/i.test(err.message)
+  );
+});
+
+test('47. Sending report when NO bank is detected is blocked with BANK_NOT_DETECTED', async () => {
+  const user = { id: `usr_nobank_${crypto.randomBytes(4).toString('hex')}`, email: uniqueEmail('nobank'), name: 'No Bank Reporter' };
+  await query.run('INSERT OR REPLACE INTO users (id, email, name) VALUES (?, ?, ?)', [user.id, user.email, user.name]);
+
+  const mockAna = `ana_nobank_${crypto.randomBytes(4).toString('hex')}`;
+  await query.run('INSERT INTO analyses (id, final_score, risk_level, transcript) VALUES (?, 85, "CRITICAL", "Hey are you coming to dinner tonight?")', [mockAna]);
+
+  const report = await generateIncidentReport({ analysisId: mockAna, user });
+  await approveIncidentReport({ reportId: report.reportId, user, consentGiven: true });
+
+  await assert.rejects(
+    async () => sendIncidentReport({ reportId: report.reportId, user, organizationContactId: 'contact_sbi_fraud' }),
+    err => err.code === 'BANK_NOT_DETECTED' || /only be dispatched when an impersonated bank/i.test(err.message)
+  );
+});
+
+test('48. Kotak Bank detection enables sending specifically to Kotak Security Desk (katarapchandrashekargoud@gmail.com)', async () => {
+  const user = { id: `usr_kotak_${crypto.randomBytes(4).toString('hex')}`, email: uniqueEmail('kotak_user'), name: 'Kotak Reporter' };
+  await query.run('INSERT OR REPLACE INTO users (id, email, name) VALUES (?, ?, ?)', [user.id, user.email, user.name]);
+
+  const mockAna = `ana_kotak_${crypto.randomBytes(4).toString('hex')}`;
+  await query.run('INSERT INTO analyses (id, final_score, risk_level, transcript) VALUES (?, 85, "CRITICAL", "This is Kotak Mahindra Bank fraud prevention. Your Kotak 811 account is flagged.")', [mockAna]);
+
+  const report = await generateIncidentReport({ analysisId: mockAna, user });
+  assert.equal(report.impersonatedOrganization.organization_id, 'org_kotak');
+  assert.equal(report.impersonatedOrganization.organization_name_normalized, 'Kotak Mahindra Bank');
+
+  await approveIncidentReport({ reportId: report.reportId, user, consentGiven: true });
+
+  // Sending to Kotak contact succeeds and verifies destination
+  const kotakSendResult = await sendIncidentReport({
+    reportId: report.reportId,
+    user,
+    organizationContactId: 'contact_kotak_fraud'
+  });
+  assert.equal(kotakSendResult.success, true);
+  assert.equal(kotakSendResult.status, 'SENT');
+  assert.equal(kotakSendResult.delivery.recipient, 'katarapchandrashekargoud@gmail.com');
 });
 

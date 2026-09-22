@@ -1,3 +1,6 @@
+import fs from 'fs/promises';
+import path from 'path';
+import crypto from 'crypto';
 import { RealityDefender } from '@realitydefender/realitydefender';
 import { config } from '../config/index.js';
 import { DeepfakeStatus, Provider } from '../core/constants.js';
@@ -5,6 +8,7 @@ import { ProviderBase } from '../integrations/interfaces.js';
 import { createDeepfakeEvidence } from '../schemas/evidence.js';
 import { createLogger } from '../core/logger.js';
 import { withRetries, withTimeout } from '../core/resilience.js';
+import { ensurePcmWav } from '../audio/preprocessor.js';
 
 const logger = createLogger({ component: 'deepfake_adapter', provider: Provider.REALITY_DEFENDER });
 
@@ -125,10 +129,24 @@ export class RealityDefenderAdapter extends ProviderBase {
       });
     }
 
+    let targetFilePath = filePath;
+    let cleanUpTemp = false;
     const started = performance.now();
     try {
+      if (typeof filePath === 'string' && (!filePath.toLowerCase().endsWith('.wav') || filePath.toLowerCase().endsWith('.webm'))) {
+        const fileBuf = await fs.readFile(filePath).catch(() => null);
+        if (fileBuf && fileBuf.toString('utf8', 0, 4) !== 'RIFF') {
+          const wavBuf = ensurePcmWav(fileBuf);
+          if (wavBuf && wavBuf.toString('utf8', 0, 4) === 'RIFF') {
+            targetFilePath = path.join(config.tempDir, `rd_${crypto.randomUUID()}.wav`);
+            await fs.writeFile(targetFilePath, wavBuf);
+            cleanUpTemp = true;
+          }
+        }
+      }
+
       const result = await withRetries(
-        () => withTimeout(() => this.client.detect({ filePath }), config.timeouts.realityDefender, 'Reality Defender request'),
+        () => withTimeout(() => this.client.detect({ filePath: targetFilePath }), config.timeouts.realityDefender, 'Reality Defender request'),
         { retries: config.retry.maxRetries, delayMs: config.retry.retryDelayMs }
       );
       const latencyMs = Math.round(performance.now() - started);
@@ -154,6 +172,10 @@ export class RealityDefenderAdapter extends ProviderBase {
         confidence: null,
         error: error.message
       });
+    } finally {
+      if (cleanUpTemp && targetFilePath) {
+        await fs.unlink(targetFilePath).catch(() => {});
+      }
     }
   }
 

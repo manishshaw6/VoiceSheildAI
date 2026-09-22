@@ -325,6 +325,19 @@ export async function sendIncidentReport({ reportId, user, organizationContactId
 
   // Gate 7 & 8: Organization contact is verified and enabled in trusted directory
   const contact = await resolveVerifiedReportingContact(organizationContactId);
+  const detectedOrgId = reportPayload?.impersonatedOrganization?.organization_id;
+  const detectedOrgDetected = reportPayload?.impersonatedOrganization?.organization_detected;
+
+  // Strict Gate: Disallow dispatching to banks/entities not detected in the interaction evidence
+  if (contact.organizationId !== 'org_demo') {
+    if (!detectedOrgDetected || !detectedOrgId) {
+      throw new ApiError('BANK_NOT_DETECTED', 'Incident reports can only be dispatched when an impersonated bank (such as SBI, HDFC, or Kotak Bank) is detected in the interaction.', 400);
+    }
+    if (contact.organizationId !== detectedOrgId) {
+      throw new ApiError('BANK_MISMATCH', `Selected reporting destination (${contact.organizationName}) does not match the detected bank/entity (${reportPayload.impersonatedOrganization.organization_name_normalized || 'Unknown'}).`, 400);
+    }
+  }
+
   const idempotencyKey = `idemp_${reportId}_${contact.id}_${user.id}`;
 
   // Gate 10: Atomic state transition from APPROVED to SENDING

@@ -23,8 +23,12 @@ import {
   getReportStatus
 } from '../controllers/reportController.js';
 import { requireAuth } from '../middleware/authMiddleware.js';
+import apiKeyRoutes from './apiKeyRoutes.js';
 
 const router = Router();
+
+// API Key Management & Developer Layer
+router.use('/api-keys', apiKeyRoutes);
 
 // Health Check
 router.get('/health', getHealth);

@@ -14,14 +14,33 @@ export const KNOWN_ORGANIZATIONS = [
     normalized_name: 'State Bank of India',
     type: 'BANK',
     domain: 'sbi.co.in',
-    aliases: ['sbi', 'state bank of india', 'state bank', 'sbi bank', 'state bank group']
+    aliases: [
+      'sbi', 'state bank of india', 'state bank', 'sbi bank', 'state bank group',
+      'sbi card', 'sbi credit card', 'yono sbi', 'yono', 'sbi yono', 'sbi branch',
+      'sbi customer care', 'sbi security', 'sbi netbanking', 'sbi quick', 'state bank of hyderabad'
+    ]
   },
   {
     id: 'org_hdfc',
     normalized_name: 'HDFC Bank',
     type: 'BANK',
     domain: 'hdfcbank.com',
-    aliases: ['hdfc', 'hdfc bank', 'hdfc customer care', 'hdfc security']
+    aliases: [
+      'hdfc', 'hdfc bank', 'hdfc customer care', 'hdfc security', 'hdfc card',
+      'hdfc credit card', 'hdfc bank ltd', 'hdfc netbanking', 'hdfc branch',
+      'hdfc life', 'hdfc ergo', 'hdfc security desk'
+    ]
+  },
+  {
+    id: 'org_kotak',
+    normalized_name: 'Kotak Mahindra Bank',
+    type: 'BANK',
+    domain: 'kotak.com',
+    aliases: [
+      'kotak', 'kotak mahindra', 'kotak mahindra bank', 'kotak bank', 'kotak 811',
+      '811 kotak', 'kotak customer care', 'kotak security', 'kotak netbanking',
+      'kotak credit card', 'kotak debit card', 'कोटक', 'కోటక్'
+    ]
   },
   {
     id: 'org_icici',
@@ -126,6 +145,8 @@ export function extractOrganizationIntelligence({ text = '', conversationIntelli
       impersonation_status: 'NONE', // NONE | ORGANIZATION_MENTION | ORGANIZATION_IDENTITY_CLAIM | LIKELY_ORGANIZATION_IMPERSONATION
       claimed_role: null,
       confidence: 0,
+      is_supported_bank: false,
+      detected_banks: [],
       evidence: []
     };
   }
@@ -205,6 +226,8 @@ export function extractOrganizationIntelligence({ text = '', conversationIntelli
       impersonation_status: 'NONE',
       claimed_role: null,
       confidence: 0,
+      is_supported_bank: false,
+      detected_banks: [],
       evidence: []
     };
   }
@@ -238,6 +261,29 @@ export function extractOrganizationIntelligence({ text = '', conversationIntelli
     }
   }
 
+  // Identify all supported banks present in the text (SBI / HDFC / Kotak)
+  const detectedBanks = [];
+  const lowerText = cleanText.toLowerCase();
+  for (const org of KNOWN_ORGANIZATIONS) {
+    if (org.id === 'org_sbi' || org.id === 'org_hdfc' || org.id === 'org_kotak') {
+      for (const alias of org.aliases) {
+        const regex = new RegExp(`\\b${alias}\\b`, 'i');
+        if (regex.test(lowerText) || (matchedOrg && matchedOrg.id === org.id)) {
+          if (!detectedBanks.some(b => b.id === org.id)) {
+            detectedBanks.push({
+              id: org.id,
+              name: org.normalized_name,
+              code: org.id === 'org_sbi' ? 'SBI' : org.id === 'org_hdfc' ? 'HDFC' : 'KOTAK'
+            });
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  const isSupportedBank = matchedOrg.id === 'org_sbi' || matchedOrg.id === 'org_hdfc' || matchedOrg.id === 'org_kotak' || detectedBanks.length > 0;
+
   return {
     organization_detected: true,
     organization_id: matchedOrg.id,
@@ -249,6 +295,8 @@ export function extractOrganizationIntelligence({ text = '', conversationIntelli
     impersonation_status: impersonationStatus,
     claimed_role: claimedRole || (isClaim ? 'representative' : null),
     confidence: Number(confidence.toFixed(2)),
+    is_supported_bank: isSupportedBank,
+    detected_banks: detectedBanks,
     evidence: claimEvidence ? [{ text: claimEvidence, type: impersonationStatus }] : []
   };
 }

@@ -8,6 +8,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 export default function VoiceForensicsWorkstation({ analysis }) {
   const [selectedTime, setSelectedTime] = useState(null);
   const [hoveredEvent, setHoveredEvent] = useState(null);
+  const [hoveredVectorId, setHoveredVectorId] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [activeTab, setActiveTab] = useState('acoustic'); // 'acoustic' | 'prosody' | 'spectral'
   const [trustHover, setTrustHover] = useState(null);
@@ -85,7 +86,7 @@ export default function VoiceForensicsWorkstation({ analysis }) {
     let speechImpact = "Normal vocal fold resonance & speech structure";
     let impactSeverity = "CLEAR";
     if (activeSegment && activeSegment.flagged) {
-      speechImpact = `⚠️ SOC FLAG: "${activeSegment.indicators?.[0] || 'Threat Marker'}" spoken at ${t.toFixed(1)}s`;
+      speechImpact = `[SOC FLAG] Threat Marker: "${activeSegment.indicators?.[0] || 'Threat Marker'}" spoken at ${t.toFixed(1)}s`;
       impactSeverity = "CRITICAL";
     } else if (currentPitch && (currentPitch < 70 || currentPitch > 340)) {
       speechImpact = `Anomalous F0 Pitch Spike (${Math.round(currentPitch)} Hz) at ${t.toFixed(1)}s — Outside normal speech range`;
@@ -290,56 +291,128 @@ export default function VoiceForensicsWorkstation({ analysis }) {
   }, [mfcc]);
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SYNCHRONIZED FORENSIC EVENTS
+  // SYNCHRONIZED FORENSIC EVENTS & THREAT SIGNALS ON WAVEFORM
+  // ═══════════════════════════════════════════════════════════════════════
+  // SYNCHRONIZED FORENSIC EVENTS (Curated Top 2–3 Threat Flags)
   // ═══════════════════════════════════════════════════════════════════════
   const synchronizedEvents = useMemo(() => {
-    const list = [];
+    const dur = Math.max(0.1, duration);
+    const candidateThreats = [];
 
-    // Acoustic / Signal events
-    if (energy.speech_ratio > 0) {
-      list.push({ time: 0.2, category: 'ACOUSTIC', label: 'Speech Activity Detected', color: '#70c99f', desc: 'VAD confirmed vocal speech presence.' });
-    }
-    if (pitch.has_voiced_speech && pitch.median_pitch_hz) {
-      list.push({ time: 0.8, category: 'ACOUSTIC', label: `Prosody Locked (${Math.round(pitch.median_pitch_hz)} Hz)`, color: '#22c55e', desc: 'Sufficient vocal fold vibration detected.' });
-    }
-
-    // Identity / Authenticity events
-    if (deepfake.available && deepfake.score != null) {
-      const isFake = deepfake.score >= 0.70;
-      list.push({
-        time: Math.min(2.0, duration * 0.4),
-        category: 'AUTHENTICITY',
-        label: isFake ? 'Synthetic Vocal Artifacts' : 'Acoustic Authenticity Confirmed',
-        color: isFake ? '#ff3b5c' : '#70c99f',
-        desc: isFake ? `Confidence: ${Math.round(deepfake.score * 100)}% synthetic indicators.` : 'No synthetic vocoder traces identified.'
+    // Helper to collect candidate threats
+    const addCandidate = (time, label, category, severity, priority, desc) => {
+      candidateThreats.push({
+        time: Number(Math.max(0.2, Math.min(dur * 0.95, Number(time) || (dur * 0.5))).toFixed(1)),
+        category: category || 'THREAT_SIGNAL',
+        label,
+        severity: severity || 'HIGH',
+        priority: priority || 1,
+        color: severity === 'CRITICAL' ? '#ff3b5c' : severity === 'HIGH' ? '#ff8c00' : '#fbbf24',
+        desc: desc || 'Forensic threat indicator identified.'
       });
-    }
+    };
 
-    if (speaker.enrolled && speaker.similarity != null) {
-      list.push({
-        time: Math.min(3.5, duration * 0.6),
-        category: 'IDENTITY',
-        label: speaker.match ? 'Enrolled Speaker Matched' : 'Speaker Identity Mismatch',
-        color: speaker.match ? '#70c99f' : '#ff8c00',
-        desc: `ECAPA Cosine Similarity: ${(speaker.similarity).toFixed(3)} (Threshold: ${speaker.threshold || 0.75})`
-      });
-    }
+    // 1. Primary Rule Engine & Detected Indicators (e.g. Bank Details, Credentials, OTP, Payment/Transfer)
+    const indicators = [
+      ...(analysis?.indicators || []),
+      ...(analysis?.threatRules?.indicators || [])
+    ];
 
-    // Conversation / Intent events from transcript timeline
-    (timeline || []).forEach((item) => {
-      if (item.flagged) {
-        list.push({
-          time: item.start || 1.0,
-          category: 'BEHAVIOR',
-          label: item.indicators?.[0] || 'High-Risk Trigger Phrase',
-          color: item.risk >= 70 ? '#ff3b5c' : '#ff8c00',
-          desc: item.text ? `"${item.text.slice(0, 60)}..."` : 'Threat marker detected.'
-        });
+    indicators.forEach((ind, i) => {
+      let foundTime = null;
+      if (timeline && timeline.length > 0 && ind.matchedTerm) {
+        const cleanTerm = String(ind.matchedTerm).toLowerCase();
+        const matchedSeg = timeline.find(seg => seg.text && String(seg.text).toLowerCase().includes(cleanTerm));
+        if (matchedSeg) foundTime = matchedSeg.start;
       }
+      if (foundTime === null) {
+        foundTime = dur * (0.25 + (i * 0.28));
+      }
+
+      const isCrit = ind.severity === 'CRITICAL' ||
+        ind.type === 'OTP_REQUEST' ||
+        ind.type === 'BANK_DETAILS_REQUEST' ||
+        ind.type === 'CREDENTIAL_REQUEST' ||
+        ind.type === 'REMOTE_ACCESS' ||
+        ind.type === 'SENSITIVE_INFO_REQUEST';
+
+      addCandidate(
+        foundTime,
+        ind.label || ind.type,
+        'BEHAVIOR',
+        isCrit ? 'CRITICAL' : 'HIGH',
+        isCrit ? 10 : 7,
+        ind.evidence ? `Term: "${ind.evidence}"` : 'Detected threat pattern'
+      );
     });
 
-    return list.sort((a, b) => a.time - b.time);
-  }, [energy, pitch, deepfake, speaker, timeline, duration]);
+    // 2. Synthetic Deepfake & Speaker Clone Detections
+    if (deepfake.available && deepfake.score != null && deepfake.score >= 0.70) {
+      addCandidate(
+        dur * 0.35,
+        'Synthetic Speech Detected',
+        'AUTHENTICITY',
+        'CRITICAL',
+        9,
+        `Synthetic probability: ${Math.round(deepfake.score * 100)}%`
+      );
+    }
+
+    if (speaker.enrolled && speaker.similarity != null && !speaker.match) {
+      addCandidate(
+        dur * 0.65,
+        'Speaker Identity Mismatch',
+        'IDENTITY',
+        'HIGH',
+        8,
+        `Similarity ${(speaker.similarity).toFixed(2)} below threshold`
+      );
+    }
+
+    // 3. Fallback to flagged timeline segments if no indicators
+    if (candidateThreats.length === 0 && Array.isArray(timeline)) {
+      timeline.filter(t => t.flagged).forEach((t, i) => {
+        addCandidate(
+          t.start || (dur * 0.3 * (i + 1)),
+          t.indicators?.[0] || 'High-Risk Trigger Phrase',
+          'BEHAVIOR',
+          t.risk >= 70 ? 'CRITICAL' : 'HIGH',
+          5,
+          t.text ? `"${t.text.slice(0, 50)}..."` : 'Threat marker detected.'
+        );
+      });
+    }
+
+    // Deduplicate by similar label or close timestamps (< 0.7s apart)
+    const uniqueThreats = [];
+    candidateThreats
+      .sort((a, b) => b.priority - a.priority)
+      .forEach(c => {
+        const isDuplicate = uniqueThreats.some(u =>
+          u.label.toLowerCase() === c.label.toLowerCase() ||
+          Math.abs(u.time - c.time) < 0.7
+        );
+        if (!isDuplicate) {
+          uniqueThreats.push(c);
+        }
+      });
+
+    // Curate strictly to top 2–3 high-priority flags
+    const curatedFlags = uniqueThreats.slice(0, 3).sort((a, b) => a.time - b.time);
+
+    // If completely clean (0 threats), show 1 subtle acoustic confirmation flag
+    if (curatedFlags.length === 0 && energy.speech_ratio > 0) {
+      curatedFlags.push({
+        time: Number((dur * 0.3).toFixed(1)),
+        category: 'ACOUSTIC',
+        label: 'Speech Verified Authentic',
+        color: '#70c99f',
+        desc: 'Natural acoustic structure with no threat markers.'
+      });
+    }
+
+    return curatedFlags;
+  }, [energy, pitch, deepfake, speaker, timeline, duration, analysis]);
 
   const maxRms = Math.max(...(energy.values || [0.1]), 0.05);
 
@@ -931,9 +1004,13 @@ export default function VoiceForensicsWorkstation({ analysis }) {
               desc: 'Likelihood the voice was generated by AI/TTS/vocoder synthesis',
               value: deepfakeScore != null ? deepfakeScore : (spectralFlatness != null ? Math.min(0.95, spectralFlatness * 1.4) : 0.15),
               evidence: deepfakeScore != null
-                ? `Reality Defender ML confidence: ${(deepfakeScore * 100).toFixed(1)}%`
-                : `Estimated from spectral flatness: ${(spectralFlatness || 0).toFixed(3)}`,
-              icon: '⚡'
+                ? `Model: ${(deepfakeScore * 100).toFixed(0)}%`
+                : `Flatness: ${(spectralFlatness || 0).toFixed(3)}`,
+              icon: (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2v20M17 5v14M7 9v6M22 10v4M2 11v2"/>
+                </svg>
+              )
             },
             {
               id: 'MANIP_IDX',
@@ -947,8 +1024,14 @@ export default function VoiceForensicsWorkstation({ analysis }) {
                 if (centroidHz > 2800) score += 0.2;
                 return Math.min(1, score);
               })(),
-              evidence: `Spectral flatness: ${(spectralFlatness || 0).toFixed(3)} | Harmonic ratio: ${(harmonicRatio || 0).toFixed(3)} | Centroid: ${Math.round(centroidHz)} Hz`,
-              icon: '🔬'
+              evidence: `Harmonicity: ${(harmonicRatio || 0).toFixed(2)} · Centroid: ${Math.round(centroidHz)} Hz`,
+              icon: (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 8v8M8 12h8"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              )
             },
             {
               id: 'SPEC_ANOM',
@@ -965,8 +1048,14 @@ export default function VoiceForensicsWorkstation({ analysis }) {
                 if (spectralFlatness != null && (spectralFlatness < 0.05 || spectralFlatness > 0.7)) anomaly += 0.3;
                 return Math.min(1, anomaly);
               })(),
-              evidence: `Centroid: ${Math.round(centroidHz)} Hz (norm: 800–2500) | Bandwidth: ${Math.round(bandwidthHz)} Hz | Flatness: ${(spectralFlatness || 0).toFixed(3)}`,
-              icon: '📊'
+              evidence: `Bandwidth: ${Math.round(bandwidthHz)} Hz · Flatness: ${(spectralFlatness || 0).toFixed(3)}`,
+              icon: (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="20" x2="18" y2="10"/>
+                  <line x1="12" y1="20" x2="12" y2="4"/>
+                  <line x1="6" y1="20" x2="6" y2="14"/>
+                </svg>
+              )
             },
             {
               id: 'PROSODY',
@@ -986,9 +1075,13 @@ export default function VoiceForensicsWorkstation({ analysis }) {
                 return Math.min(1, score);
               })(),
               evidence: pitch.has_voiced_speech
-                ? `Median F0: ${Math.round(pitch.median_pitch_hz || 0)} Hz | Stability: ${(pitchStability || 0).toFixed(3)} | Range: ${pitch.pitch_range_hz || 0} Hz`
-                : 'Insufficient voiced speech for prosodic analysis',
-              icon: '🎭'
+                ? `F0: ${Math.round(pitch.median_pitch_hz || 0)} Hz · Stability: ${(pitchStability || 0).toFixed(2)}`
+                : 'Speech unvoiced',
+              icon: (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 12c4-8 8-8 12 0s8 8 12 0"/>
+                </svg>
+              )
             },
             {
               id: 'SIG_INT',
@@ -1001,8 +1094,12 @@ export default function VoiceForensicsWorkstation({ analysis }) {
                 if (energy.mean_rms && energy.mean_rms < 0.005) integrity += 0.3;
                 return integrity;
               })())),
-              evidence: `Peak amplitude: ${(signalStrength || 0).toFixed(3)} | Speech ratio: ${(speechRatio * 100).toFixed(1)}% | Mean RMS: ${(energy.mean_rms || 0).toFixed(4)}`,
-              icon: '🛡️',
+              evidence: `Speech: ${(speechRatio * 100).toFixed(0)}% · RMS: ${(energy.mean_rms || 0).toFixed(3)}`,
+              icon: (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+              ),
               invert: true // higher = safer for this one
             },
             {
@@ -1010,8 +1107,16 @@ export default function VoiceForensicsWorkstation({ analysis }) {
               label: 'Behavioral Threat Level',
               desc: 'Combined risk from conversation analysis, social engineering patterns, and urgency indicators',
               value: Math.min(1, riskScore / 100),
-              evidence: `VoxShield composite risk: ${riskScore}/100 | ${(risk.reasons || []).slice(0, 2).join('; ') || 'No behavioral flags detected'}`,
-              icon: '🎯'
+              evidence: `Risk Score: ${Number(riskScore).toFixed(1)}/100 · ${(risk.reasons?.[0]?.replace(/^Pattern detected:\s*/i, '').slice(0, 30)) || 'Normal baseline'}`,
+              icon: (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="22" y1="12" x2="18" y2="12"/>
+                  <line x1="6" y1="12" x2="2" y2="12"/>
+                  <line x1="12" y1="6" x2="12" y2="2"/>
+                  <line x1="12" y1="22" x2="12" y2="18"/>
+                </svg>
+              )
             }
           ];
 
@@ -1021,7 +1126,7 @@ export default function VoiceForensicsWorkstation({ analysis }) {
             if (v >= 0.75) return { label: 'CRITICAL', color: '#ff3b5c', bg: 'rgba(255,59,92,0.12)', border: 'rgba(255,59,92,0.35)' };
             if (v >= 0.50) return { label: 'HIGH', color: '#ff8c00', bg: 'rgba(255,140,0,0.10)', border: 'rgba(255,140,0,0.30)' };
             if (v >= 0.30) return { label: 'ELEVATED', color: '#fbbf24', bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.25)' };
-            if (v >= 0.10) return { label: 'LOW', color: '#70c99f', bg: 'rgba(112,201,159,0.08)', border: 'rgba(112,201,159,0.25)' };
+            if (v >= 0.10) return { label: 'LOW', color: '#00e5a3', bg: 'rgba(0,229,163,0.08)', border: 'rgba(0,229,163,0.25)' };
             return { label: 'CLEAR', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', border: 'rgba(34,197,94,0.25)' };
           };
 
@@ -1035,107 +1140,244 @@ export default function VoiceForensicsWorkstation({ analysis }) {
             if (v >= 0.75) return 'linear-gradient(90deg, #ff3b5c, #ff6b81)';
             if (v >= 0.50) return 'linear-gradient(90deg, #ff8c00, #ffad42)';
             if (v >= 0.30) return 'linear-gradient(90deg, #fbbf24, #fcd34d)';
-            return 'linear-gradient(90deg, #22c55e, #70c99f)';
+            return 'linear-gradient(90deg, #22c55e, #00e5a3)';
           };
 
           return (
-            <div style={{ background: 'rgba(4, 9, 7, 0.9)', border: '1px solid rgba(112, 201, 159, 0.2)', borderRadius: '10px', padding: '16px' }}>
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(6, 14, 11, 0.96) 0%, rgba(2, 8, 5, 0.98) 100%)',
+              border: '1px solid rgba(0, 229, 163, 0.28)',
+              borderRadius: '10px',
+              padding: '16px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(0, 229, 163, 0.15)',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              overflow: 'hidden'
+            }}>
+              {/* Tactical Cyber Grid Background Effect */}
+              <div style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                backgroundImage: 'radial-gradient(circle at 50% 0%, rgba(0, 229, 163, 0.04) 0%, transparent 70%)',
+                pointerEvents: 'none'
+              }} />
+
+              {/* Tactical Corner Accents */}
+              <div style={{ position: 'absolute', top: '-1px', left: '-1px', width: '9px', height: '9px', borderTop: '2px solid #00e5a3', borderLeft: '2px solid #00e5a3', borderTopLeftRadius: '10px', pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', top: '-1px', right: '-1px', width: '9px', height: '9px', borderTop: '2px solid #00e5a3', borderRight: '2px solid #00e5a3', borderTopRightRadius: '10px', pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', bottom: '-1px', left: '-1px', width: '9px', height: '9px', borderBottom: '2px solid #00e5a3', borderLeft: '2px solid #00e5a3', borderBottomLeftRadius: '10px', pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', bottom: '-1px', right: '-1px', width: '9px', height: '9px', borderBottom: '2px solid #00e5a3', borderRight: '2px solid #00e5a3', borderBottomRightRadius: '10px', pointerEvents: 'none' }} />
+
               {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '12px',
+                flexWrap: 'wrap',
+                gap: '8px',
+                position: 'relative',
+                zIndex: 1
+              }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontWeight: 800, fontSize: '0.82rem', color: '#effbf3', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    VOICE THREAT INTELLIGENCE
-                  </span>
-                  <span
-                    title="Multi-vector voice security assessment combining deepfake detection, spectral analysis, prosodic patterns, and behavioral indicators to classify the threat level of the analyzed voice sample."
-                    style={{ cursor: 'help', color: '#70c99f', fontSize: '0.85rem' }}
-                  >
-                    ⓘ
-                  </span>
+                  <div style={{
+                    width: '6px',
+                    height: '14px',
+                    background: '#00e5a3',
+                    borderRadius: '1px',
+                    boxShadow: '0 0 8px #00e5a3'
+                  }} />
+                  <div>
+                    <div style={{ fontSize: '0.58rem', color: '#00e5a3', fontFamily: 'monospace', letterSpacing: '0.12em', textTransform: 'uppercase', lineHeight: 1 }}>
+                      SEC_OPS // ACOUSTIC INTELLIGENCE
+                    </div>
+                    <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#effbf3', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '2px' }}>
+                      VOICE THREAT TELEMETRY
+                    </div>
+                  </div>
                 </div>
+
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: '6px',
                   background: overallClass.bg, border: `1px solid ${overallClass.border}`,
-                  padding: '3px 10px', borderRadius: '4px'
+                  padding: '4px 10px', borderRadius: '4px',
+                  boxShadow: `0 0 12px ${overallClass.color}25`
                 }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: overallClass.color, boxShadow: `0 0 6px ${overallClass.color}` }} />
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: overallClass.color, letterSpacing: '0.06em' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: overallClass.color, boxShadow: `0 0 8px ${overallClass.color}` }} />
+                  <span style={{ fontSize: '0.70rem', fontWeight: 800, color: overallClass.color, letterSpacing: '0.08em', fontFamily: 'monospace' }}>
                     {overallClass.label}
                   </span>
                 </div>
               </div>
 
-              {/* Threat Indicator Rows */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                {threatIndicators.map((t) => {
+              {/* Threat Indicator Grid / Rows */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+                gap: '8px',
+                marginBottom: '10px',
+                position: 'relative',
+                zIndex: 1
+              }}>
+                {threatIndicators.map((t, idx) => {
                   const cls = getClassification(t.value, t.invert);
-                  const displayVal = t.invert ? t.value : t.value;
+                  const displayPct = Math.round(t.value * 100);
                   const barVal = t.invert ? (1 - t.value) : t.value;
+                  const isHovered = hoveredVectorId === t.id;
+
                   return (
-                    <div key={t.id} style={{
-                      background: 'rgba(0,0,0,0.25)',
-                      border: '1px solid rgba(255,255,255,0.04)',
-                      borderRadius: '5px',
-                      padding: '7px 10px',
-                      transition: 'all 0.2s ease'
-                    }}>
-                      {/* Row 1: Label + Classification + Value */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '0.72rem', flexShrink: 0 }}>{t.icon}</span>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#dce8e1', flex: 1 }}>
-                          {t.label}
-                        </span>
-                        <span style={{
-                          fontSize: '0.58rem', fontWeight: 800, padding: '1px 6px', borderRadius: '2px',
-                          background: cls.bg, color: cls.color, border: `1px solid ${cls.border}`,
-                          letterSpacing: '0.05em'
-                        }}>
-                          {t.invert ? getClassification(1 - t.value).label : cls.label}
-                        </span>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: cls.color, width: '36px', textAlign: 'right' }}>
-                          {t.invert ? `${(t.value * 100).toFixed(0)}%` : `${(t.value * 100).toFixed(0)}%`}
-                        </span>
+                    <div
+                      key={t.id}
+                      onMouseEnter={() => setHoveredVectorId(t.id)}
+                      onMouseLeave={() => setHoveredVectorId(null)}
+                      style={{
+                        background: isHovered
+                          ? 'linear-gradient(135deg, rgba(14, 28, 22, 0.95) 0%, rgba(8, 18, 14, 0.98) 100%)'
+                          : 'linear-gradient(135deg, rgba(8, 18, 14, 0.85) 0%, rgba(4, 10, 7, 0.92) 100%)',
+                        border: isHovered
+                          ? `1px solid ${cls.color}`
+                          : '1px solid rgba(0, 229, 163, 0.12)',
+                        borderLeft: `3px solid ${cls.color}`,
+                        borderRadius: '6px',
+                        padding: '9px 11px',
+                        boxShadow: isHovered
+                          ? `0 6px 20px ${cls.color}28, inset 0 0 14px ${cls.color}15`
+                          : `inset 0 0 10px ${cls.color}08`,
+                        transform: isHovered ? 'translateY(-2px)' : 'translateY(0)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        cursor: 'default',
+                        transition: 'all 0.22s cubic-bezier(0.16, 1, 0.3, 1)'
+                      }}
+                    >
+                      {/* Row 1: Vector Index + Icon + Label + Badge + Numeric Readout */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                          <span style={{
+                            fontSize: '0.55rem',
+                            fontFamily: 'monospace',
+                            color: isHovered ? '#00e5a3' : '#70c99f',
+                            background: 'rgba(0, 229, 163, 0.08)',
+                            padding: '1px 4px',
+                            borderRadius: '2px',
+                            flexShrink: 0,
+                            fontWeight: 700
+                          }}>
+                            0{idx + 1}
+                          </span>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: cls.color,
+                            flexShrink: 0,
+                            filter: isHovered ? `drop-shadow(0 0 4px ${cls.color})` : 'none',
+                            transition: 'filter 0.2s ease'
+                          }}>
+                            {t.icon}
+                          </span>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            color: isHovered ? '#ffffff' : '#f0fdf4',
+                            letterSpacing: '0.02em',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }} title={t.label}>
+                            {t.label}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                          <span style={{
+                            fontSize: '0.58rem',
+                            fontWeight: 800,
+                            padding: '1px 6px',
+                            borderRadius: '3px',
+                            background: cls.bg,
+                            color: cls.color,
+                            border: `1px solid ${cls.border}`,
+                            letterSpacing: '0.05em',
+                            fontFamily: 'monospace'
+                          }}>
+                            {t.invert ? getClassification(1 - t.value).label : cls.label}
+                          </span>
+                          <span style={{
+                            fontSize: '0.78rem',
+                            fontWeight: 800,
+                            color: cls.color,
+                            minWidth: '38px',
+                            textAlign: 'right',
+                            fontFamily: 'monospace',
+                            textShadow: isHovered ? `0 0 8px ${cls.color}80` : 'none'
+                          }}>
+                            {displayPct}%
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Row 2: Gauge Bar */}
-                      <div style={{ height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '2px', overflow: 'hidden', marginBottom: '3px' }}>
+                      {/* Row 2: Cyber HUD Dual-Rail Laser Gauge Bar */}
+                      <div style={{
+                        height: '4px',
+                        background: 'rgba(255,255,255,0.06)',
+                        borderRadius: '2px',
+                        overflow: 'hidden',
+                        position: 'relative'
+                      }}>
                         <div style={{
-                          width: `${barVal * trustAnimProgress * 100}%`,
+                          width: `${Math.min(100, Math.max(0, barVal * trustAnimProgress * 100))}%`,
                           height: '100%',
                           background: getGaugeGradient(t.value, t.invert),
                           borderRadius: '2px',
-                          transition: 'width 0.8s ease-out',
-                          boxShadow: barVal > 0.5 ? `0 0 6px ${cls.color}40` : 'none'
+                          transition: 'width 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+                          boxShadow: barVal > 0.25 ? `0 0 10px ${cls.color}80` : 'none'
                         }} />
-                      </div>
-
-                      {/* Row 3: Evidence citation */}
-                      <div style={{ fontSize: '0.6rem', color: '#6b8a7c', fontFamily: 'monospace', lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {t.evidence}
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-              {/* Overall Threat Classification Footer */}
+              {/* Overall Threat Classification Tactical Footer */}
               <div style={{
-                marginTop: '10px', padding: '8px 12px', borderRadius: '6px',
-                background: overallClass.bg,
+                marginTop: '2px',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                background: 'rgba(0, 0, 0, 0.45)',
                 border: `1px solid ${overallClass.border}`,
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px'
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+                position: 'relative',
+                zIndex: 1
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '0.68rem', color: '#88a395', fontWeight: 700 }}>THREAT CLASSIFICATION:</span>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 800, color: overallClass.color, letterSpacing: '0.05em' }}>
+                  <span style={{ fontSize: '0.64rem', color: '#88a395', fontWeight: 700, fontFamily: 'monospace' }}>
+                    CLASSIFICATION:
+                  </span>
+                  <span style={{
+                    fontSize: '0.76rem',
+                    fontWeight: 800,
+                    color: overallClass.color,
+                    letterSpacing: '0.06em',
+                    fontFamily: 'monospace'
+                  }}>
                     {overallClass.label}
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.64rem', color: '#88a395' }}>
-                  <span>6 vectors analyzed</span>
-                  <span>•</span>
-                  <span style={{ color: overallClass.color, fontWeight: 700 }}>
-                    Composite: {(threatAvg * 100).toFixed(1)}%
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.64rem', color: '#88a395', fontFamily: 'monospace' }}>
+                  <span style={{ color: '#00e5a3' }}>6/6 VECTORS ARMED</span>
+                  <span>·</span>
+                  <span style={{ color: overallClass.color, fontWeight: 800 }}>
+                    COMPOSITE: {(threatAvg * 100).toFixed(1)}%
                   </span>
                 </div>
               </div>

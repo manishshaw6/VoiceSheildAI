@@ -34,8 +34,6 @@ export default function SecurityDashboard({ analysis, onExportReport }) {
   }
 
   const risk = analysis.risk || {};
-  const score = typeof risk.score === 'number' ? risk.score : (analysis.final_score || 0);
-  const level = risk.level || analysis.risk_level || 'LOW';
   const deepfake = analysis.deepfake || {};
   const scam = analysis.scam || {};
   const speaker = analysis.speaker || {};
@@ -47,11 +45,19 @@ export default function SecurityDashboard({ analysis, onExportReport }) {
   const convIntel = analysis.conversationIntelligence || null;
   const incidentGuidance = analysis.incidentGuidance || null;
   const complaintDraft = analysis.complaintDraft || null;
-
-  const isThreat = score >= 30 || (convIntel?.threat_assessment?.malicious_intent_detected);
-
   const threatRules = analysis.threatRules || {};
   const topIndicator = indicators.find(i => i.severity === 'CRITICAL' || i.severity === 'HIGH') || indicators[0];
+
+  const detectedScamScore = Number(Math.max(
+    convIntel?.threat_assessment?.threat_score != null ? (convIntel.threat_assessment.threat_score * 100) : 0,
+    threatRules.score ? Number(threatRules.score) : 0,
+    scam.scamProbability != null ? (scam.scamProbability * 100) : 0
+  ).toFixed(2));
+
+  const rawScore = typeof risk.score === 'number' ? risk.score : (typeof analysis.final_score === 'number' ? analysis.final_score : 0);
+  const score = Number(Math.min(96.00, Math.max(rawScore, detectedScamScore)).toFixed(2));
+  const level = score >= 80 ? 'CRITICAL' : score >= 60 ? 'HIGH' : score >= 30 ? 'SUSPICIOUS' : (risk.level || analysis.risk_level || 'SAFE');
+  const isThreat = score >= 30 || (convIntel?.threat_assessment?.malicious_intent_detected);
 
   const detectedScamCategory = (convIntel?.threat_assessment?.threat_category && 
     convIntel.threat_assessment.threat_category !== 'Normal Conversation' && 
@@ -60,17 +66,12 @@ export default function SecurityDashboard({ analysis, onExportReport }) {
       ? convIntel.threat_assessment.threat_category
       : (topIndicator?.label || threatRules.matchedCategories?.[0]?.replace(/_/g, ' ') || scam.category || (isThreat ? 'Suspicious Coercion / Payment Threat' : 'Normal Conversation'));
 
-  const detectedScamScore = Math.max(
-    convIntel?.threat_assessment?.threat_score != null ? Math.round(convIntel.threat_assessment.threat_score * 100) : 0,
-    threatRules.score ? Math.round(threatRules.score) : 0,
-    scam.scamProbability != null ? Math.round(scam.scamProbability * 100) : 0
-  );
-
   const detectedAttackStage = (convIntel?.threat_assessment?.attack_stage && convIntel.threat_assessment.attack_stage !== 'BENIGN')
     ? convIntel.threat_assessment.attack_stage
     : (detectedScamScore >= 70 ? 'EXPLOITATION' : detectedScamScore >= 35 ? 'PRESSURE ESCALATION' : isThreat ? 'INITIAL CONTACT' : 'BENIGN');
 
-  const primaryDriverText = reasons[0] || (topIndicator?.label ? `Triggered by: ${topIndicator.label}` : isThreat ? 'Multi-signal linguistic & acoustic threat detected' : 'Authentic speech baseline · No threat patterns detected');
+  const primaryReason = (reasons && reasons.length > 0 && reasons[0] !== 'Audio passed the quality gate.') ? reasons[0] : null;
+  const primaryDriverText = primaryReason || (topIndicator?.label ? `Pattern detected: ${topIndicator.label}` : (threatRules.indicators?.[0]?.label ? `Pattern detected: ${threatRules.indicators[0].label}` : (isThreat ? 'Multi-signal linguistic & acoustic threat detected' : 'Authentic speech baseline · No threat patterns detected')));
 
   const orgIntel = analysis.organization || (convIntel?.threat_assessment?.impersonated_organization ? {
     detected: true,
@@ -85,6 +86,19 @@ export default function SecurityDashboard({ analysis, onExportReport }) {
     suspiciousReasons: ['Unsolicited caller claiming to represent financial institution requesting urgent credential verification.'],
     evidenceQuotes: []
   } : null);
+
+  const transcriptToScan = `${analysis.transcript || ''} ${analysis.transcription?.text || ''} ${convIntel?.summary?.detailed_summary || ''}`;
+  const isSbiInAnalysis = analysis.organization?.organization_id === 'org_sbi' || /\b(sbi|state bank of india|state bank|yono)\b/i.test(transcriptToScan);
+  const isHdfcInAnalysis = analysis.organization?.organization_id === 'org_hdfc' || /\b(hdfc|hdfc bank)\b/i.test(transcriptToScan);
+  const isKotakInAnalysis = analysis.organization?.organization_id === 'org_kotak' || /\b(kotak|kotak mahindra|kotak bank|kotak 811)\b/i.test(transcriptToScan);
+
+  const detectedBankNames = [
+    isSbiInAnalysis && 'SBI',
+    isHdfcInAnalysis && 'HDFC Bank',
+    isKotakInAnalysis && 'Kotak Bank'
+  ].filter(Boolean);
+
+  const detectedBankLabel = detectedBankNames.join(' & ') || null;
 
   const reportingEligibility = analysis.reportingEligibility || (isThreat ? {
     status: score >= 75 ? 'STRONGLY_RECOMMENDED' : 'RECOMMENDED',
@@ -440,7 +454,7 @@ Please review this draft, verify all information, and file an official complaint
           <div className="kpi-label">OVERALL VOICESHIELD RISK SCORE</div>
           <div className="gauge-wrapper">
             <div className="gauge-number" style={{ color: levelColor }}>
-              {score}
+              {typeof score === 'number' ? score.toFixed(2) : (score || '0.00')}
             </div>
             <div className="gauge-max">/ 100</div>
           </div>
@@ -551,7 +565,7 @@ Please review this draft, verify all information, and file an official complaint
           <div className="card-metric-row">
             <span>Threat Score:</span>
             <strong>
-              {detectedScamScore}/100
+              {Number(detectedScamScore).toFixed(2)} / 100
             </strong>
           </div>
           <div className="kpi-subtext">Cyber-fraud linguistic intent & rule fusion</div>
@@ -1200,19 +1214,52 @@ Please review this draft, verify all information, and file an official complaint
 
       {/* Action Footer */}
       <div className="dashboard-footer-actions">
-        <button
-          className="report-download-btn"
-          style={{
-            background: 'linear-gradient(135deg, #ff3b5c, #e11d48)',
-            color: '#fff',
-            fontWeight: 800,
-            border: 'none',
-            boxShadow: '0 4px 14px rgba(255, 59, 92, 0.4)'
-          }}
-          onClick={() => setShowIncidentModal(true)}
-        >
-          Generate & Authorize Incident Report ↗
-        </button>
+        {detectedBankLabel ? (
+          <button
+            className="report-download-btn"
+            style={{
+              background: 'linear-gradient(135deg, #ff3b5c, #e11d48)',
+              color: '#fff',
+              fontWeight: 800,
+              border: 'none',
+              boxShadow: '0 4px 14px rgba(255, 59, 92, 0.4)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+            onClick={() => setShowIncidentModal(true)}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span>Send Incident Report to {detectedBankLabel}</span>
+            <span style={{
+              background: 'rgba(255, 255, 255, 0.25)',
+              padding: '2px 8px',
+              borderRadius: '10px',
+              fontSize: '0.72rem',
+              letterSpacing: '0.5px'
+            }}>
+              {detectedBankLabel} DETECTED
+            </span>
+          </button>
+        ) : (
+          <button
+            className="report-download-btn"
+            style={{
+              background: 'rgba(255, 255, 255, 0.08)',
+              color: '#94a3b8',
+              fontWeight: 700,
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+            onClick={() => setShowIncidentModal(true)}
+            title="Bank incident dispatch requires SBI, HDFC, or Kotak Bank detection in the call audio"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>Incident Report (SBI/HDFC/Kotak Only)</span>
+          </button>
+        )}
         <button
           className="report-download-btn"
           onClick={() => onExportReport && onExportReport(analysis.analysisId || analysis.id, 'json')}

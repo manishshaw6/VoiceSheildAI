@@ -15,6 +15,7 @@ import { ApiError, formatErrorResponse } from './schemas/errors.js';
 import { rateLimitMiddleware } from './middleware/rateLimitMiddleware.js';
 import { openApiDocument, docsHtml } from './api/openapi.js';
 import { attachUser } from './middleware/authMiddleware.js';
+import { optionalApiKey } from './middleware/apiKeyAuth.js';
 
 const logger = createLogger({ component: 'app' });
 const app = express();
@@ -39,7 +40,7 @@ app.use(cors({
   origin: corsOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'Cookie']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'Cookie', 'X-API-Key', 'x-api-key']
 }));
 
 // ─── Request ID & Logging ───────────────────────────────────────────────────
@@ -52,6 +53,7 @@ app.use(rateLimitMiddleware);
 
 app.use(cookieParser());
 app.use(attachUser);
+app.use(optionalApiKey);
 app.use(express.json({ limit: `${config.audio.maxUploadSizeMB}mb` }));
 app.use(express.urlencoded({ extended: true, limit: `${config.audio.maxUploadSizeMB}mb` }));
 

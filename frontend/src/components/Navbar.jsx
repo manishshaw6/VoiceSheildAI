@@ -4,7 +4,7 @@ import voxShieldMark from '../assets/voxshield-mark.svg';
 import { useAuth } from '../context/AuthContext';
 import AuthModal from './AuthModal';
 
-export default function Navbar() {
+export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
   const [health, setHealth] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -32,33 +32,36 @@ export default function Navbar() {
     <>
       <header className="site-header-pro">
         <div className="header-inner">
-          <Link to="/" className="brand-pro">
-            <div className="brand-icon-shield">
-              <img src={voxShieldMark} alt="" />
-            </div>
-            <span className="brand-title">VOXSHIELD <span className="brand-accent">AI</span></span>
-          </Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* ChatGPT-style Sidebar Toggle Button */}
+            <button
+              className="navbar-sidebar-toggle-btn"
+              onClick={onToggleSidebar}
+              title={isSidebarCollapsed ? "Open Sidebar (Ctrl + B)" : "Close Sidebar (Ctrl + B)"}
+              aria-label="Toggle Sidebar"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+                {isSidebarCollapsed ? (
+                  <polyline points="14 9 17 12 14 15" />
+                ) : (
+                  <polyline points="16 9 13 12 16 15" />
+                )}
+              </svg>
+            </button>
 
-          <nav className="nav-links-pro" aria-label="Primary Navigation">
-            <NavLink to="/" end className={({ isActive }) => `nav-item-pro ${isActive ? 'active' : ''}`}>
-              Overview
-            </NavLink>
-            <NavLink to="/scanner" className={({ isActive }) => `nav-item-pro ${isActive ? 'active' : ''}`}>
-              Threat Scanner
-            </NavLink>
-            <NavLink to="/live" className={({ isActive }) => `nav-item-pro ${isActive ? 'active' : ''}`}>
-              Live Call Shield
-            </NavLink>
-            <NavLink to="/speaker-guard" className={({ isActive }) => `nav-item-pro ${isActive ? 'active' : ''}`}>
-              Voice ID Guard
-            </NavLink>
-            <NavLink to="/history" className={({ isActive }) => `nav-item-pro ${isActive ? 'active' : ''}`}>
-              Audit Vault
-            </NavLink>
-            <NavLink to="/about" className={({ isActive }) => `nav-item-pro ${isActive ? 'active' : ''}`}>
-              Methodology
-            </NavLink>
-          </nav>
+            <Link to="/" className="brand-pro" title="VoxShield AI Operations">
+              <div className="brand-icon-shield">
+                <img src={voxShieldMark} alt="VoxShield" />
+              </div>
+              <span className="brand-title">VOXSHIELD <span className="brand-accent">AI</span></span>
+            </Link>
+
+            <div className="navbar-grid-tag">
+              <span>CYBER SENTINEL GRID</span>
+            </div>
+          </div>
 
           <div className="header-actions-pro" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
@@ -165,10 +168,6 @@ export default function Navbar() {
                 <span>Secure Sign In</span>
               </button>
             )}
-
-            <Link to="/scanner" className="cta-header-btn">
-              Scanner
-            </Link>
           </div>
         </div>
       </header>

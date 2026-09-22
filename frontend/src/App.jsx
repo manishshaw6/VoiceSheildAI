@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './App.css';
 import './voxshield.css';
 import Navbar from './components/Navbar';
+import Sidebar from './components/Sidebar';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
 import ScannerPage from './pages/ScannerPage';
@@ -10,12 +11,53 @@ import LiveShieldPage from './pages/LiveShieldPage';
 import SpeakerGuardPage from './pages/SpeakerGuardPage';
 import AuditVaultPage from './pages/AuditVaultPage';
 import AboutPage from './pages/AboutPage';
+import ApiKeyPortalPage from './pages/ApiKeyPortalPage';
 import { generateCyberCrimePdfReport } from './services/pdfReportGenerator';
 
 import { AuthProvider } from './context/AuthContext';
 import ReportVerificationPage from './pages/ReportVerificationPage';
 
 function App() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('voxshield_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    try {
+      const saved = localStorage.getItem('voxshield_sidebar_width');
+      return saved ? parseInt(saved, 10) : 260;
+    } catch {
+      return 260;
+    }
+  });
+
+  const [isResizing, setIsResizing] = useState(false);
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('voxshield_sidebar_collapsed', next.toString());
+      } catch (_) {}
+      return next;
+    });
+  };
+
+  // Keyboard shortcut Ctrl + B to toggle sidebar
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   const handleExportReport = async (analysisId, format = 'pdf') => {
     try {
       const res = await fetch(`/api/analysis/${analysisId}/report`);
@@ -133,23 +175,40 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <div className="page-shell-pro">
-          <Navbar />
+        <div className={`page-shell-pro ${sidebarCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded'} ${isResizing ? 'is-resizing' : ''}`}>
+          <Navbar
+            onToggleSidebar={toggleSidebar}
+            isSidebarCollapsed={sidebarCollapsed}
+          />
 
-          <main className="main-content-pro">
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/scanner" element={<ScannerPage onExportReport={handleExportReport} />} />
-              <Route path="/live" element={<LiveShieldPage onExportReport={handleExportReport} />} />
-              <Route path="/speaker-guard" element={<SpeakerGuardPage />} />
-              <Route path="/history" element={<AuditVaultPage onExportReport={handleExportReport} />} />
-              <Route path="/about" element={<AboutPage />} />
-              <Route path="/reports/:id/verify" element={<ReportVerificationPage />} />
-              <Route path="/reports/verify/:id" element={<ReportVerificationPage />} />
-            </Routes>
-          </main>
+          <div className="app-workspace-layout">
+            <Sidebar
+              isCollapsed={sidebarCollapsed}
+              onToggleCollapse={toggleSidebar}
+              width={sidebarWidth}
+              setWidth={setSidebarWidth}
+              isResizing={isResizing}
+              setIsResizing={setIsResizing}
+            />
 
-          <Footer />
+            <div className="app-main-viewport">
+              <main className="main-content-pro">
+                <Routes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/scanner" element={<ScannerPage onExportReport={handleExportReport} />} />
+                  <Route path="/live" element={<LiveShieldPage onExportReport={handleExportReport} />} />
+                  <Route path="/speaker-guard" element={<SpeakerGuardPage />} />
+                  <Route path="/history" element={<AuditVaultPage onExportReport={handleExportReport} />} />
+                  <Route path="/api-keys" element={<ApiKeyPortalPage />} />
+                  <Route path="/about" element={<AboutPage />} />
+                  <Route path="/reports/:id/verify" element={<ReportVerificationPage />} />
+                  <Route path="/reports/verify/:id" element={<ReportVerificationPage />} />
+                </Routes>
+              </main>
+
+              <Footer />
+            </div>
+          </div>
         </div>
       </BrowserRouter>
     </AuthProvider>

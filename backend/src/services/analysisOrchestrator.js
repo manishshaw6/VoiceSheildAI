@@ -140,7 +140,14 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
     explanation: speaker.match ? 'The voice matched the enrolled speaker.' : 'The voice did not match the enrolled speaker.' }));
 
   const fusionStart = performance.now();
-  const risk = calculateFusedRisk({ evidence, speakerResult: speaker, audioQuality });
+  const risk = calculateFusedRisk({
+    evidence,
+    deepfakeResult: deepfake,
+    scamResult: contextAnalysis.llm,
+    threatRulesResult: contextAnalysis.rules,
+    speakerResult: speaker,
+    audioQuality
+  });
   const policy = evaluatePolicy(risk);
   const explanation = explainAssessment(evidence, policy);
   risk.recommendedAction = explanation.recommendedResponse;

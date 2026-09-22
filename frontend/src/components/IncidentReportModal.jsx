@@ -16,6 +16,23 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
 
   const analysisId = analysis?.analysisId || analysis?.id;
 
+  // Detect which supported banks (SBI / HDFC / Kotak) were identified in the analysis / transcript
+  const orgDetectedId = reportData?.impersonatedOrganization?.organization_id || analysis?.organization?.organization_id;
+  const transcriptText = `${reportData?.transcriptExcerpt || ''} ${analysis?.transcript || ''} ${analysis?.transcription?.text || ''} ${analysis?.conversationIntelligence?.summary?.detailed_summary || ''}`;
+
+  const isSbiDetected = orgDetectedId === 'org_sbi' || /\b(sbi|state bank of india|state bank|yono)\b/i.test(transcriptText);
+  const isHdfcDetected = orgDetectedId === 'org_hdfc' || /\b(hdfc|hdfc bank)\b/i.test(transcriptText);
+  const isKotakDetected = orgDetectedId === 'org_kotak' || /\b(kotak|kotak mahindra|kotak bank|kotak 811)\b/i.test(transcriptText);
+  const isBankDetected = isSbiDetected || isHdfcDetected || isKotakDetected;
+
+  const detectedBankNamesList = [
+    isSbiDetected && 'State Bank of India (SBI)',
+    isHdfcDetected && 'HDFC Bank',
+    isKotakDetected && 'Kotak Mahindra Bank'
+  ].filter(Boolean);
+
+  const detectedBankName = detectedBankNamesList.join(' & ') || null;
+
   // Auto-generate report when modal opens if user is authenticated
   useEffect(() => {
     if (isOpen && authenticated && analysisId && !reportData && !loading) {
@@ -45,17 +62,32 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
             }
           }
         }
-        setContacts(allContacts);
 
-        const detectedOrgId = reportData?.impersonatedOrganization?.organization_id;
-        const matching = allContacts.find(c => c.orgId === detectedOrgId);
-        if (matching) {
-          setSelectedContactId(matching.id);
-        } else if (allContacts.length > 0) {
-          const hdfcMatch = allContacts.find(c => c.orgId === 'org_hdfc');
-          setSelectedContactId(hdfcMatch ? hdfcMatch.id : allContacts[0].id);
+        // STRICT FILTER: Only include contacts for detected banks (SBI, HDFC, and/or Kotak)
+        const filteredContacts = allContacts.filter(c => {
+          if (isSbiDetected && c.orgId === 'org_sbi') return true;
+          if (isHdfcDetected && c.orgId === 'org_hdfc') return true;
+          if (isKotakDetected && c.orgId === 'org_kotak') return true;
+          return false;
+        });
+
+        setContacts(filteredContacts);
+
+        if (filteredContacts.length > 0) {
+          if (isKotakDetected && !isSbiDetected && !isHdfcDetected) {
+            const kotakMatch = filteredContacts.find(c => c.orgId === 'org_kotak');
+            setSelectedContactId(kotakMatch ? kotakMatch.id : filteredContacts[0].id);
+          } else if (isSbiDetected && !isHdfcDetected && !isKotakDetected) {
+            const sbiMatch = filteredContacts.find(c => c.orgId === 'org_sbi');
+            setSelectedContactId(sbiMatch ? sbiMatch.id : filteredContacts[0].id);
+          } else if (isHdfcDetected && !isSbiDetected && !isKotakDetected) {
+            const hdfcMatch = filteredContacts.find(c => c.orgId === 'org_hdfc');
+            setSelectedContactId(hdfcMatch ? hdfcMatch.id : filteredContacts[0].id);
+          } else {
+            setSelectedContactId(filteredContacts[0].id);
+          }
         } else {
-          setSelectedContactId('contact_hdfc_fraud');
+          setSelectedContactId('');
         }
       } catch (err) {
         console.error('[IncidentReportModal] Failed to load directory contacts:', err);
@@ -64,7 +96,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
     if (reportData) {
       loadContacts();
     }
-  }, [reportData]);
+  }, [reportData, isSbiDetected, isHdfcDetected, isKotakDetected]);
 
   const handleGenerateReport = async () => {
     try {
@@ -229,7 +261,9 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
               borderRadius: '12px',
               border: '1px dashed rgba(0, 210, 255, 0.3)'
             }}>
-              <div style={{ fontSize: '2.4rem', marginBottom: '12px' }}>🛡️</div>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#00d2ff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </div>
               <h4 style={{ margin: '0 0 8px', color: '#ffffff' }}>Sign In to Generate & Authorize Report</h4>
               <p style={{ color: '#a0aec0', fontSize: '0.9rem', maxWidth: '480px', margin: '0 auto 20px' }}>
                 To prevent fraud complaints from appearing as anonymous spam, VoxShield sends digitally verified reports through its secure relay only after your explicit approval.
@@ -252,7 +286,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                   boxShadow: '0 4px 18px rgba(0, 210, 255, 0.35)'
                 }}
               >
-                <span>🛡️</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                 Sign In / Register Account
               </button>
             </div>
@@ -270,7 +304,9 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
               borderRadius: '12px',
               border: '1px solid #10b981'
             }}>
-              <div style={{ fontSize: '3rem', marginBottom: '10px' }}>✅</div>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </div>
               <h3 style={{ color: '#10b981', margin: '0 0 8px', fontWeight: 800, textTransform: 'uppercase' }}>
                 REPORT TRANSMITTED VIA VOXSHIELD SECURE RELAY
               </h3>
@@ -335,7 +371,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                 border: '1px solid #ff3b5c',
                 borderRadius: '10px',
                 padding: '16px 20px',
-                marginBottom: '20px'
+                marginBottom: '16px'
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                   <div>
@@ -343,7 +379,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                       Possible Organization Impersonation
                     </span>
                     <h4 style={{ margin: '2px 0 0', fontSize: '1.2rem', color: '#ffffff' }}>
-                      {org.organization_name_normalized || 'Unspecified Entity'}
+                      {org.organization_name_normalized || (isBankDetected ? detectedBankName : 'Unspecified Entity')}
                     </h4>
                   </div>
                   <div style={{ textAlign: 'right' }}>
@@ -374,6 +410,51 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                 )}
               </div>
 
+              {/* Bank Detection Enforcement Status Box */}
+              {isBankDetected ? (
+                <div style={{
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  border: '1px solid rgba(16, 185, 129, 0.5)',
+                  borderRadius: '8px',
+                  padding: '14px 18px',
+                  marginBottom: '18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+                  <div>
+                    <div style={{ color: '#10b981', fontWeight: 800, fontSize: '0.92rem', marginBottom: '2px' }}>
+                      VERIFIED BANK DETECTED: {detectedBankName}
+                    </div>
+                    <div style={{ color: '#cbd5e1', fontSize: '0.82rem', lineHeight: '1.4' }}>
+                      VoiceShieldAI detected specific evidence for <strong>{detectedBankName}</strong>. Verified reporting channel unlocked for official incident dispatch.
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.5)',
+                  borderRadius: '8px',
+                  padding: '14px 18px',
+                  marginBottom: '18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  <div>
+                    <div style={{ color: '#ef4444', fontWeight: 800, fontSize: '0.92rem', marginBottom: '2px' }}>
+                      NO SUPPORTED BANK (SBI / HDFC / KOTAK) DETECTED IN AUDIO
+                    </div>
+                    <div style={{ color: '#cbd5e1', fontSize: '0.82rem', lineHeight: '1.4' }}>
+                      Official bank dispatch is locked. Sending reports to banks is strictly permitted <strong>only when SBI, HDFC, or Kotak Bank</strong> is detected in the call interaction evidence.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Delivery Metadata Grid */}
               <div style={{
                 background: 'rgba(255, 255, 255, 0.03)',
@@ -386,38 +467,48 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                 <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '8px', alignItems: 'center' }}>
                   <div style={{ color: '#94a3b8', fontWeight: 600 }}>Reporting To:</div>
                   <div>
-                    <select
-                      value={selectedContactId}
-                      onChange={(e) => setSelectedContactId(e.target.value)}
-                      style={{
-                        background: '#1e293b',
-                        color: '#ffffff',
-                        border: '1px solid rgba(0, 210, 255, 0.4)',
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        fontSize: '0.85rem',
-                        width: '100%',
-                        maxWidth: '420px'
-                      }}
-                    >
-                      {contacts.length > 0 ? (
-                        contacts.map(c => (
+                    {isBankDetected && contacts.length > 0 ? (
+                      <select
+                        value={selectedContactId}
+                        onChange={(e) => setSelectedContactId(e.target.value)}
+                        style={{
+                          background: '#1e293b',
+                          color: '#ffffff',
+                          border: '1px solid rgba(0, 210, 255, 0.4)',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          fontSize: '0.85rem',
+                          width: '100%',
+                          maxWidth: '420px'
+                        }}
+                      >
+                        {contacts.map(c => (
                           <option key={c.id} value={c.id}>
                             {c.orgName} Security Desk ({c.destination})
                           </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="contact_hdfc_fraud">HDFC Bank Security Desk (jakkula.premsagar@gmail.com)</option>
-                          <option value="contact_sbi_fraud">State Bank of India Security Desk (jakkulaayushpreetham@gmail.com)</option>
-                        </>
-                      )}
-                    </select>
+                        ))}
+                      </select>
+                    ) : (
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: '1px dashed rgba(239, 68, 68, 0.4)',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '0.82rem',
+                        color: '#f87171'
+                      }}>
+                        [LOCKED] No Supported Bank (SBI/HDFC/Kotak) Detected — Destination Gated
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ color: '#94a3b8', fontWeight: 600 }}>Verified Contact:</div>
                   <div>
-                    <span style={{ color: '#10b981', fontWeight: 800 }}>✓ YES (RBI / Official Directory Staging)</span>
+                    {isBankDetected ? (
+                      <span style={{ color: '#10b981', fontWeight: 800 }}>VERIFIED (Official Banking Intelligence Directory)</span>
+                    ) : (
+                      <span style={{ color: '#94a3b8', fontWeight: 600 }}>N/A (No bank detected)</span>
+                    )}
                   </div>
 
                   <div style={{ color: '#94a3b8', fontWeight: 600 }}>Submitted By:</div>
@@ -481,21 +572,25 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
 
               {/* Explicit User Consent Checkbox */}
               <div style={{
-                background: 'rgba(0, 210, 255, 0.05)',
-                border: '1px solid rgba(0, 210, 255, 0.3)',
+                background: isBankDetected ? 'rgba(0, 210, 255, 0.05)' : 'rgba(255, 255, 255, 0.02)',
+                border: isBankDetected ? '1px solid rgba(0, 210, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
                 borderRadius: '8px',
                 padding: '14px 18px',
-                marginBottom: '20px'
+                marginBottom: '20px',
+                opacity: isBankDetected ? 1 : 0.55
               }}>
-                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: isBankDetected ? 'pointer' : 'not-allowed' }}>
                   <input
                     type="checkbox"
+                    disabled={!isBankDetected}
                     checked={consentChecked}
-                    onChange={(e) => setConsentChecked(e.target.checked)}
-                    style={{ marginTop: '3px', width: '18px', height: '18px', accentColor: '#00d2ff' }}
+                    onChange={(e) => isBankDetected && setConsentChecked(e.target.checked)}
+                    style={{ marginTop: '3px', width: '18px', height: '18px', accentColor: '#00d2ff', cursor: isBankDetected ? 'pointer' : 'not-allowed' }}
                   />
-                  <span style={{ fontSize: '0.88rem', color: '#ffffff', fontWeight: 600, lineHeight: '1.4' }}>
-                    I have reviewed this report and authorize VoxShield to dispatch it through the secure email relay to the verified reporting contact shown above, with Reply-To set to my verified email address ({user.email}).
+                  <span style={{ fontSize: '0.88rem', color: isBankDetected ? '#ffffff' : '#94a3b8', fontWeight: 600, lineHeight: '1.4' }}>
+                    {isBankDetected
+                      ? `I have reviewed this report and authorize VoxShield to dispatch it through the secure email relay to the verified ${detectedBankName} Security Desk, with Reply-To set to my verified email address (${user.email}).`
+                      : `Dispatch authorization locked: SBI, HDFC, or Kotak Bank must be detected in the call audio/transcript before sending to bank is enabled.`}
                   </span>
                 </label>
               </div>
@@ -539,23 +634,41 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                   </a>
                 </div>
 
-                <button
-                  onClick={handleSendReport}
-                  disabled={!consentChecked || sending}
-                  style={{
-                    background: consentChecked && !sending ? 'linear-gradient(135deg, #00d2ff, #0072ff)' : '#334155',
-                    color: consentChecked && !sending ? '#ffffff' : '#94a3b8',
-                    border: 'none',
-                    padding: '12px 28px',
-                    borderRadius: '8px',
-                    fontWeight: 800,
-                    fontSize: '0.92rem',
-                    cursor: consentChecked && !sending ? 'pointer' : 'not-allowed',
-                    boxShadow: consentChecked && !sending ? '0 4px 16px rgba(0, 210, 255, 0.4)' : 'none'
-                  }}
-                >
-                  {sending ? 'Sending via Secure Relay...' : 'Authorize & Send Report'}
-                </button>
+                {isBankDetected ? (
+                  <button
+                    onClick={handleSendReport}
+                    disabled={!consentChecked || sending}
+                    style={{
+                      background: consentChecked && !sending ? 'linear-gradient(135deg, #00d2ff, #0072ff)' : '#334155',
+                      color: consentChecked && !sending ? '#ffffff' : '#94a3b8',
+                      border: 'none',
+                      padding: '12px 28px',
+                      borderRadius: '8px',
+                      fontWeight: 800,
+                      fontSize: '0.92rem',
+                      cursor: consentChecked && !sending ? 'pointer' : 'not-allowed',
+                      boxShadow: consentChecked && !sending ? '0 4px 16px rgba(0, 210, 255, 0.4)' : 'none'
+                    }}
+                  >
+                    {sending ? 'Sending via Secure Relay...' : `Authorize & Send Report to ${detectedBankName}`}
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.06)',
+                      color: '#64748b',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      padding: '12px 24px',
+                      borderRadius: '8px',
+                      fontWeight: 700,
+                      fontSize: '0.88rem',
+                      cursor: 'not-allowed'
+                    }}
+                  >
+                    [LOCKED] Send Option Locked (No SBI/HDFC/Kotak Detected)
+                  </button>
+                )}
               </div>
             </div>
           ) : null}

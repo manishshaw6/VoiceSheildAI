@@ -38,6 +38,7 @@ export async function sendIncidentReportEmail({ reporter, organization, recipien
     }
 
     const gmailPass = process.env.GMAIL_APP_PASSWORD;
+    const smtpUser = process.env.GMAIL_USER || config.sendgrid.fromEmail || reporter.email;
     if (gmailPass && process.env.NODE_ENV !== 'test') {
         try {
             const nodemailer = await import('nodemailer');
@@ -46,12 +47,12 @@ export async function sendIncidentReportEmail({ reporter, organization, recipien
                 port: 465,
                 secure: true,
                 auth: {
-                    user: config.sendgrid.fromEmail || reporter.email,
+                    user: smtpUser,
                     pass: gmailPass.replace(/\s+/g, '')
                 }
             });
             const info = await transporter.sendMail({
-                from: `"${config.sendgrid.fromName || 'VoxShield Fraud Intelligence'}" <${config.sendgrid.fromEmail || reporter.email}>`,
+                from: `"${config.sendgrid.fromName || 'VoxShield Fraud Intelligence'}" <${smtpUser}>`,
                 to: recipient,
                 replyTo: reporter.email,
                 subject,
@@ -63,15 +64,12 @@ export async function sendIncidentReportEmail({ reporter, organization, recipien
                     contentType: 'application/pdf'
                 }]
             });
-            console.log(`[VoxShield] Live email dispatched via Gmail SMTP (Msg ID: ${info.messageId})`);
+            console.log(`[VoxShield] Live email dispatched via Gmail SMTP (Msg ID: ${info.messageId}) to ${recipient}`);
             return {
                 provider: 'gmail_smtp',
                 messageId: info.messageId,
-                senderEmail: config.sendgrid.fromEmail || reporter.email,
-                replyToEmail: reporter.email,
-                recipientEmail: recipient,
-                organization,
-                mode: 'live_gmail_smtp'
+                senderEmail: smtpUser,
+                replyToEmail: reporter.email
             };
         } catch (gmailErr) {
             console.warn('[VoxShield] Gmail SMTP attempt failed, trying SendGrid:', gmailErr.message);

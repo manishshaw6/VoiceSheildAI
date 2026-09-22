@@ -6,6 +6,8 @@ import { EvidenceCategory, Severity } from '../core/constants.js';
 const CATEGORY_MAP = Object.freeze({
   OTP_REQUEST: EvidenceCategory.OTP_REQUEST,
   CREDENTIAL_REQUEST: EvidenceCategory.CREDENTIAL_REQUEST,
+  BANK_DETAILS_REQUEST: EvidenceCategory.CREDENTIAL_REQUEST,
+  SENSITIVE_INFO_REQUEST: EvidenceCategory.CREDENTIAL_REQUEST,
   PAYMENT_FRAUD: EvidenceCategory.FINANCIAL_REQUEST,
   ACCOUNT_SUSPENSION_THREAT: EvidenceCategory.ACCOUNT_THREAT,
   AUTHORITY_IMPERSONATION: EvidenceCategory.IMPERSONATION,
@@ -16,10 +18,18 @@ const CATEGORY_MAP = Object.freeze({
   PRIZE_LOTTERY_LOAN: EvidenceCategory.PRIZE_LOTTERY
 });
 const VALUE_KEYS = Object.freeze({
-  OTP_REQUEST: 'otpRequest', CREDENTIAL_REQUEST: 'credentialRequest', PAYMENT_FRAUD: 'financialRequest',
-  ACCOUNT_SUSPENSION_THREAT: 'urgency', AUTHORITY_IMPERSONATION: 'impersonation',
-  URGENCY_COERCION: 'urgency', REMOTE_ACCESS: 'remoteAccess', SECRECY_REQUEST: 'secrecy',
-  TRUSTED_PERSON_IMPERSONATION: 'impersonation', PRIZE_LOTTERY_LOAN: 'financialRequest'
+  OTP_REQUEST: 'otpRequest',
+  CREDENTIAL_REQUEST: 'credentialRequest',
+  BANK_DETAILS_REQUEST: 'credentialRequest',
+  SENSITIVE_INFO_REQUEST: 'credentialRequest',
+  PAYMENT_FRAUD: 'financialRequest',
+  ACCOUNT_SUSPENSION_THREAT: 'urgency',
+  AUTHORITY_IMPERSONATION: 'impersonation',
+  URGENCY_COERCION: 'urgency',
+  REMOTE_ACCESS: 'remoteAccess',
+  SECRECY_REQUEST: 'secrecy',
+  TRUSTED_PERSON_IMPERSONATION: 'impersonation',
+  PRIZE_LOTTERY_LOAN: 'financialRequest'
 });
 
 function locateSegment(term, segments) {
@@ -39,7 +49,7 @@ export async function analyzeContext({ callId, text, segments = [] }) {
   for (const indicator of rules.indicators) {
     const category = CATEGORY_MAP[indicator.type];
     if (!category) continue;
-    const score = Math.min(1, indicator.weight / 25 + 0.2);
+    const score = Math.min(1, Math.max(0.10, indicator.weight / 100));
     values[VALUE_KEYS[indicator.type]] = Math.max(values[VALUE_KEYS[indicator.type]], score);
     const segment = locateSegment(indicator.matchedTerm, segments);
     phrases.push(createPhraseEvidence({ type: category, text: segment?.text || indicator.evidence,
@@ -47,7 +57,7 @@ export async function analyzeContext({ callId, text, segments = [] }) {
       confidence: 0.95, matchedTerm: indicator.matchedTerm }));
     evidence.push({ ...createEvidence({ callId, category, source: 'rule_engine', score, confidence: 0.95,
       severity: indicator.severity, startTime: segment?.start ?? null, endTime: segment?.end ?? null,
-      explanation: indicator.label }), reliability: 0.95, weight: 0.15 });
+      explanation: indicator.label }), reliability: 0.95, weight: 0.20 });
   }
 
   // Normalized LLM structure for backward compatibility

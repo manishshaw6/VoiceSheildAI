@@ -9,9 +9,9 @@ export default function LiveStreamMonitor({
   const [isStreaming, setIsStreaming] = useState(false);
   const [speakerId, setSpeakerId] = useState('');
 
-  const [liveScore, setLiveScore] = useState(12.45);
-  const [targetScore, setTargetScore] = useState(12.45);
-  const [smoothScore, setSmoothScore] = useState(12.45);
+  const [liveScore, setLiveScore] = useState(0.00);
+  const [targetScore, setTargetScore] = useState(0.00);
+  const [smoothScore, setSmoothScore] = useState(0.00);
   const [liveLevel, setLiveLevel] = useState('SAFE');
   const [liveTranscript, setLiveTranscript] = useState('');
   const [detectedSignals, setDetectedSignals] = useState([]);
@@ -37,6 +37,8 @@ export default function LiveStreamMonitor({
   const wsRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recognitionRef = useRef(null);
+  const accumulatedTranscriptRef = useRef('');
+  const isStreamingRef = useRef(false);
   const timerRef = useRef(null);
   const audioCtxRef = useRef(null);
   const animFrameRef = useRef(null);
@@ -83,6 +85,9 @@ export default function LiveStreamMonitor({
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const ctx = new AudioCtx();
       audioCtxRef.current = ctx;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
       const source = ctx.createMediaStreamSource(liveAudioStream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
@@ -148,14 +153,6 @@ export default function LiveStreamMonitor({
         const active = rms > 0.02;
         setIsSpeechActive(active);
 
-        // Smoothly nudge base risk while speech is active
-        if (active) {
-          setTargetScore(prev => {
-            if (prev < 15.0) return Number((prev + 0.15).toFixed(2));
-            return prev;
-          });
-        }
-
         animFrameRef.current = requestAnimationFrame(trackAudio);
       };
 
@@ -174,6 +171,9 @@ export default function LiveStreamMonitor({
   }, [liveAudioStream, isStreaming]);
 
   const getWsUrl = () => {
+    if (window.location.port === '5173') {
+      return `ws://${window.location.hostname || 'localhost'}:5000/ws/live-analysis`;
+    }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}/ws/live-analysis`;
   };
@@ -222,10 +222,11 @@ export default function LiveStreamMonitor({
             }
           };
 
-          mediaRecorder.start(800);
+          mediaRecorder.start(250);
+          isStreamingRef.current = true;
           setIsStreaming(true);
 
-          // Speech Recognition
+          // Real-Time High-Responsiveness Speech Recognition
           const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
           if (SpeechRec) {
             const recognition = new SpeechRec();
@@ -233,29 +234,54 @@ export default function LiveStreamMonitor({
             recognition.interimResults = true;
             recognition.lang = 'en-US';
 
-            recognition.onresult = (event) => {
-              let fullTranscript = '';
-              for (let i = event.resultIndex; i < event.results.length; i++) {
-                const transcriptPiece = event.results[i][0].transcript;
-                fullTranscript += transcriptPiece + ' ';
+            let currentSessionFinal = '';
 
-                if (event.results[i].isFinal && socket.readyState === WebSocket.OPEN) {
-                  socket.send(
-                    JSON.stringify({
-                      type: 'transcript_chunk',
-                      text: transcriptPiece
-                    })
-                  );
+            recognition.onresult = (event) => {
+              currentSessionFinal = '';
+              let sessionInterim = '';
+
+              for (let i = 0; i < event.results.length; i++) {
+                const item = event.results[i];
+                if (item.isFinal) {
+                  currentSessionFinal += item[0].transcript + ' ';
+                } else {
+                  sessionInterim += item[0].transcript;
                 }
               }
 
-              if (fullTranscript.trim()) {
-                setLiveTranscript((prev) => `${prev} ${fullTranscript}`.trim());
+              const combined = (accumulatedTranscriptRef.current + ' ' + currentSessionFinal + ' ' + sessionInterim)
+                .replace(/\s+/g, ' ')
+                .trim();
+
+              if (combined) {
+                setLiveTranscript(combined);
+                if (socket.readyState === WebSocket.OPEN) {
+                  socket.send(
+                    JSON.stringify({
+                      type: 'transcript_update',
+                      text: combined
+                    })
+                  );
+                }
               }
             };
 
             recognition.onerror = (e) => {
               console.warn('Speech recognition warning:', e.error);
+            };
+
+            recognition.onend = () => {
+              if (currentSessionFinal.trim()) {
+                accumulatedTranscriptRef.current = (accumulatedTranscriptRef.current + ' ' + currentSessionFinal)
+                  .replace(/\s+/g, ' ')
+                  .trim();
+                currentSessionFinal = '';
+              }
+              if (recognitionRef.current && isStreamingRef.current) {
+                try {
+                  recognition.start();
+                } catch (_) {}
+              }
             };
 
             recognition.start();
@@ -277,31 +303,33 @@ export default function LiveStreamMonitor({
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          const payload = data.data || data;
 
-          if (data.type === 'risk_update') {
-            const newScore = Number((data.score || 0).toFixed(2));
+          if (data.type === 'risk_update' || data.event === 'risk_update' || data.event === 'risk.updated') {
+            const newScore = Number((payload.score ?? data.score ?? 0).toFixed(2));
             setTargetScore(newScore);
             setLiveScore(newScore);
-            setLiveLevel(data.riskLevel || 'SAFE');
+            setLiveLevel(payload.riskLevel || data.riskLevel || 'SAFE');
 
-            if (data.transcript) {
-              setLiveTranscript(data.transcript);
+            if (payload.transcript || data.transcript) {
+              setLiveTranscript(payload.transcript || data.transcript);
             }
 
-            if (data.indicators) {
-              setDetectedSignals(data.indicators);
+            if (payload.indicators || data.indicators) {
+              setDetectedSignals(payload.indicators || data.indicators || []);
             }
 
-            if (data.recommendedAction) {
-              setRecommendedAction(data.recommendedAction);
+            if (payload.recommendedAction || data.recommendedAction) {
+              setRecommendedAction(payload.recommendedAction || data.recommendedAction);
             }
 
-            if (data.cloneSuspicion) {
+            if (payload.cloneSuspicion || data.cloneSuspicion) {
               setCloneWarning(true);
             }
           }
 
           if (data.type === 'session_complete') {
+            isStreamingRef.current = false;
             setIsTerminating(false);
             setIsStreaming(false);
             setIsConnected(false);
@@ -323,6 +351,7 @@ export default function LiveStreamMonitor({
       };
 
       socket.onclose = () => {
+        isStreamingRef.current = false;
         setIsConnected(false);
         setIsStreaming(false);
         setIsTerminating(false);
@@ -334,6 +363,7 @@ export default function LiveStreamMonitor({
 
       socket.onerror = (err) => {
         console.error('WebSocket error:', err);
+        isStreamingRef.current = false;
         setIsTerminating(false);
         setWsStatus('Connection Error');
       };
@@ -344,12 +374,14 @@ export default function LiveStreamMonitor({
         err
       );
 
+      isStreamingRef.current = false;
       setIsTerminating(false);
       setWsStatus('Connection Error');
     }
   };
 
   const stopLiveMonitor = (notifyBackend = true) => {
+    isStreamingRef.current = false;
     // 1. Stop local microphone hardware immediately
     if (
       mediaRecorderRef.current &&
@@ -382,6 +414,7 @@ export default function LiveStreamMonitor({
 
       // Safety timeout: if backend takes longer than 20s, force cleanup
       setTimeout(() => {
+        isStreamingRef.current = false;
         setIsTerminating(false);
         setIsStreaming(false);
         setIsConnected(false);
@@ -391,6 +424,7 @@ export default function LiveStreamMonitor({
         }
       }, 20000);
     } else {
+      isStreamingRef.current = false;
       setIsTerminating(false);
       setIsStreaming(false);
       setIsConnected(false);
@@ -447,9 +481,12 @@ export default function LiveStreamMonitor({
   const launchLiveWorkspace = () => {
     setIsLiveWorkspaceOpen(true);
 
+    accumulatedTranscriptRef.current = '';
     setCloneWarning(false);
     setLiveScore(0);
-    setLiveLevel('LOW');
+    setTargetScore(0);
+    setSmoothScore(0);
+    setLiveLevel('SAFE');
     setLiveTranscript('');
     setDetectedSignals([]);
 
@@ -566,7 +603,7 @@ export default function LiveStreamMonitor({
             onClick={() => stopLiveMonitor(true)}
             disabled={isTerminating}
           >
-            {isTerminating ? '⏳ Finalizing Voice Forensics...' : '⏹️ Terminate & Save Call Session'}
+            {isTerminating ? 'Finalizing Voice Forensics...' : 'Terminate & Save Call Session'}
           </button>
 
         )}
@@ -936,7 +973,7 @@ export default function LiveStreamMonitor({
                 }
                 disabled={isTerminating}
               >
-                {isTerminating ? '⏳ Finalizing...' : 'End and save session'}
+                {isTerminating ? 'Finalizing...' : 'End and save session'}
               </button>
 
             </footer>

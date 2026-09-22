@@ -200,6 +200,24 @@ function initSchema() {
         delivery_metadata TEXT DEFAULT '{}',
         FOREIGN KEY (user_id) REFERENCES users(id)
       )
+    `);
+
+    // API Keys (External Integrations & Developer Layer)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        key_name TEXT NOT NULL,
+        key_prefix TEXT NOT NULL,
+        key_hash TEXT UNIQUE NOT NULL,
+        permissions TEXT DEFAULT '["forensics:read","forensics:write","live:stream"]',
+        status TEXT DEFAULT 'ACTIVE',
+        rate_limit_rpm INTEGER DEFAULT 60,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_used_at DATETIME,
+        expires_at DATETIME,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
     `, () => {
       seedTrustedDirectory();
     });
@@ -314,9 +332,24 @@ function seedTrustedDirectory() {
       }]
     },
     {
+      id: 'org_kotak',
+      display_name: 'Kotak Mahindra Bank',
+      aliases: JSON.stringify(['kotak', 'kotak bank', 'kotak mahindra', 'kotak mahindra bank', 'kotak 811', '811 kotak', 'kotak security']),
+      organization_type: 'BANK',
+      country: 'IN',
+      official_domain: 'kotak.com',
+      contacts: [{
+        id: 'contact_kotak_fraud',
+        destination: 'katarapchandrashekargoud@gmail.com',
+        verified: 1,
+        verification_source: 'RBI Regulated Entity Directory (Verified)',
+        enabled: 1
+      }]
+    },
+    {
       id: 'org_unverified_sample',
-      display_name: 'Unverified Third-Party Entity',
-      aliases: JSON.stringify(['unverified entity', 'sample unverified']),
+      display_name: 'Unverified Entity (Security Test)',
+      aliases: JSON.stringify(['unverified entity', 'sample unverified org']),
       organization_type: 'DEMO',
       country: 'IN',
       official_domain: 'unverified.example.com',
@@ -330,23 +363,20 @@ function seedTrustedDirectory() {
     }
   ];
 
-  db.get('SELECT COUNT(*) as count FROM organizations', (err, row) => {
-    if (err || !row || row.count > 0) return;
-    for (const org of seedOrgs) {
-      db.run(
-        'INSERT OR IGNORE INTO organizations (id, display_name, aliases, organization_type, country, official_domain) VALUES (?, ?, ?, ?, ?, ?)',
-        [org.id, org.display_name, org.aliases, org.organization_type, org.country, org.official_domain],
-        () => {
-          for (const c of org.contacts) {
-            db.run(
-              'INSERT OR IGNORE INTO organization_contacts (id, organization_id, channel_type, destination, verified, verification_source, verified_at, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-              [c.id, org.id, 'email', c.destination, c.verified, c.verification_source, new Date().toISOString(), c.enabled]
-            );
-          }
+  for (const org of seedOrgs) {
+    db.run(
+      'INSERT OR REPLACE INTO organizations (id, display_name, aliases, organization_type, country, official_domain) VALUES (?, ?, ?, ?, ?, ?)',
+      [org.id, org.display_name, org.aliases, org.organization_type, org.country, org.official_domain],
+      () => {
+        for (const c of org.contacts) {
+          db.run(
+            'INSERT OR REPLACE INTO organization_contacts (id, organization_id, channel_type, destination, verified, verification_source, verified_at, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [c.id, org.id, 'email', c.destination, c.verified, c.verification_source, new Date().toISOString(), c.enabled]
+          );
         }
-      );
-    }
-  });
+      }
+    );
+  }
 }
 
 // Promise-based helper functions
@@ -376,6 +406,10 @@ export const query = {
     });
   }
 };
+
+export const run = query.run;
+export const get = query.get;
+export const all = query.all;
 
 export async function checkDatabase() {
   try {
