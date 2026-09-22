@@ -1,7 +1,14 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 export default function Footer() {
+  const location = useLocation();
+
+  // Exclude footer from the dedicated air-gapped Guardian Offline workstation
+  if (location.pathname.startsWith('/guardian-offline')) {
+    return null;
+  }
+
   return (
     <footer className="site-footer-pro">
       <div className="footer-inner">
