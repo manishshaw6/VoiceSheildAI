@@ -15,6 +15,23 @@ import { generateIncidentPdfBuffer } from './reportPdfService.js';
 import { sendIncidentReportEmail, getSendGridStatus } from './sendgridMailService.js';
 import { recordAudit } from './auditService.js';
 
+function parseStoredJson(value, fallback) {
+  if (!value) return fallback;
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeProbability(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Number(Math.max(0, Math.min(1, numeric > 1 ? numeric / 100 : numeric)).toFixed(4));
+}
+
 /**
  * Builds structured, redacted, and cryptographically signed VoxShield Incident Report
  */
@@ -28,14 +45,29 @@ export async function generateIncidentReport({ analysisId, user }) {
     throw notFoundError('Analysis');
   }
 
-  const raw = analysisRow.raw_result ? JSON.parse(analysisRow.raw_result) : {};
-  const indicators = analysisRow.indicators ? JSON.parse(analysisRow.indicators) : [];
-  const risk = raw.risk || { score: analysisRow.final_score, level: analysisRow.risk_level };
-  const deepfake = raw.deepfake || {};
-  const speaker = raw.speaker || {};
+  const raw = parseStoredJson(analysisRow.raw_result, {});
+  const indicators = parseStoredJson(analysisRow.indicators, raw.indicators || []);
+  const risk = {
+    score: Number(raw.risk?.score ?? analysisRow.final_score ?? 0),
+    level: raw.risk?.level || analysisRow.risk_level || 'SAFE',
+    reasons: raw.risk?.reasons || [],
+    confidence: raw.risk?.confidence ?? null,
+    trustScore: raw.risk?.trustScore ?? null,
+    subScores: raw.risk?.subScores || {},
+    evidenceCoverage: raw.risk?.evidenceCoverage ?? null
+  };
+  const deepfake = {
+    ...(raw.deepfake || {}),
+    score: normalizeProbability(raw.deepfake?.score ?? raw.deepfake?.fakeProbability ?? analysisRow.deepfake_score)
+  };
+  const speaker = {
+    ...(raw.speaker || {}),
+    similarity: normalizeProbability(raw.speaker?.similarity ?? analysisRow.speaker_score)
+  };
   const convIntel = raw.conversationIntelligence || null;
   const transcript = analysisRow.transcript || raw.transcription?.text || '';
   const forensic = raw.forensic || {};
+  const transcriptExcerpt = String(transcript || '').trim();
 
   // Extract organization impersonation intelligence
   const orgIntel = extractOrganizationIntelligence({
@@ -70,8 +102,9 @@ export async function generateIncidentReport({ analysisId, user }) {
       name: user.name || 'Security Analyst',
       email: user.email
     },
-    incidentOverview: convIntel?.summary?.detailed_summary ||
-      `Suspected voice fraud interaction recorded on ${analysisRow.timestamp || generatedAt} involving caller claiming representation.`,
+    incidentOverview: convIntel?.summary?.detailed_summary || (transcriptExcerpt
+      ? `VoxShield evaluated a recorded interaction containing ${indicators.length} flagged signal${indicators.length === 1 ? '' : 's'}. Review the redacted transcript and evidence ledger below.`
+      : 'VoxShield completed the available analysis, but no speech transcript was recoverable from the recording.'),
     impersonatedOrganization: {
       organization_detected: orgIntel.organization_detected,
       organization_id: orgIntel.organization_id,
@@ -89,7 +122,11 @@ export async function generateIncidentReport({ analysisId, user }) {
       score: risk.score,
       level: risk.level,
       threatCategory: analysisRow.threat_category || convIntel?.threat_assessment?.threat_category || 'Suspected Impersonation',
-      reasons: risk.reasons || []
+      reasons: risk.reasons?.length ? risk.reasons : indicators.map(item => item.label || item.type).filter(Boolean),
+      confidence: risk.confidence,
+      evidenceCoverage: risk.evidenceCoverage,
+      trustScore: risk.trustScore,
+      subScores: risk.subScores
     },
     voiceAuthenticity: {
       provider: deepfake.provider || 'Reality Defender',
@@ -110,7 +147,13 @@ export async function generateIncidentReport({ analysisId, user }) {
       credentialsRequested: Boolean(convIntel?.sensitive_entities?.passwords_requested),
       financialRequested: Boolean(convIntel?.sensitive_entities?.upi_reference || (convIntel?.sensitive_entities?.payment_amounts && convIntel.sensitive_entities.payment_amounts.length > 0))
     },
-    transcriptExcerpt: transcript,
+    evidenceSummary: indicators.map(item => ({
+      label: item.label || item.type || 'Threat indicator',
+      severity: item.severity || 'UNSPECIFIED',
+      category: item.category || item.type || null,
+      evidence: item.evidence || item.matchedText || null
+    })),
+    transcriptExcerpt,
     userExposure: {
       informationShared: convIntel?.victim_exposure?.information_shared || 'None indicated in recorded audio',
       credentialsShared: Boolean(convIntel?.victim_exposure?.credentials_potentially_shared),

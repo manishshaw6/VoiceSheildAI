@@ -37,6 +37,15 @@ export const config = {
   port: parseInt(process.env.PORT, 10) || 5000,
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
 
+  livekit: {
+    url: (process.env.LIVEKIT_URL || '').replace(/\/$/, ''),
+    apiKey: process.env.LIVEKIT_API_KEY || '',
+    apiSecret: process.env.LIVEKIT_API_SECRET || '',
+    tokenTtlSeconds: parseInt(process.env.LIVEKIT_TOKEN_TTL_SECONDS, 10) || 3600,
+    inviteTtlSeconds: parseInt(process.env.LIVEKIT_INVITE_TTL_SECONDS, 10) || 3600,
+    maxParticipants: parseInt(process.env.LIVEKIT_MAX_PARTICIPANTS, 10) || 2
+  },
+
   // Auth JWT
   jwtSecret: process.env.JWT_SECRET || 'voxshield_jwt_secret_key_2026_secure',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
@@ -189,6 +198,11 @@ export function validateConfig() {
   }
   if (!config.sendgrid.apiKey || !config.sendgrid.fromEmail) {
     warnings.push('SENDGRID_API_KEY and SENDGRID_FROM_EMAIL are not configured. Incident email delivery is unavailable.');
+  }
+  if (!config.livekit.url || !config.livekit.apiKey || !config.livekit.apiSecret) {
+    warnings.push('LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET are required for two-device calling.');
+  } else if (config.livekit.apiSecret.length < 16) {
+    warnings.push('LIVEKIT_API_SECRET appears incomplete; LiveKit will reject room operations until the full secret is configured.');
   }
 
   // Validate weight sum is approximately 1.0

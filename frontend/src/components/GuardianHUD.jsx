@@ -38,6 +38,14 @@ export default function GuardianHUD({ onIncidentRecorded }) {
   const animationFrameRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
+  const recognitionRef = useRef(null);
+  const transcriptRef = useRef('');
+  const analysisInFlightRef = useRef(false);
+  const recordingChunkCountRef = useRef(0);
+
+  useEffect(() => {
+    transcriptRef.current = transcriptText;
+  }, [transcriptText]);
 
   // Monitor connectivity & enrolled contacts
   useEffect(() => {
@@ -69,6 +77,10 @@ export default function GuardianHUD({ onIncidentRecorded }) {
     }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
+    }
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (_) {}
+      recognitionRef.current = null;
     }
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close().catch(() => {});
@@ -255,6 +267,7 @@ export default function GuardianHUD({ onIncidentRecorded }) {
       stopLiveAudio();
       setAlertDismissed(false);
       recordedChunksRef.current = [];
+      recordingChunkCountRef.current = 0;
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -279,18 +292,49 @@ export default function GuardianHUD({ onIncidentRecorded }) {
 
       drawCanvas();
 
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      let recorder;
+      try {
+        recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      } catch {
+        recorder = new MediaRecorder(stream);
+      }
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = async (e) => {
         if (e.data.size > 0) {
+          recordingChunkCountRef.current += 1;
           recordedChunksRef.current.push(e.data);
-          if (recordedChunksRef.current.length >= 2) {
+          // Retain a bounded ~18 second rolling window and analyze every ~6 seconds.
+          if (recordedChunksRef.current.length > 12) recordedChunksRef.current.shift();
+          if (recordedChunksRef.current.length >= 4 && recordingChunkCountRef.current % 4 === 0 && !analysisInFlightRef.current) {
             const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
-            runLocalAnalysisOnBlob(blob);
+            runLocalAnalysisOnBlob(blob, transcriptRef.current);
           }
         }
       };
+
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRec) {
+        const recognition = new SpeechRec();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-IN';
+        recognition.onresult = event => {
+          let text = '';
+          for (let i = 0; i < event.results.length; i++) text += `${event.results[i][0].transcript} `;
+          const normalized = text.replace(/\s+/g, ' ').trim();
+          if (normalized) {
+            transcriptRef.current = normalized;
+            setTranscriptText(normalized);
+          }
+        };
+        recognition.onend = () => {
+          if (streamRef.current && recognitionRef.current === recognition) {
+            try { recognition.start(); } catch (_) {}
+          }
+        };
+        try { recognition.start(); recognitionRef.current = recognition; } catch (_) {}
+      }
 
       recorder.start(1500);
       setIsMonitoring(true);
@@ -302,9 +346,11 @@ export default function GuardianHUD({ onIncidentRecorded }) {
 
   // Run local inference pipeline on audio blob
   const runLocalAnalysisOnBlob = async (audioBlob, optionalTranscript = null) => {
+    if (analysisInFlightRef.current) return;
+    analysisInFlightRef.current = true;
     try {
       setIsAnalyzing(true);
-      const transcriptToUse = optionalTranscript !== null ? optionalTranscript : transcriptText;
+      const transcriptToUse = optionalTranscript !== null ? optionalTranscript : transcriptRef.current;
 
       // 1. Edge Deepfake Detection
       const fakeResult = await analyzeAudioOffline(audioBlob);
@@ -353,6 +399,7 @@ export default function GuardianHUD({ onIncidentRecorded }) {
     } catch (err) {
       console.error('[GuardianHUD] Offline analysis error:', err);
     } finally {
+      analysisInFlightRef.current = false;
       setIsAnalyzing(false);
     }
   };

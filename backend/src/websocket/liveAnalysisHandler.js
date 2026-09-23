@@ -9,11 +9,13 @@ import { config } from '../config/index.js';
 import { query } from '../database/db.js';
 import { createWSMessage } from '../schemas/events.js';
 import { InMemorySessionManager } from '../sessions/sessionManager.js';
+import { canTransition } from '../sessions/stateMachine.js';
 import { CallState, DomainEvent } from '../core/constants.js';
 import eventBus from '../events/eventBus.js';
 import { createLogger } from '../core/logger.js';
 import { orchestrateAnalysis } from '../services/analysisOrchestrator.js';
 import { ensurePcmWav } from '../audio/preprocessor.js';
+import { extractJsForensics } from '../services/forensicAnalysisService.js';
 
 const logger = createLogger({ component: 'live_analysis' });
 const sessions = new InMemorySessionManager({ ewmaAlpha: config.ewmaAlpha });
@@ -60,8 +62,11 @@ export function setupLiveAnalysisWebSocket(wss) {
     const session = sessions.create(callId, { connectionId: crypto.randomUUID() });
     session.deepfake = null;
     session.speakerResult = null;
+    session.lastAcousticAnalysisBytes = 0;
     session.isAnalyzing = false;
     session.isFinished = false;
+    session.isFinalizing = false;
+    session.connectionClosed = false;
     const send = (type, data) => {
       if (ws.readyState === ws.OPEN) ws.send(createWSMessage(type, callId, data, sessions.nextSequence(callId)));
     };
@@ -72,50 +77,68 @@ export function setupLiveAnalysisWebSocket(wss) {
     send('connected', { sessionId: callId, message: 'VoxShield live security stream ready.' });
     eventBus.emit(DomainEvent.CALL_STARTED, { callId, data: { connectionId: session.connectionId } });
 
-    session.periodicTimer = setInterval(async () => {
-      if (session.isFinished || session.isAnalyzing || (!session.audioChunks.length && !session.transcript)) return;
+    const publishRiskUpdate = async () => {
+      if (session.isFinished || (!session.audioChunks.length && !session.transcript)) return;
+      const update = liveRisk(session);
+      if (session.state !== CallState.ANALYZING) {
+        const nextState = update.risk.level === 'CRITICAL' ? CallState.CRITICAL :
+          update.risk.level === 'HIGH' ? CallState.HIGH_RISK :
+            update.risk.level === 'SUSPICIOUS' ? CallState.SUSPICIOUS : CallState.MONITORING;
+        if (nextState !== session.state && canTransition(session.state, nextState)) {
+          sessions.transition(callId, nextState);
+        }
+      }
+      await eventBus.emit(DomainEvent.RISK_UPDATED, { callId, data: {
+        timestamp: update.elapsedSec, transcript: session.transcript, score: update.risk.score,
+        riskLevel: update.risk.level, deepfakeProbability: session.deepfake?.score ?? null,
+        indicators: update.rules.indicators, reasons: update.risk.reasons,
+        recommendedAction: update.policy.recommendedAction || update.risk.recommendedAction,
+        confidence: update.risk.confidence, trend: update.risk.trend, policy: update.policy,
+        temporalRisk: update.temporal, trustScore: update.risk.trustScore,
+        trustLevel: update.risk.trustLevel, cloneSuspicion: Boolean(update.risk.cloneSuspicion),
+        subScores: update.risk.subScores, evidenceCoverage: update.risk.evidenceCoverage,
+        evidenceContributions: update.risk.evidenceContributions,
+        interactionEffects: (update.risk.interactionDeltas || []).map(d => d.pattern),
+        analysisStatus: session.isAnalyzing ? 'ACOUSTIC_ANALYSIS' : 'MONITORING'
+      }});
+    };
+
+    const runAcousticAnalysis = async fullBuffer => {
+      if (session.isFinished || session.isAnalyzing) return;
       session.isAnalyzing = true;
       let tempPath = null;
       try {
-        if (session.state === CallState.RECEIVING_AUDIO || session.state === CallState.MONITORING)
-          sessions.transition(callId, CallState.ANALYZING);
-        const fullBuffer = Buffer.concat(session.audioChunks);
-        if (fullBuffer.length >= config.ws.minAudioBytes) {
-          if (!session.deepfake) {
-            const pcmBuffer = ensurePcmWav(fullBuffer);
-            tempPath = path.join(config.tempDir, `live_${crypto.randomUUID()}.wav`);
-            await fs.writeFile(tempPath, pcmBuffer);
-            session.deepfake = await getIntelligenceProvider('deepfake').analyze(tempPath);
-          }
-          if (session.speakerProfile && !session.speakerResult) {
-            session.speakerResult = await getIntelligenceProvider('speaker').verify({
-              audioBuffer: ensurePcmWav(fullBuffer),
-              targetSpeakerId: session.speakerProfile,
-              threshold: config.speaker.matchThreshold
-            });
-          }
+        session.lastAcousticAnalysisBytes = fullBuffer.length;
+        const pcmBuffer = ensurePcmWav(fullBuffer);
+        tempPath = path.join(config.tempDir, `live_${crypto.randomUUID()}.wav`);
+        await fs.writeFile(tempPath, pcmBuffer);
+        session.deepfake = await getIntelligenceProvider('deepfake').analyze(tempPath);
+        if (session.speakerProfile) {
+          session.speakerResult = await getIntelligenceProvider('speaker').verify({
+            audioBuffer: pcmBuffer,
+            targetSpeakerId: session.speakerProfile,
+            threshold: config.speaker.matchThreshold
+          });
         }
-        const update = liveRisk(session);
-        if (session.state === CallState.ANALYZING) sessions.transition(callId,
-          update.risk.level === 'CRITICAL' ? CallState.CRITICAL : update.risk.level === 'HIGH' ? CallState.HIGH_RISK :
-            update.risk.level === 'SUSPICIOUS' ? CallState.SUSPICIOUS : CallState.MONITORING);
-        await eventBus.emit(DomainEvent.RISK_UPDATED, { callId, data: {
-          timestamp: update.elapsedSec, transcript: session.transcript, score: update.risk.score,
-          riskLevel: update.risk.level, deepfakeProbability: session.deepfake?.score ?? null,
-          indicators: update.rules.indicators, reasons: update.risk.reasons,
-          recommendedAction: update.policy.recommendedAction || update.risk.recommendedAction, confidence: update.risk.confidence,
-          trend: update.risk.trend, policy: update.policy, temporalRisk: update.temporal,
-          trustScore: update.risk.trustScore, trustLevel: update.risk.trustLevel,
-          subScores: update.risk.subScores, evidenceCoverage: update.risk.evidenceCoverage,
-          evidenceContributions: update.risk.evidenceContributions,
-          interactionEffects: (update.risk.interactionDeltas || []).map(d => d.pattern)
-        }});
+        if (!session.isFinished) await publishRiskUpdate();
       } catch (error) {
         logger.error('live.analysis_failed', { call_id: callId, error: error.message });
-        send('error', { code: 'ANALYSIS_FAILED', message: 'Live analysis could not be completed.' });
+        send('analysis_degraded', { code: 'ACOUSTIC_PROVIDER_UNAVAILABLE', message: 'Language risk monitoring remains active while acoustic analysis recovers.' });
       } finally {
         session.isAnalyzing = false;
         if (tempPath) await fs.unlink(tempPath).catch(() => {});
+      }
+    };
+
+    session.periodicTimer = setInterval(() => {
+      if (session.isFinished || (!session.audioChunks.length && !session.transcript)) return;
+      // Linguistic/rule risk is published on every tick and never waits for a slow acoustic provider.
+      publishRiskUpdate().catch(error => logger.error('live.risk_publish_failed', { call_id: callId, error: error.message }));
+      const fullBuffer = Buffer.concat(session.audioChunks);
+      const hasFreshAcousticWindow = fullBuffer.length >= config.ws.minAudioBytes &&
+        (!session.deepfake || fullBuffer.length - session.lastAcousticAnalysisBytes >= config.ws.minAudioBytes * 4);
+      if (hasFreshAcousticWindow && !session.isAnalyzing) {
+        runAcousticAnalysis(fullBuffer).catch(error => logger.error('live.acoustic_task_failed', { call_id: callId, error: error.message }));
       }
     }, config.ws.analysisIntervalMs);
 
@@ -141,6 +164,7 @@ export function setupLiveAnalysisWebSocket(wss) {
             indicators: update.rules.indicators, reasons: update.risk.reasons, trend: update.risk.trend,
             policy: update.policy, temporalRisk: update.temporal,
             trustScore: update.risk.trustScore, trustLevel: update.risk.trustLevel,
+            cloneSuspicion: Boolean(update.risk.cloneSuspicion),
             subScores: update.risk.subScores, evidenceCoverage: update.risk.evidenceCoverage,
             evidenceContributions: update.risk.evidenceContributions,
             interactionEffects: (update.risk.interactionDeltas || []).map(d => d.pattern) } });
@@ -152,6 +176,7 @@ export function setupLiveAnalysisWebSocket(wss) {
             indicators: update.rules.indicators, reasons: update.risk.reasons, trend: update.risk.trend,
             policy: update.policy, temporalRisk: update.temporal,
             trustScore: update.risk.trustScore, trustLevel: update.risk.trustLevel,
+            cloneSuspicion: Boolean(update.risk.cloneSuspicion),
             subScores: update.risk.subScores, evidenceCoverage: update.risk.evidenceCoverage,
             evidenceContributions: update.risk.evidenceContributions,
             interactionEffects: (update.risk.interactionDeltas || []).map(d => d.pattern) } });
@@ -165,7 +190,10 @@ export function setupLiveAnalysisWebSocket(wss) {
     async function finish() {
       if (session.isFinished) return;
       session.isFinished = true;
+      session.isFinalizing = true;
       clearInterval(session.periodicTimer);
+      send('finalizing', { message: 'Building the post-call forensic dossier and incident evidence.' });
+      try {
       const update = liveRisk(session);
       if (session.state !== CallState.ENDED && session.state !== CallState.FAILED) {
         if (session.state === CallState.ANALYZING) sessions.transition(callId, CallState.MONITORING);
@@ -267,13 +295,20 @@ export function setupLiveAnalysisWebSocket(wss) {
         analysis: completeLiveDossier
       });
       eventBus.emit(DomainEvent.CALL_ENDED, { callId, data: { risk: completeLiveDossier.risk } });
+      } finally {
+      session.isFinalizing = false;
+      if (session.connectionClosed) sessions.remove(callId);
+      }
     }
 
     ws.on('close', () => {
       clearInterval(session.periodicTimer);
-      session.isFinished = true;
+      session.connectionClosed = true;
       unsubscribe();
-      sessions.remove(callId);
+      if (!session.isFinalizing) {
+        session.isFinished = true;
+        sessions.remove(callId);
+      }
     });
   });
 }

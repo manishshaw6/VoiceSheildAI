@@ -255,3 +255,21 @@ If a signal is unavailable (e.g., unenrolled speaker), the weights are dynamical
 - **Browser Audio Formats**: Live microphone recording relies on browser-supported codecs (standard WebM/Opus or WAV).
 - **Background Noise**: Extreme background acoustic noise may affect acoustic biometric similarity precision.
 - **Provider Rate Limits**: Reality Defender and Gemini free-tier requests should be spaced according to provider quota policies.
+# Two-device monitored VoIP (LiveKit)
+
+The **Live Call Shield** can create a private two-person LiveKit room and a
+short-lived guest link. The host's browser mixes both participants into the
+existing live-analysis WebSocket, displays risk warnings, and ends the room for
+both participants when the configurable cutoff is reached.
+
+1. Copy `backend/.env.example` to `backend/.env` and configure `LIVEKIT_URL`,
+   `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` from the same LiveKit project.
+2. Start the backend and frontend, sign in, and open **Live Call Shield**.
+3. Select **Create Secure Call Room**, copy the guest link to device two, then
+   select **Start Two-Device Call Interceptor** after both devices are connected.
+4. Set the auto-end score before monitoring starts (70–100, default 80).
+
+The API secret is backend-only. Guest links expire, room capacity is limited to
+two, and only the signed host control token can delete a room. Physical-device
+microphone access requires the frontend to be served over HTTPS (except
+`localhost`, which browsers treat as a secure development context).

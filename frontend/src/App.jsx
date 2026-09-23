@@ -21,6 +21,7 @@ import ApiKeyPortalPage from './pages/ApiKeyPortalPage';
 import AuthPage from './pages/AuthPage';
 import GuardianOfflinePage from './pages/GuardianOfflinePage';
 import ReportVerificationPage from './pages/ReportVerificationPage';
+import JoinCallPage from './pages/JoinCallPage';
 
 import { generateCyberCrimePdfReport } from './services/pdfReportGenerator';
 
@@ -244,6 +245,7 @@ function App() {
                   <Route path="/auth" element={<AuthPage />} />
                   <Route path="/login" element={<AuthPage />} />
                   <Route path="/register" element={<AuthPage />} />
+                  <Route path="/join-call" element={<JoinCallPage />} />
 
                   {/* Protected Operations & Tools */}
                   <Route

@@ -3,7 +3,10 @@ import { VoicePoweredOrb } from './ui/voice-powered-orb';
 
 export default function LiveStreamMonitor({
   onSessionComplete,
-  enrolledSpeakers
+  enrolledSpeakers,
+  externalAudioStream = null,
+  onCriticalRisk = null,
+  onStreamingChange = null
 }) {
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -23,6 +26,14 @@ export default function LiveStreamMonitor({
   const [isSpeechActive, setIsSpeechActive] = useState(false);
   const [riskVelocity, setRiskVelocity] = useState(0.0);
   const [riskTrend, setRiskTrend] = useState('STABLE');
+  const [riskTelemetry, setRiskTelemetry] = useState({
+    confidence: 0,
+    evidenceCoverage: 0,
+    trustScore: 100,
+    subScores: {},
+    analysisStatus: 'STANDBY',
+    updatedAt: null
+  });
 
   const [recommendedAction, setRecommendedAction] = useState(
     'Monitoring audio stream in real-time...'
@@ -42,6 +53,14 @@ export default function LiveStreamMonitor({
   const timerRef = useRef(null);
   const audioCtxRef = useRef(null);
   const animFrameRef = useRef(null);
+  const ownsAudioStreamRef = useRef(false);
+  const criticalTriggeredRef = useRef(false);
+  const lastSequenceRef = useRef(0);
+  const finalizeTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    onStreamingChange?.(isStreaming);
+  }, [isStreaming, onStreamingChange]);
 
   // ═══════════════════════════════════════════════════════════════════════
   // ANIMATION: Smooth EWMA lerp for score display (e.g. 45.34 / 100)
@@ -197,9 +216,10 @@ export default function LiveStreamMonitor({
             })
           );
 
-          const stream = await navigator.mediaDevices.getUserMedia({
+          const stream = externalAudioStream || await navigator.mediaDevices.getUserMedia({
             audio: true
           });
+          ownsAudioStreamRef.current = !externalAudioStream;
 
           setLiveAudioStream(stream);
 
@@ -305,11 +325,24 @@ export default function LiveStreamMonitor({
           const data = JSON.parse(event.data);
           const payload = data.data || data;
 
+          if (Number.isFinite(data.sequence) && data.sequence <= lastSequenceRef.current) return;
+          if (Number.isFinite(data.sequence)) lastSequenceRef.current = data.sequence;
+
           if (data.type === 'risk_update' || data.event === 'risk_update' || data.event === 'risk.updated') {
-            const newScore = Number((payload.score ?? data.score ?? 0).toFixed(2));
+            const rawScore = Number(payload.score ?? data.score ?? 0);
+            const newScore = Number(Math.max(0, Math.min(100, Number.isFinite(rawScore) ? rawScore : 0)).toFixed(2));
             setTargetScore(newScore);
             setLiveScore(newScore);
             setLiveLevel(payload.riskLevel || data.riskLevel || 'SAFE');
+            setRiskTrend(payload.trend || data.trend || 'STABLE');
+            setRiskTelemetry({
+              confidence: Number(payload.confidence ?? data.confidence ?? 0),
+              evidenceCoverage: Number(payload.evidenceCoverage ?? data.evidenceCoverage ?? 0),
+              trustScore: Number(payload.trustScore ?? data.trustScore ?? Math.max(0, 100 - newScore)),
+              subScores: payload.subScores || data.subScores || {},
+              analysisStatus: payload.analysisStatus || data.analysisStatus || 'MONITORING',
+              updatedAt: new Date().toISOString()
+            });
 
             if (payload.transcript || data.transcript) {
               setLiveTranscript(payload.transcript || data.transcript);
@@ -326,9 +359,24 @@ export default function LiveStreamMonitor({
             if (payload.cloneSuspicion || data.cloneSuspicion) {
               setCloneWarning(true);
             }
+
+            if ((newScore >= 80 || (payload.riskLevel || data.riskLevel) === 'CRITICAL') && !criticalTriggeredRef.current) {
+              criticalTriggeredRef.current = true;
+              onCriticalRisk?.({ score: newScore, riskLevel: 'CRITICAL', at: new Date().toISOString() });
+            }
+          }
+
+          if (data.type === 'finalizing') {
+            setIsTerminating(true);
+            setWsStatus('Building forensic dossier');
+          }
+
+          if (data.type === 'analysis_degraded') {
+            setWsStatus('Language monitoring active · acoustic service degraded');
           }
 
           if (data.type === 'session_complete') {
+            clearTimeout(finalizeTimeoutRef.current);
             isStreamingRef.current = false;
             setIsTerminating(false);
             setIsStreaming(false);
@@ -351,6 +399,7 @@ export default function LiveStreamMonitor({
       };
 
       socket.onclose = () => {
+        clearTimeout(finalizeTimeoutRef.current);
         isStreamingRef.current = false;
         setIsConnected(false);
         setIsStreaming(false);
@@ -389,9 +438,11 @@ export default function LiveStreamMonitor({
     ) {
       try {
         mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream
-          .getTracks()
-          .forEach((track) => track.stop());
+        if (ownsAudioStreamRef.current) {
+          mediaRecorderRef.current.stream
+            .getTracks()
+            .forEach((track) => track.stop());
+        }
       } catch (_) {}
       setLiveAudioStream(null);
     }
@@ -413,7 +464,8 @@ export default function LiveStreamMonitor({
       );
 
       // Safety timeout: if backend takes longer than 20s, force cleanup
-      setTimeout(() => {
+      clearTimeout(finalizeTimeoutRef.current);
+      finalizeTimeoutRef.current = setTimeout(() => {
         isStreamingRef.current = false;
         setIsTerminating(false);
         setIsStreaming(false);
@@ -422,7 +474,7 @@ export default function LiveStreamMonitor({
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           wsRef.current.close();
         }
-      }, 20000);
+      }, 180000);
     } else {
       isStreamingRef.current = false;
       setIsTerminating(false);
@@ -440,6 +492,7 @@ export default function LiveStreamMonitor({
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
+      clearTimeout(finalizeTimeoutRef.current);
 
       if (
         mediaRecorderRef.current &&
@@ -477,6 +530,13 @@ export default function LiveStreamMonitor({
   };
 
   const levelColor = getLevelColor(liveLevel);
+  const signalTelemetry = [
+    ['Synthetic voice', riskTelemetry.subScores.authenticity_risk],
+    ['Identity uncertainty', riskTelemetry.subScores.identity_uncertainty],
+    ['Fraud context', riskTelemetry.subScores.context_fraud_risk],
+    ['Sensitive action', riskTelemetry.subScores.sensitive_action_risk],
+    ['Behavioural coercion', riskTelemetry.subScores.behavioral_coercion_risk]
+  ].map(([label, value]) => [label, Math.max(0, Math.min(100, Number(value) || 0))]);
 
   const launchLiveWorkspace = () => {
     setIsLiveWorkspaceOpen(true);
@@ -489,6 +549,8 @@ export default function LiveStreamMonitor({
     setLiveLevel('SAFE');
     setLiveTranscript('');
     setDetectedSignals([]);
+    lastSequenceRef.current = 0;
+    setRiskTelemetry({ confidence: 0, evidenceCoverage: 0, trustScore: 100, subScores: {}, analysisStatus: 'CONNECTING', updatedAt: null });
 
     startLiveMonitor();
   };
@@ -587,13 +649,32 @@ export default function LiveStreamMonitor({
         </div>
 
 
+        {externalAudioStream && !isStreaming && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 10px',
+            borderRadius: '6px',
+            background: 'rgba(0, 229, 163, 0.12)',
+            border: '1px solid rgba(0, 229, 163, 0.3)',
+            fontSize: '0.75rem',
+            color: '#00e5a3',
+            fontWeight: 700
+          }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00e5a3', boxShadow: '0 0 8px #00e5a3' }} />
+            Two-Way VoIP Feed Ready
+          </div>
+        )}
+
         {!isStreaming ? (
 
           <button
             className="start-stream-btn"
             onClick={launchLiveWorkspace}
+            style={externalAudioStream ? { boxShadow: '0 0 16px rgba(0, 229, 163, 0.45)' } : {}}
           >
-            Start Live Call Interceptor
+            {externalAudioStream ? 'Arm Two-Device Call Interceptor' : 'Start Local Microphone Interceptor'}
           </button>
 
         ) : (
@@ -652,6 +733,38 @@ export default function LiveStreamMonitor({
           >
             {smoothScore.toFixed(2)}
             <span style={{ fontSize: '1rem', opacity: 0.7 }}>/100</span>
+          </div>
+
+          <div className="risk-telemetry-summary">
+            <div>
+              <span>Model confidence</span>
+              <strong>{Math.round(Math.max(0, Math.min(1, riskTelemetry.confidence)) * 100)}%</strong>
+            </div>
+            <div>
+              <span>Evidence coverage</span>
+              <strong>{Math.round(Math.max(0, Math.min(1, riskTelemetry.evidenceCoverage)) * 100)}%</strong>
+            </div>
+            <div>
+              <span>Trust index</span>
+              <strong>{Math.round(Math.max(0, Math.min(100, riskTelemetry.trustScore)))}/100</strong>
+            </div>
+          </div>
+
+          <div className="risk-signal-stack" aria-label="Risk signal breakdown">
+            {signalTelemetry.map(([label, value]) => (
+              <div className="risk-signal-row" key={label}>
+                <div><span>{label}</span><strong>{value.toFixed(0)}</strong></div>
+                <div className="risk-signal-track">
+                  <span style={{ width: `${value}%`, background: value >= 70 ? '#ff3b5c' : value >= 35 ? '#f59e0b' : '#00d2ff' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="risk-freshness-line">
+            <span className={isStreaming ? 'risk-live-dot active' : 'risk-live-dot'} />
+            {riskTelemetry.analysisStatus.replace(/_/g, ' ')}
+            {riskTelemetry.updatedAt ? ` · refreshed ${new Date(riskTelemetry.updatedAt).toLocaleTimeString()}` : ''}
           </div>
 
           {/* REAL-TIME WEBAUDIO HARDWARE TELEMETRY READOUT */}

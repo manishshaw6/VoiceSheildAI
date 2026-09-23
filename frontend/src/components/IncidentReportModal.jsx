@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function IncidentReportModal({ analysis, isOpen, onClose }) {
-  const { user, authenticated, mailStatus, openAuthModal, saveMailPassword } = useAuth();
+  const { user, authenticated, openAuthModal } = useAuth();
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -11,8 +11,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
   const [sendResult, setSendResult] = useState(null);
   const [contacts, setContacts] = useState([]);
   const [selectedContactId, setSelectedContactId] = useState('');
-  const [appPasswordInput, setAppPasswordInput] = useState('');
-  const [savingAppPass, setSavingAppPass] = useState(false);
+  const lastAutoAttemptRef = useRef(null);
 
   const analysisId = analysis?.analysisId || analysis?.id;
 
@@ -33,12 +32,39 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
 
   const detectedBankName = detectedBankNamesList.join(' & ') || null;
 
+  const handleGenerateReport = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setSendResult(null);
+      setConsentChecked(false);
+      const res = await fetch('/api/v1/reports/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ analysisId })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || data.message || (typeof data.error === 'string' ? data.error : null) || 'Failed to generate incident report.');
+      }
+      setReportData(data.report);
+    } catch (err) {
+      setReportData(null);
+      setError(err.message || 'The report could not be generated. Please retry.');
+    } finally {
+      setLoading(false);
+    }
+  }, [analysisId]);
+
   // Auto-generate report when modal opens if user is authenticated
   useEffect(() => {
-    if (isOpen && authenticated && analysisId && !reportData && !loading) {
-      handleGenerateReport();
+    if (isOpen && authenticated && analysisId && reportData?.analysisId !== analysisId && !loading && lastAutoAttemptRef.current !== analysisId) {
+      lastAutoAttemptRef.current = analysisId;
+      const timer = window.setTimeout(handleGenerateReport, 0);
+      return () => window.clearTimeout(timer);
     }
-  }, [isOpen, authenticated, analysisId]);
+  }, [isOpen, authenticated, analysisId, reportData?.analysisId, loading, handleGenerateReport]);
 
   // Load organization contacts from directory when reportData is generated
   useEffect(() => {
@@ -97,28 +123,6 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
       loadContacts();
     }
   }, [reportData, isSbiDetected, isHdfcDetected, isKotakDetected]);
-
-  const handleGenerateReport = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch('/api/v1/reports/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ analysisId })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to generate incident report.');
-      }
-      setReportData(data.report);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSendReport = async () => {
     if (!consentChecked) {
@@ -248,7 +252,14 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
               marginBottom: '16px',
               fontSize: '0.88rem'
             }}>
-              <strong>Error:</strong> {error}
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'center' }}>
+                <span><strong>Report unavailable:</strong> {error}</span>
+                {!loading && !reportData && authenticated && (
+                  <button type="button" onClick={handleGenerateReport} style={{ flexShrink: 0, border: '1px solid #fca5a5', background: 'transparent', color: '#fff', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontWeight: 700 }}>
+                    Retry
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -407,6 +418,36 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                       ))}
                     </ul>
                   </div>
+                )}
+              </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+                gap: '10px',
+                marginBottom: '18px'
+              }}>
+                {[
+                  ['Synthetic voice', reportData.voiceAuthenticity?.syntheticProbability == null ? 'Not available' : `${Math.round(reportData.voiceAuthenticity.syntheticProbability * 100)}%`, reportData.voiceAuthenticity?.verdict || 'Pending'],
+                  ['Speaker similarity', reportData.speakerVerification?.similarity == null ? 'Not enrolled' : `${Math.round(reportData.speakerVerification.similarity * 100)}%`, reportData.speakerVerification?.decision || 'No comparison'],
+                  ['Fraud context', `${Math.round(reportData.riskAssessment?.subScores?.context_fraud_risk || 0)}/100`, reportData.conversationIntelligence?.attackCategory || 'Unclassified'],
+                  ['Behavioural coercion', `${Math.round(reportData.riskAssessment?.subScores?.behavioral_coercion_risk || 0)}/100`, reportData.conversationIntelligence?.techniques?.length ? `${reportData.conversationIntelligence.techniques.length} technique(s)` : 'No tactic detected']
+                ].map(([label, value, detail]) => (
+                  <div key={label} style={{ background: 'linear-gradient(145deg, rgba(15,23,42,.92), rgba(2,8,23,.72))', border: '1px solid rgba(148,163,184,.16)', borderRadius: '10px', padding: '13px' }}>
+                    <div style={{ color: '#7f9d94', fontSize: '.68rem', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>{label}</div>
+                    <div style={{ color: '#f8fafc', font: '800 1.25rem ui-monospace, monospace', margin: '5px 0 3px' }}>{value}</div>
+                    <div style={{ color: '#94a3b8', fontSize: '.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{detail}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background: 'rgba(0,210,255,.035)', border: '1px solid rgba(0,210,255,.15)', borderRadius: '10px', padding: '14px 16px', marginBottom: '18px' }}>
+                <div style={{ color: '#00d2ff', fontSize: '.7rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: '7px' }}>Incident assessment</div>
+                <p style={{ color: '#d6e4e0', fontSize: '.86rem', lineHeight: 1.55, margin: 0 }}>{reportData.incidentOverview || 'No narrative summary was produced.'}</p>
+                {reportData.riskAssessment?.reasons?.length > 0 && (
+                  <ul style={{ color: '#a9bbb6', fontSize: '.78rem', lineHeight: 1.5, margin: '9px 0 0', paddingLeft: '18px' }}>
+                    {reportData.riskAssessment.reasons.slice(0, 4).map((reason, index) => <li key={`${reason}-${index}`}>{reason}</li>)}
+                  </ul>
                 )}
               </div>
 

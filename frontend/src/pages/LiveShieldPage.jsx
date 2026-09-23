@@ -1,12 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LiveStreamMonitor from '../components/LiveStreamMonitor';
 import SecurityDashboard from '../components/SecurityDashboard';
+import LiveKitCallPanel from '../components/LiveKitCallPanel';
 
 export default function LiveShieldPage({ onExportReport }) {
   const [enrolledSpeakers, setEnrolledSpeakers] = useState([]);
   const [postCallAnalysis, setPostCallAnalysis] = useState(null);
+  const [callAudioStream, setCallAudioStream] = useState(null);
+  const [criticalSignal, setCriticalSignal] = useState(null);
   const navigate = useNavigate();
+
+  const handleCallAudioStream = useCallback((stream) => {
+    setCallAudioStream(stream);
+    setCriticalSignal(null);
+  }, []);
 
   useEffect(() => {
     fetch('/api/speaker/profiles')
@@ -48,7 +56,7 @@ export default function LiveShieldPage({ onExportReport }) {
             if (el) el.scrollIntoView({ behavior: 'smooth' });
           }, 150);
         }
-      } catch (_) {}
+      } catch { /* History is best-effort after a live session. */ }
     }
   };
 
@@ -63,9 +71,15 @@ export default function LiveShieldPage({ onExportReport }) {
       </div>
 
       <div className="live-shield-layout">
+        <LiveKitCallPanel
+          onAnalysisStream={handleCallAudioStream}
+          criticalSignal={criticalSignal}
+        />
         <LiveStreamMonitor
           enrolledSpeakers={enrolledSpeakers}
           onSessionComplete={handleSessionComplete}
+          externalAudioStream={callAudioStream}
+          onCriticalRisk={setCriticalSignal}
         />
 
         {postCallAnalysis && (
