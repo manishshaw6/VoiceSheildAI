@@ -12,6 +12,7 @@
     "test": "node --test --test-concurrency=1",
     "benchmark": "node scripts/benchmarkModels.js",
     "preflight": "node scripts/preflight.js",
+    "db:status": "node scripts/databaseStatus.js",
     "migrate:postgres": "node scripts/migrateSqliteToPostgres.js"
   },
   "keywords": [],

@@ -60,6 +60,16 @@ The migration is idempotent: primary-key conflicts update the existing row. The 
 4. Generate, approve, download, and verify an incident report.
 5. Test with a second account to confirm it cannot read the first account's history or reports.
 
+## Frontend deployment
+
+The deployed Vite frontend must define:
+
+```text
+VITE_API_BASE_URL=https://YOUR-BACKEND.onrender.com
+```
+
+Do not append `/api`. WebSocket requests are derived from this URL automatically. Set the backend's `FRONTEND_URL` to the exact deployed frontend origin so credentialed CORS and authentication cookies work.
+
 ## Security requirement
 
 Rotate every API key or password that has ever been pasted into chat, screenshots, logs, or committed files before deploying. Keep `backend/.env` local; it is already ignored by Git.

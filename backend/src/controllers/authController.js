@@ -22,6 +22,16 @@ import { query } from '../database/db.js';
 import { config } from '../config/index.js';
 import { ApiError } from '../schemas/errors.js';
 
+function sessionCookieOptions({ clear = false } = {}) {
+  return {
+    httpOnly: true,
+    secure: config.isProduction,
+    sameSite: config.isProduction ? 'none' : 'lax',
+    path: '/',
+    ...(clear ? {} : { maxAge: 7 * 24 * 60 * 60 * 1000 })
+  };
+}
+
 /**
  * Generate JWT token for user.
  */
@@ -110,12 +120,7 @@ export async function googleCallback(req, res, next) {
       state
     });
 
-    res.cookie('voxshield_session', sessionId, {
-      httpOnly: true,
-      secure: config.isProduction,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    res.cookie('voxshield_session', sessionId, sessionCookieOptions());
 
     if (req.headers.accept?.includes('application/json')) {
       return res.status(200).json({
@@ -253,12 +258,7 @@ export async function register(req, res, next) {
 
     const token = generateToken(tokenUser);
 
-    res.cookie('voxshield_session', result.sessionId, {
-      httpOnly: true,
-      secure: config.isProduction,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    res.cookie('voxshield_session', result.sessionId, sessionCookieOptions());
 
     return res.status(201).json({
       success: true,
@@ -382,12 +382,7 @@ export async function login(req, res, next) {
 
     const token = generateToken(tokenUser);
 
-    res.cookie('voxshield_session', sessionId, {
-      httpOnly: true,
-      secure: config.isProduction,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    res.cookie('voxshield_session', sessionId, sessionCookieOptions());
 
     return res.status(200).json({
       success: true,
@@ -461,12 +456,7 @@ export async function demoLoginEndpoint(req, res, next) {
       username: 'demo_investigator'
     });
 
-    res.cookie('voxshield_session', sessionId, {
-      httpOnly: true,
-      secure: config.isProduction,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    res.cookie('voxshield_session', sessionId, sessionCookieOptions());
 
     return res.status(200).json({
       success: true,
@@ -518,7 +508,7 @@ export async function logout(req, res, next) {
       await destroySession(sessionId);
     }
 
-    res.clearCookie('voxshield_session');
+    res.clearCookie('voxshield_session', sessionCookieOptions({ clear: true }));
 
     return res.status(200).json({
       success: true,

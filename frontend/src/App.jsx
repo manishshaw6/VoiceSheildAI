@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { apiUrl } from './config/api.js';
 
 import './App.css';
 import './voxshield.css';
@@ -79,7 +80,7 @@ function App() {
 
       if (format === 'pdf') {
         window.open(
-          `/api/v1/reports/${analysisId}/pdf`,
+          apiUrl(`/api/v1/reports/${analysisId}/pdf`),
           '_blank'
         );
       } else if (format === 'markdown') {

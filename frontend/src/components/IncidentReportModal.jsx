@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { apiUrl } from '../config/api.js';
 
 export default function IncidentReportModal({ analysis, isOpen, onClose }) {
   const { user, authenticated, openAuthModal } = useAuth();
@@ -172,7 +173,7 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
 
   const handleDownloadPdf = () => {
     if (!reportData?.reportId) return;
-    window.open(`/api/v1/reports/${reportData.reportId}/pdf`, '_blank');
+    window.open(apiUrl(`/api/v1/reports/${reportData.reportId}/pdf`), '_blank');
   };
 
   if (!isOpen) return null;

@@ -18,6 +18,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 // ─── APP_MODE ───────────────────────────────────────────────────────────────
 
 const APP_MODE = (process.env.APP_MODE || 'development').toLowerCase();
+const IS_NODE_TEST_RUNNER = Boolean(process.env.NODE_TEST_CONTEXT);
 const validModes = ['production', 'development', 'test', 'demo'];
 if (!validModes.includes(APP_MODE)) {
   console.warn(`[Config] Invalid APP_MODE '${APP_MODE}', falling back to 'development'`);
@@ -62,7 +63,9 @@ export const config = {
   tempDir: path.resolve(__dirname, '../../temp'),
   dataDir: path.resolve(__dirname, '../../data'),
   dbPath: path.resolve(__dirname, '../../data/voiceshield.db'),
-  databaseUrl: process.env.DATABASE_URL || '',
+  databaseUrl: IS_NODE_TEST_RUNNER
+    ? (process.env.TEST_DATABASE_URL || '')
+    : (process.env.DATABASE_URL || ''),
   databasePoolSize: Math.max(1, parseInt(process.env.DATABASE_POOL_SIZE, 10) || 5),
 
   supabase: {
