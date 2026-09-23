@@ -1,5 +1,7 @@
 # VoiceShieldAI (VOXSHIELD)
 
+Production setup: [Supabase + Render backend deployment](backend/SUPABASE_RENDER_DEPLOYMENT.md).
+
 > **AI-Powered Real-Time Voice Threat Intelligence, Deepfake Audio Detection & Anti-Scam Platform**
 
 VoiceShieldAI is an enterprise-inspired voice security platform engineered to protect individuals, banking institutions, and organizations from next-generation voice-based cyber attacks: synthetic/deepfake voices, cloned audio impersonation, OTP/credential harvesting, and urgency-driven social engineering fraud.

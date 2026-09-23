@@ -557,8 +557,14 @@ export async function loginDemoUser() {
     const { hash, salt } = hashPassword(demoPass);
     userId = `usr_demo_${crypto.createHash('sha256').update(demoEmail).digest('hex').slice(0, 12)}`;
     await query.run(`
-      INSERT OR REPLACE INTO users (id, email, name, password_hash, password_salt, last_login_at)
+      INSERT INTO users (id, email, name, password_hash, password_salt, last_login_at)
       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        email = excluded.email,
+        name = excluded.name,
+        password_hash = excluded.password_hash,
+        password_salt = excluded.password_salt,
+        last_login_at = CURRENT_TIMESTAMP
     `, [userId, demoEmail, demoName, hash, salt]);
     user = { id: userId, email: demoEmail, name: demoName };
   } else {

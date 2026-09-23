@@ -1,5 +1,5 @@
 import { config } from '../config/index.js';
-import { checkDatabase } from '../database/db.js';
+import { checkDatabase, databaseEngine } from '../database/db.js';
 import { getIntelligenceProviderHealth } from '../integrations/providers.js';
 import { runPreflight } from '../../scripts/preflight.js';
 import { getSendGridStatus } from '../services/sendgridMailService.js';
@@ -35,7 +35,7 @@ export async function getProviderStatus(_req, res) {
       available: Boolean(providers.speaker?.available), device: providers.speaker?.device ?? null, model: providers.speaker?.model ?? null
     },
     speaker_engine: providers.speaker,
-    database: { available: databaseAvailable }
+    database: { available: databaseAvailable, engine: databaseEngine }
     , sendgrid: { configured: getSendGridStatus().configured }
   });
 }
@@ -45,7 +45,7 @@ export async function getReadiness(req, res) {
   const canAnalyze = databaseAvailable; // local quality/rules/speaker engines require no external provider
   return res.status(canAnalyze ? 200 : 503).json({
     status: canAnalyze ? 'ready' : 'not_ready',
-    canAnalyze, database: { available: databaseAvailable }, sendgrid: { configured: getSendGridStatus().configured }, request_id: req.requestId
+    canAnalyze, database: { available: databaseAvailable, engine: databaseEngine }, sendgrid: { configured: getSendGridStatus().configured }, request_id: req.requestId
   });
 }
 

@@ -11,6 +11,20 @@ import { getUserFromSession } from '../services/authService.js';
 import { config } from '../config/index.js';
 import { ApiError } from '../schemas/errors.js';
 import { query } from '../database/db.js';
+import { verifySupabaseAccessToken } from '../services/supabaseAuthService.js';
+
+function toRequestUser(user) {
+  return {
+    id: user.id,
+    fullName: user.full_name || user.name,
+    name: user.name || user.full_name,
+    email: user.email,
+    username: user.username,
+    picture: user.picture,
+    createdAt: user.created_at,
+    lastLoginAt: user.last_login_at
+  };
+}
 
 /**
  * Attach authenticated user if a valid session or JWT exists.
@@ -46,7 +60,7 @@ export async function attachUser(req, res, next) {
     const authHeader = req.headers.authorization;
 
     if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
+      const token = authHeader.slice(7).trim();
 
       if (token) {
         try {
@@ -71,21 +85,22 @@ export async function attachUser(req, res, next) {
           );
 
           if (user) {
-            req.user = {
-              id: user.id,
-              fullName: user.full_name || user.name,
-              name: user.name || user.full_name,
-              email: user.email,
-              username: user.username,
-              picture: user.picture,
-              createdAt: user.created_at,
-              lastLoginAt: user.last_login_at
-            };
+            req.user = toRequestUser(user);
 
             return next();
           }
         } catch {
           // Invalid JWT — treat as unauthenticated.
+        }
+
+        try {
+          const supabaseUser = await verifySupabaseAccessToken(token);
+          if (supabaseUser) {
+            req.user = toRequestUser(supabaseUser);
+            return next();
+          }
+        } catch {
+          // Keep provider failures private and continue as unauthenticated.
         }
       }
     }

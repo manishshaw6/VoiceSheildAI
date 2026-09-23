@@ -7,9 +7,10 @@
 import http from 'http';
 import { WebSocketServer } from 'ws';
 import app from './app.js';
-import { config, validateConfig } from './config/index.js';
+import { config, validateConfig, assertProductionConfig } from './config/index.js';
 import { setupLiveAnalysisWebSocket } from './websocket/liveAnalysisHandler.js';
 import logger from './core/logger.js';
+import { closeDatabase } from './database/db.js';
 
 // ─── Startup Validation ─────────────────────────────────────────────────────
 
@@ -17,6 +18,7 @@ const configWarnings = validateConfig();
 for (const warning of configWarnings) {
   logger.warn('startup.config_warning', { message: warning });
 }
+assertProductionConfig();
 
 logger.info('startup.mode', { mode: config.mode, demo: config.enableDemoMode });
 
@@ -32,6 +34,27 @@ const wss = new WebSocketServer({
 });
 
 setupLiveAnalysisWebSocket(wss);
+
+function handleListenerError(error) {
+  if (error.code === 'EADDRINUSE') {
+    logger.error('startup.port_in_use', {
+      port: config.port,
+      message: `Port ${config.port} is already in use. Stop the existing backend process or configure a different PORT.`
+    });
+  } else {
+    logger.error('startup.listener_failed', { code: error.code, message: error.message });
+  }
+
+  closeDatabase()
+    .catch(closeError => logger.warn('startup.database_close_failed', { error: closeError.message }))
+    .finally(() => { process.exitCode = 1; });
+}
+
+// Prevent HTTP/WebSocket listener failures from becoming unhandled exceptions.
+server.on('error', handleListenerError);
+wss.on('error', error => {
+  if (error.code !== 'EADDRINUSE') handleListenerError(error);
+});
 
 // ─── Listen ─────────────────────────────────────────────────────────────────
 
@@ -71,7 +94,8 @@ function shutdown(signal) {
     } catch (_) { /* ignore */ }
   });
 
-  server.close(() => {
+  server.close(async () => {
+    await closeDatabase().catch(error => logger.warn('shutdown.database_close_failed', { error: error.message }));
     logger.info('shutdown.complete');
     process.exit(0);
   });

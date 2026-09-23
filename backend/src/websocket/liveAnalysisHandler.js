@@ -16,6 +16,7 @@ import { createLogger } from '../core/logger.js';
 import { orchestrateAnalysis } from '../services/analysisOrchestrator.js';
 import { ensurePcmWav } from '../audio/preprocessor.js';
 import { extractJsForensics } from '../services/forensicAnalysisService.js';
+import { getUserFromSession } from '../services/authService.js';
 
 const logger = createLogger({ component: 'live_analysis' });
 const sessions = new InMemorySessionManager({ ewmaAlpha: config.ewmaAlpha });
@@ -57,7 +58,15 @@ function liveRisk(session) {
 }
 
 export function setupLiveAnalysisWebSocket(wss) {
-  wss.on('connection', ws => {
+  wss.on('connection', async (ws, request) => {
+    const cookieHeader = request.headers.cookie || '';
+    const sessionCookie = cookieHeader.split(';')
+      .map(value => value.trim().split('='))
+      .find(([name]) => name === 'voxshield_session');
+    let authenticatedUser = null;
+    if (sessionCookie?.[1]) {
+      authenticatedUser = await getUserFromSession(decodeURIComponent(sessionCookie.slice(1).join('='))).catch(() => null);
+    }
     const callId = `call_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
     const session = sessions.create(callId, { connectionId: crypto.randomUUID() });
     session.deepfake = null;
@@ -279,9 +288,9 @@ export function setupLiveAnalysisWebSocket(wss) {
 
       const storedRaw = JSON.stringify(completeLiveDossier);
 
-      await query.run(`INSERT INTO analyses (id, audio_filename, duration, transcript, deepfake_score,
+      await query.run(`INSERT INTO analyses (id, user_id, audio_filename, duration, transcript, deepfake_score,
         scam_score, speaker_score, final_score, risk_level, threat_category, indicators, raw_result)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [callId, 'live_recording.webm', completeLiveDossier.duration,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [callId, authenticatedUser?.id || null, 'live_recording.webm', completeLiveDossier.duration,
         storedTranscript, storedDeepfake, storedScam, storedSpeaker, storedScore, storedLevel, storedCategory,
         storedIndicators, storedRaw]);
 

@@ -53,9 +53,10 @@ async function checkExpress() {
 async function checkDatabase() {
   try {
     const data = await fetchJson(`${EXPRESS_URL}/api/system/providers`);
-    record('SQLite Database', data.database?.available ? 'PASS' : 'FAIL');
+    const engine = data.database?.engine === 'postgres' ? 'Supabase PostgreSQL' : 'SQLite Database';
+    record(engine, data.database?.available ? 'PASS' : 'FAIL');
   } catch (err) {
-    record('SQLite Database', 'FAIL', err.message);
+    record('Database', 'FAIL', err.message);
   }
 }
 

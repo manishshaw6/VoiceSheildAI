@@ -1,7 +1,9 @@
-import sqlite3 from 'sqlite3';
+import postgres from 'postgres';
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config/index.js';
+import { initializePostgresSchema } from './postgresSchema.js';
+import { toPostgresPlaceholders } from './sqlDialect.js';
 
 // Ensure necessary directories exist
 [config.dataDir, config.uploadDir, config.tempDir].forEach(dir => {
@@ -10,14 +12,33 @@ import { config } from '../config/index.js';
   }
 });
 
-const db = new sqlite3.Database(config.dbPath, (err) => {
-  if (err) {
-    console.error('[VoiceShieldAI:DB] Database connection error:', err.message);
-  } else {
-    console.log('[VoiceShieldAI:DB] Connected to SQLite database at', config.dbPath);
-    initSchema();
-  }
-});
+export const databaseEngine = config.databaseUrl ? 'postgres' : 'sqlite';
+let db = null;
+let pgClient = null;
+let databaseReady = Promise.resolve();
+
+if (databaseEngine === 'postgres') {
+  let transactionPooler = false;
+  try { transactionPooler = new URL(config.databaseUrl).port === '6543'; } catch { /* validated on connect */ }
+  pgClient = postgres(config.databaseUrl, {
+    max: config.databasePoolSize,
+    ssl: 'require',
+    prepare: !transactionPooler,
+    connect_timeout: 15,
+    idle_timeout: 30,
+    max_lifetime: 60 * 30
+  });
+  databaseReady = initializePostgresSchema(pgClient, { devTestRecipient: config.devTestRecipient })
+    .then(() => console.log('[VoiceShieldAI:DB] Connected to Supabase PostgreSQL'));
+  databaseReady.catch(error => {
+    console.error('[VoiceShieldAI:DB] PostgreSQL initialization error:', error.message);
+  });
+} else {
+  const { openSqliteDatabase } = await import('./sqliteCompat.js');
+  db = openSqliteDatabase(config.dbPath);
+  console.log('[VoiceShieldAI:DB] Connected to built-in SQLite database at', config.dbPath);
+  initSchema();
+}
 
 function initSchema() {
   db.serialize(() => {
@@ -25,6 +46,7 @@ function initSchema() {
     db.run(`
       CREATE TABLE IF NOT EXISTS analyses (
         id TEXT PRIMARY KEY,
+        user_id TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         audio_filename TEXT,
         duration REAL,
@@ -39,6 +61,8 @@ function initSchema() {
         raw_result TEXT
       )
     `);
+    db.run('ALTER TABLE analyses ADD COLUMN user_id TEXT', () => {});
+    db.run('CREATE INDEX IF NOT EXISTS idx_analyses_user_id ON analyses(user_id)');
     // Speaker Profiles table for enrollment & verification
     db.run(`
       CREATE TABLE IF NOT EXISTS speaker_profiles (
@@ -127,6 +151,7 @@ function initSchema() {
     // These allow databases created by either branch to continue working.
     for (const statement of [
       'ALTER TABLE users ADD COLUMN google_id TEXT',
+      'ALTER TABLE users ADD COLUMN supabase_id TEXT',
       'ALTER TABLE users ADD COLUMN full_name TEXT',
       'ALTER TABLE users ADD COLUMN username TEXT',
       'ALTER TABLE users ADD COLUMN picture TEXT',
@@ -139,6 +164,7 @@ function initSchema() {
     ]) {
       db.run(statement, () => {});
     }
+    db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_supabase_id ON users(supabase_id)');
 
     // OAuth Tokens for Users (Encrypted at rest)
     db.run(`
@@ -395,8 +421,19 @@ function seedTrustedDirectory() {
 }
 
 // Promise-based helper functions
+async function executePostgres(statement, params = []) {
+  await databaseReady;
+  return pgClient.unsafe(toPostgresPlaceholders(statement), params);
+}
+
 export const query = {
   run: (sql, params = []) => {
+    if (databaseEngine === 'postgres') {
+      return executePostgres(sql, params).then(result => ({
+        lastID: result[0]?.id ?? null,
+        changes: result.count ?? result.length ?? 0
+      }));
+    }
     return new Promise((resolve, reject) => {
       db.run(sql, params, function (err) {
         if (err) reject(err);
@@ -405,6 +442,9 @@ export const query = {
     });
   },
   get: (sql, params = []) => {
+    if (databaseEngine === 'postgres') {
+      return executePostgres(sql, params).then(rows => rows[0]);
+    }
     return new Promise((resolve, reject) => {
       db.get(sql, params, (err, row) => {
         if (err) reject(err);
@@ -413,6 +453,9 @@ export const query = {
     });
   },
   all: (sql, params = []) => {
+    if (databaseEngine === 'postgres') {
+      return executePostgres(sql, params).then(rows => Array.from(rows));
+    }
     return new Promise((resolve, reject) => {
       db.all(sql, params, (err, rows) => {
         if (err) reject(err);
@@ -435,4 +478,11 @@ export async function checkDatabase() {
   }
 }
 
-export default db;
+export async function closeDatabase() {
+  if (pgClient) await pgClient.end({ timeout: 5 });
+  if (db) await new Promise(resolve => db.close(() => resolve()));
+}
+
+export { databaseReady };
+
+export default databaseEngine === 'postgres' ? pgClient : db;

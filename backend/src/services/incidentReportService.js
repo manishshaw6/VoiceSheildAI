@@ -44,6 +44,18 @@ export async function generateIncidentReport({ analysisId, user }) {
   if (!analysisRow) {
     throw notFoundError('Analysis');
   }
+  // One-time ownership claim supports records created before ownership tracking was introduced.
+  if (!analysisRow.user_id) {
+    const claim = await query.run(
+      'UPDATE analyses SET user_id = ? WHERE id = ? AND user_id IS NULL',
+      [user.id, analysisId]
+    );
+    if (claim.changes === 1) analysisRow.user_id = user.id;
+  }
+  if (analysisRow.user_id !== user.id) {
+    // Avoid revealing whether another user's analysis exists.
+    throw notFoundError('Analysis');
+  }
 
   const raw = parseStoredJson(analysisRow.raw_result, {});
   const indicators = parseStoredJson(analysisRow.indicators, raw.indicators || []);

@@ -171,19 +171,19 @@ router.post(
 // History & Auditing
 // =====================================================
 
-router.get('/history', getHistory);
-router.get('/history/:id', getHistoryById);
-router.delete('/history/:id', deleteHistory);
+router.get('/history', requireAuth, getHistory);
+router.get('/history/:id', requireAuth, getHistoryById);
+router.delete('/history/:id', requireAuth, deleteHistory);
 
 
 // =====================================================
 // Security Reports (Legacy & Native)
 // =====================================================
 
-router.get('/analysis/:id/report', getSecurityReport);
-router.get('/analysis/:id/forensics', getAnalysisForensics);
-router.get('/incidents/:id', getIncident);
-router.get('/audit', getAuditTrail);
+router.get('/analysis/:id/report', requireAuth, getSecurityReport);
+router.get('/analysis/:id/forensics', requireAuth, getAnalysisForensics);
+router.get('/incidents/:id', requireAuth, getIncident);
+router.get('/audit', requireAuth, getAuditTrail);
 
 
 // =====================================================
@@ -239,11 +239,13 @@ router.post(
 
 router.get(
   '/reports/:id',
+  requireAuth,
   getReport
 );
 
 router.get(
   '/reports/:id/pdf',
+  requireAuth,
   getReportPdf
 );
 
@@ -272,6 +274,7 @@ router.post(
 
 router.get(
   '/reports/:id/status',
+  requireAuth,
   getReportStatus
 );
 

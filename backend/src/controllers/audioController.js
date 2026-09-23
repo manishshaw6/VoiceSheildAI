@@ -18,9 +18,9 @@ export async function analyzeAudio(req, res, next) {
 
     if (!result.success && result.state === 'AUDIO_UNUSABLE') return res.status(422).json(result);
     if (!result.cached) {
-      await query.run(`INSERT INTO analyses (id, audio_filename, duration, transcript, deepfake_score,
+      await query.run(`INSERT INTO analyses (id, user_id, audio_filename, duration, transcript, deepfake_score,
         scam_score, speaker_score, final_score, risk_level, threat_category, indicators, raw_result)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [result.analysisId, result.filename, result.duration,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [result.analysisId, req.user?.id || null, result.filename, result.duration,
         result.transcription?.text || '', result.deepfake?.score == null ? null : Math.round(result.deepfake.score * 100),
         result.context?.overallContextRisk == null ? null : Math.round(result.context.overallContextRisk * 100),
         result.speaker?.similarity == null ? null : Math.round(result.speaker.similarity * 100), result.risk.score,
@@ -37,7 +37,7 @@ export async function analyzeAudio(req, res, next) {
 export async function getAnalysisForensics(req, res, next) {
   try {
     const { id } = req.params;
-    const row = await query.get('SELECT raw_result FROM analyses WHERE id = ?', [id]);
+    const row = await query.get('SELECT raw_result FROM analyses WHERE id = ? AND user_id = ?', [id, req.user.id]);
     if (!row || !row.raw_result) {
       return res.status(404).json({ success: false, error: 'Analysis record not found' });
     }

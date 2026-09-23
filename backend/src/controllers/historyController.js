@@ -7,15 +7,17 @@ import { query } from '../database/db.js';
 
 export async function getHistory(req, res) {
   try {
-    const limit = parseInt(req.query.limit) || 50;
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
     const rows = await query.all(`
       SELECT id, timestamp, audio_filename, duration,
              deepfake_score, scam_score, speaker_score,
              final_score, risk_level, threat_category, indicators
       FROM analyses
+      WHERE user_id = ?
       ORDER BY timestamp DESC
       LIMIT ?
-    `, [limit]);
+    `, [req.user.id, limit]);
 
     const formatted = rows.map(r => ({
       ...r,
@@ -36,7 +38,7 @@ export async function getHistory(req, res) {
 export async function getHistoryById(req, res) {
   try {
     const { id } = req.params;
-    const row = await query.get('SELECT * FROM analyses WHERE id = ?', [id]);
+    const row = await query.get('SELECT * FROM analyses WHERE id = ? AND user_id = ?', [id, req.user.id]);
     if (!row) {
       return res.status(404).json({ success: false, error: 'Analysis record not found' });
     }
@@ -58,7 +60,7 @@ export async function getHistoryById(req, res) {
 export async function deleteHistory(req, res) {
   try {
     const { id } = req.params;
-    const result = await query.run('DELETE FROM analyses WHERE id = ?', [id]);
+    const result = await query.run('DELETE FROM analyses WHERE id = ? AND user_id = ?', [id, req.user.id]);
     if (result.changes === 0) {
       return res.status(404).json({ success: false, error: 'Record not found' });
     }
@@ -72,7 +74,7 @@ export async function deleteHistory(req, res) {
 export async function getSecurityReport(req, res) {
   try {
     const { id } = req.params;
-    const row = await query.get('SELECT * FROM analyses WHERE id = ?', [id]);
+    const row = await query.get('SELECT * FROM analyses WHERE id = ? AND user_id = ?', [id, req.user.id]);
     if (!row) {
       return res.status(404).json({ success: false, error: 'Analysis record not found' });
     }

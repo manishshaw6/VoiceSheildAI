@@ -62,6 +62,14 @@ export const config = {
   tempDir: path.resolve(__dirname, '../../temp'),
   dataDir: path.resolve(__dirname, '../../data'),
   dbPath: path.resolve(__dirname, '../../data/voiceshield.db'),
+  databaseUrl: process.env.DATABASE_URL || '',
+  databasePoolSize: Math.max(1, parseInt(process.env.DATABASE_POOL_SIZE, 10) || 5),
+
+  supabase: {
+    url: (process.env.SUPABASE_URL || '').replace(/\/$/, ''),
+    publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || '',
+    secretKey: process.env.SUPABASE_SECRET_KEY || ''
+  },
 
   // Risk weights (configurable)
   riskWeights: {
@@ -205,6 +213,13 @@ export function validateConfig() {
     warnings.push('LIVEKIT_API_SECRET appears incomplete; LiveKit will reject room operations until the full secret is configured.');
   }
 
+  if (config.isProduction && !config.databaseUrl) {
+    warnings.push('DATABASE_URL is not configured. Production will fall back to ephemeral SQLite storage.');
+  }
+  if (Boolean(config.supabase.url) !== Boolean(config.supabase.publishableKey)) {
+    warnings.push('SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY must be configured together for Supabase token verification.');
+  }
+
   // Validate weight sum is approximately 1.0
   const weightSum = Object.values(config.riskWeights).reduce((s, w) => s + w, 0);
   if (Math.abs(weightSum - 1.0) > 0.01) {
@@ -212,4 +227,21 @@ export function validateConfig() {
   }
 
   return warnings;
+}
+
+export function assertProductionConfig() {
+  if (!config.isProduction) return;
+
+  const missing = [];
+  if (!config.databaseUrl) missing.push('DATABASE_URL');
+  if (!config.supabase.url) missing.push('SUPABASE_URL');
+  if (!config.supabase.publishableKey) missing.push('SUPABASE_PUBLISHABLE_KEY');
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) missing.push('JWT_SECRET (minimum 32 characters)');
+  if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) missing.push('SESSION_SECRET (minimum 32 characters)');
+  if (!process.env.REPORT_SIGNING_SECRET || process.env.REPORT_SIGNING_SECRET.length < 32) missing.push('REPORT_SIGNING_SECRET (minimum 32 characters)');
+  if (!config.frontendUrl || /localhost|127\.0\.0\.1/i.test(config.frontendUrl)) missing.push('FRONTEND_URL (deployed HTTPS origin)');
+
+  if (missing.length > 0) {
+    throw new Error(`Production configuration is incomplete: ${missing.join(', ')}`);
+  }
 }
