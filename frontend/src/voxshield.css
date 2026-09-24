@@ -33,6 +33,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   flex-direction: column;
 }
 
+.page-shell-pro.no-sidebar-page {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
 /* Workspace Layout & Sidebar */
 .app-workspace-layout {
   display: flex;
@@ -41,6 +46,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   margin-top: 72px;
   position: relative;
   width: 100%;
+}
+
+.app-workspace-layout.no-sidebar-layout {
+  display: block;
+  width: 100%;
+}
+
+.app-main-viewport.call-room-viewport {
+  background: #f8fafc;
+  width: 100%;
+  max-width: 100%;
 }
 
 .app-main-viewport {

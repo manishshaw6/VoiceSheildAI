@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { apiUrl } from './config/api.js';
 
 import './App.css';
@@ -23,6 +23,7 @@ import AuthPage from './pages/AuthPage';
 import GuardianOfflinePage from './pages/GuardianOfflinePage';
 import ReportVerificationPage from './pages/ReportVerificationPage';
 import JoinCallPage from './pages/JoinCallPage';
+import LiveRiskRoomPage from './pages/LiveRiskRoomPage';
 
 import { generateCyberCrimePdfReport } from './services/pdfReportGenerator';
 
@@ -220,108 +221,137 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <div className={`page-shell-pro ${sidebarCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded'} ${isResizing ? 'is-resizing' : ''}`}>
-          <Navbar
-            onToggleSidebar={toggleSidebar}
-            isSidebarCollapsed={sidebarCollapsed}
-          />
-
-          <div className="app-workspace-layout">
-            <Sidebar
-              isCollapsed={sidebarCollapsed}
-              onToggleCollapse={toggleSidebar}
-              width={sidebarWidth}
-              setWidth={setSidebarWidth}
-              isResizing={isResizing}
-              setIsResizing={setIsResizing}
-            />
-
-            <div className="app-main-viewport">
-              <main className="main-content-pro">
-                <Routes>
-                  {/* Public Landing Page */}
-                  <Route path="/" element={<HomePage />} />
-
-                  {/* Public Authentication Routes */}
-                  <Route path="/auth" element={<AuthPage />} />
-                  <Route path="/login" element={<AuthPage />} />
-                  <Route path="/register" element={<AuthPage />} />
-                  <Route path="/join-call" element={<JoinCallPage />} />
-
-                  {/* Protected Operations & Tools */}
-                  <Route
-                    path="/dashboard"
-                    element={
-                      <ProtectedRoute>
-                        <ScannerPage onExportReport={handleExportReport} />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/scanner"
-                    element={
-                      <ProtectedRoute>
-                        <ScannerPage onExportReport={handleExportReport} />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/guardian-offline"
-                    element={<GuardianOfflinePage />}
-                  />
-                  <Route
-                    path="/live"
-                    element={
-                      <ProtectedRoute>
-                        <LiveShieldPage onExportReport={handleExportReport} />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/speaker-guard"
-                    element={
-                      <ProtectedRoute>
-                        <SpeakerGuardPage />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/history"
-                    element={
-                      <ProtectedRoute>
-                        <AuditVaultPage onExportReport={handleExportReport} />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/api-keys"
-                    element={
-                      <ProtectedRoute>
-                        <ApiKeyPortalPage />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/about"
-                    element={
-                      <ProtectedRoute>
-                        <AboutPage />
-                      </ProtectedRoute>
-                    }
-                  />
-
-                  {/* Report Verification */}
-                  <Route path="/reports/:id/verify" element={<ReportVerificationPage />} />
-                  <Route path="/reports/verify/:id" element={<ReportVerificationPage />} />
-                </Routes>
-              </main>
-
-              <Footer />
-            </div>
-          </div>
-        </div>
+        <AppLayout
+          sidebarCollapsed={sidebarCollapsed}
+          sidebarWidth={sidebarWidth}
+          setSidebarWidth={setSidebarWidth}
+          isResizing={isResizing}
+          setIsResizing={setIsResizing}
+          toggleSidebar={toggleSidebar}
+          handleExportReport={handleExportReport}
+        />
       </BrowserRouter>
     </AuthProvider>
+  );
+}
+
+function AppLayout({
+  sidebarCollapsed,
+  sidebarWidth,
+  setSidebarWidth,
+  isResizing,
+  setIsResizing,
+  toggleSidebar,
+  handleExportReport
+}) {
+  const location = useLocation();
+  const isCallOrRoomPage = location.pathname === '/live-risk-room' || location.pathname === '/join-call';
+
+  return (
+    <div className={`page-shell-pro ${isCallOrRoomPage ? 'no-sidebar-page' : (sidebarCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded')} ${isResizing ? 'is-resizing' : ''}`}>
+      <Navbar
+        onToggleSidebar={toggleSidebar}
+        isSidebarCollapsed={sidebarCollapsed}
+        hideSidebarToggle={isCallOrRoomPage}
+      />
+
+      <div className={`app-workspace-layout ${isCallOrRoomPage ? 'no-sidebar-layout' : ''}`}>
+        {!isCallOrRoomPage && (
+          <Sidebar
+            isCollapsed={sidebarCollapsed}
+            onToggleCollapse={toggleSidebar}
+            width={sidebarWidth}
+            setWidth={setSidebarWidth}
+            isResizing={isResizing}
+            setIsResizing={setIsResizing}
+          />
+        )}
+
+        <div className={`app-main-viewport ${isCallOrRoomPage ? 'call-room-viewport' : ''}`}>
+          <main className="main-content-pro">
+            <Routes>
+              {/* Public Landing Page */}
+              <Route path="/" element={<HomePage />} />
+
+              {/* Public Authentication Routes */}
+              <Route path="/auth" element={<AuthPage />} />
+              <Route path="/login" element={<AuthPage />} />
+              <Route path="/register" element={<AuthPage />} />
+              <Route path="/join-call" element={<JoinCallPage />} />
+              <Route path="/live-risk-room" element={<LiveRiskRoomPage />} />
+
+              {/* Protected Operations & Tools */}
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <ScannerPage onExportReport={handleExportReport} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/scanner"
+                element={
+                  <ProtectedRoute>
+                    <ScannerPage onExportReport={handleExportReport} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/guardian-offline"
+                element={<GuardianOfflinePage />}
+              />
+              <Route
+                path="/live"
+                element={
+                  <ProtectedRoute>
+                    <LiveShieldPage onExportReport={handleExportReport} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/speaker-guard"
+                element={
+                  <ProtectedRoute>
+                    <SpeakerGuardPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/history"
+                element={
+                  <ProtectedRoute>
+                    <AuditVaultPage onExportReport={handleExportReport} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/api-keys"
+                element={
+                  <ProtectedRoute>
+                    <ApiKeyPortalPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/about"
+                element={
+                  <ProtectedRoute>
+                    <AboutPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Report Verification */}
+              <Route path="/reports/:id/verify" element={<ReportVerificationPage />} />
+              <Route path="/reports/verify/:id" element={<ReportVerificationPage />} />
+            </Routes>
+          </main>
+
+          {!isCallOrRoomPage && <Footer />}
+        </div>
+      </div>
+    </div>
   );
 }
 

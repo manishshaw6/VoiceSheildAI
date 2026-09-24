@@ -9,6 +9,7 @@ import { WebSocketServer } from 'ws';
 import app from './app.js';
 import { config, validateConfig, assertProductionConfig } from './config/index.js';
 import { setupLiveAnalysisWebSocket } from './websocket/liveAnalysisHandler.js';
+import { setupLiveRiskRoomWebSocket } from './websocket/liveRiskRoomHandler.js';
 import logger from './core/logger.js';
 import { closeDatabase } from './database/db.js';
 
@@ -26,14 +27,36 @@ logger.info('startup.mode', { mode: config.mode, demo: config.enableDemoMode });
 
 const server = http.createServer(app);
 
-// ─── WebSocket Server ───────────────────────────────────────────────────────
+// ─── WebSocket Servers ──────────────────────────────────────────────────────
 
-const wss = new WebSocketServer({
-  server,
-  path: '/ws/live-analysis'
-});
-
+const wss = new WebSocketServer({ noServer: true });
 setupLiveAnalysisWebSocket(wss);
+
+const wssRoom = new WebSocketServer({ noServer: true });
+setupLiveRiskRoomWebSocket(wssRoom);
+
+server.on('upgrade', (request, socket, head) => {
+  let pathname = '';
+  try {
+    const host = request.headers.host || 'localhost';
+    pathname = new URL(request.url, `http://${host}`).pathname;
+  } catch (err) {
+    socket.destroy();
+    return;
+  }
+
+  if (pathname === '/ws/live-analysis') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else if (pathname === '/ws/live-risk-room') {
+    wssRoom.handleUpgrade(request, socket, head, (ws) => {
+      wssRoom.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
 
 function handleListenerError(error) {
   if (error.code === 'EADDRINUSE') {
@@ -50,11 +73,10 @@ function handleListenerError(error) {
     .finally(() => { process.exitCode = 1; });
 }
 
-// Prevent HTTP/WebSocket listener failures from becoming unhandled exceptions.
+// Prevent HTTP listener failures from becoming unhandled exceptions.
 server.on('error', handleListenerError);
-wss.on('error', error => {
-  if (error.code !== 'EADDRINUSE') handleListenerError(error);
-});
+wss.on('error', error => handleListenerError(error));
+wssRoom.on('error', error => handleListenerError(error));
 
 // ─── Listen ─────────────────────────────────────────────────────────────────
 
@@ -63,6 +85,7 @@ server.listen(config.port, () => {
     port: config.port,
     http_url: `http://localhost:${config.port}/api`,
     ws_url: `ws://localhost:${config.port}/ws/live-analysis`,
+    ws_room_url: `ws://localhost:${config.port}/ws/live-risk-room`,
     health_url: `http://localhost:${config.port}/api/health`
   });
 
@@ -72,6 +95,7 @@ server.listen(config.port, () => {
     console.log(`🛡️  VoiceShieldAI Backend Server Active`);
     console.log(`📡 HTTP REST API: http://localhost:${config.port}/api`);
     console.log(`⚡ WebSocket Stream: ws://localhost:${config.port}/ws/live-analysis`);
+    console.log(`🚨 Live Risk Room WS: ws://localhost:${config.port}/ws/live-risk-room`);
     console.log(`🏥 Health Check: http://localhost:${config.port}/api/health`);
     console.log(`📋 Mode: ${config.mode.toUpperCase()}`);
     console.log('====================================================');
@@ -89,6 +113,11 @@ function shutdown(signal) {
 
   // Close WebSocket connections
   wss.clients.forEach(client => {
+    try {
+      client.close(1001, 'Server shutting down');
+    } catch (_) { /* ignore */ }
+  });
+  wssRoom.clients.forEach(client => {
     try {
       client.close(1001, 'Server shutting down');
     } catch (_) { /* ignore */ }

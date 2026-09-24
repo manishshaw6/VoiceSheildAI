@@ -69,6 +69,51 @@ export default function LiveShieldPage({ onExportReport }) {
         <h2>Near-Real-Time Live Call Interceptor</h2>
         <p>Continuous WebSocket stream monitoring speech for credential harvesting, pressure tactics, and synthetic acoustic manipulation.</p>
       </div>
+      <div style={{
+        margin: '0 0 20px 0',
+        padding: '16px 20px',
+        borderRadius: '10px',
+        background: 'linear-gradient(135deg, rgba(0,112,243,0.1), rgba(0,229,163,0.06))',
+        border: '1px solid rgba(0,112,243,0.3)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        flexWrap: 'wrap'
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <span style={{ fontSize: '1rem' }}>🛡️</span>
+            <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#60a5fa' }}>Live Risk Room — Multi-Participant Monitoring</span>
+          </div>
+          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)' }}>
+            Invite others to the same room. All participants see synchronized risk scores, transcript and alerts in real-time. Backend terminates the call automatically at critical risk (≥85).
+          </p>
+        </div>
+        <button
+          id="open-live-risk-room-btn"
+          onClick={() => window.open('/live-risk-room', '_blank', 'noopener,noreferrer')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            border: '1px solid rgba(0,112,243,0.5)',
+            background: 'linear-gradient(135deg, rgba(0,112,243,0.2), rgba(0,60,160,0.15))',
+            color: '#60a5fa',
+            cursor: 'pointer',
+            fontWeight: 800,
+            fontSize: '0.85rem',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            boxShadow: '0 0 16px rgba(0,112,243,0.2)'
+          }}
+          onMouseEnter={e => e.currentTarget.style.boxShadow = '0 0 24px rgba(0,112,243,0.45)'}
+          onMouseLeave={e => e.currentTarget.style.boxShadow = '0 0 16px rgba(0,112,243,0.2)'}
+        >
+          <span>🚀</span> Open Live Risk Room
+        </button>
+      </div>
 
       <div className="live-shield-layout">
         <LiveKitCallPanel

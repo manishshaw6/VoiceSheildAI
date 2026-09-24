@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import voxShieldMark from '../assets/voxshield-mark.svg';
 import AuthModal from './AuthModal';
 
-export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
+export default function Navbar({ onToggleSidebar, isSidebarCollapsed, hideSidebarToggle = false }) {
   const [health, setHealth] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -82,22 +82,24 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
         <div className="header-inner">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {/* ChatGPT-style Sidebar Toggle Button */}
-            <button
-              className="navbar-sidebar-toggle-btn"
-              onClick={onToggleSidebar}
-              title={isSidebarCollapsed ? "Open Sidebar (Ctrl + B)" : "Close Sidebar (Ctrl + B)"}
-              aria-label="Toggle Sidebar"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <line x1="9" y1="3" x2="9" y2="21" />
-                {isSidebarCollapsed ? (
-                  <polyline points="14 9 17 12 14 15" />
-                ) : (
-                  <polyline points="16 9 13 12 16 15" />
-                )}
-              </svg>
-            </button>
+            {!hideSidebarToggle && (
+              <button
+                className="navbar-sidebar-toggle-btn"
+                onClick={onToggleSidebar}
+                title={isSidebarCollapsed ? "Open Sidebar (Ctrl + B)" : "Close Sidebar (Ctrl + B)"}
+                aria-label="Toggle Sidebar"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <line x1="9" y1="3" x2="9" y2="21" />
+                  {isSidebarCollapsed ? (
+                    <polyline points="14 9 17 12 14 15" />
+                  ) : (
+                    <polyline points="16 9 13 12 16 15" />
+                  )}
+                </svg>
+              </button>
+            )}
 
             <Link to="/" className="brand-pro" title="VoxShield AI Operations">
               <div className="brand-icon-shield">
