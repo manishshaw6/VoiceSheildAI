@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 
+const normalizeProbability = value => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.max(0, Math.min(1, numeric > 1 ? numeric / 100 : numeric));
+};
+
 /**
  * VoxShield AI — Voice Forensic Signal Analysis Workstation
  * Courtroom and SOC grade acoustic, spectral, prosodic, and identity visualization.
@@ -92,10 +99,10 @@ export default function VoiceForensicsWorkstation({ analysis }) {
       speechImpact = `Anomalous F0 Pitch Spike (${Math.round(currentPitch)} Hz) at ${t.toFixed(1)}s — Outside normal speech range`;
       impactSeverity = "ELEVATED";
     } else if (currentPitch === null && currentRms > 0.08) {
-      speechImpact = `Unvoiced High-Energy Burst (${(currentRms).toFixed(3)} RMS) — Synthetic noise or vocoder glitch`;
-      impactSeverity = "HIGH";
+      speechImpact = `Unvoiced high-energy audio (${currentRms.toFixed(3)} RMS) - cause not determined`;
+      impactSeverity = "ELEVATED";
     } else if (currentCentroid > 3200) {
-      speechImpact = `Spectral Centroid Flare (${Math.round(currentCentroid)} Hz) — Artificial acoustic brightness`;
+      speechImpact = `Measured spectral centroid (${Math.round(currentCentroid)} Hz) - not independently classified`;
       impactSeverity = "ELEVATED";
     }
 
@@ -301,8 +308,10 @@ export default function VoiceForensicsWorkstation({ analysis }) {
 
     // Helper to collect candidate threats
     const addCandidate = (time, label, category, severity, priority, desc) => {
+      const measuredTime = Number(time);
+      if (!Number.isFinite(measuredTime)) return;
       candidateThreats.push({
-        time: Number(Math.max(0.2, Math.min(dur * 0.95, Number(time) || (dur * 0.5))).toFixed(1)),
+        time: Number(Math.max(0, Math.min(dur, measuredTime)).toFixed(1)),
         category: category || 'THREAT_SIGNAL',
         label,
         severity: severity || 'HIGH',
@@ -318,16 +327,14 @@ export default function VoiceForensicsWorkstation({ analysis }) {
       ...(analysis?.threatRules?.indicators || [])
     ];
 
-    indicators.forEach((ind, i) => {
+    indicators.forEach(ind => {
       let foundTime = null;
       if (timeline && timeline.length > 0 && ind.matchedTerm) {
         const cleanTerm = String(ind.matchedTerm).toLowerCase();
         const matchedSeg = timeline.find(seg => seg.text && String(seg.text).toLowerCase().includes(cleanTerm));
         if (matchedSeg) foundTime = matchedSeg.start;
       }
-      if (foundTime === null) {
-        foundTime = dur * (0.25 + (i * 0.28));
-      }
+      if (foundTime === null) foundTime = ind.timestamp ?? ind.start ?? ind.startTime ?? null;
 
       const isCrit = ind.severity === 'CRITICAL' ||
         ind.type === 'OTP_REQUEST' ||
@@ -347,20 +354,21 @@ export default function VoiceForensicsWorkstation({ analysis }) {
     });
 
     // 2. Synthetic Deepfake & Speaker Clone Detections
-    if (deepfake.available && deepfake.score != null && deepfake.score >= 0.70) {
+    const deepfakeProbability = normalizeProbability(deepfake.score ?? deepfake.fakeProbability);
+    if (deepfake.available && deepfakeProbability != null && deepfakeProbability >= 0.70 && Number.isFinite(Number(deepfake.timestamp))) {
       addCandidate(
-        dur * 0.35,
+        deepfake.timestamp,
         'Synthetic Speech Detected',
         'AUTHENTICITY',
         'CRITICAL',
         9,
-        `Synthetic probability: ${Math.round(deepfake.score * 100)}%`
+        `Synthetic probability: ${Math.round(deepfakeProbability * 100)}%`
       );
     }
 
-    if (speaker.enrolled && speaker.similarity != null && !speaker.match) {
+    if (speaker.enrolled && speaker.similarity != null && !speaker.match && Number.isFinite(Number(speaker.timestamp))) {
       addCandidate(
-        dur * 0.65,
+        speaker.timestamp,
         'Speaker Identity Mismatch',
         'IDENTITY',
         'HIGH',
@@ -371,9 +379,9 @@ export default function VoiceForensicsWorkstation({ analysis }) {
 
     // 3. Fallback to flagged timeline segments if no indicators
     if (candidateThreats.length === 0 && Array.isArray(timeline)) {
-      timeline.filter(t => t.flagged).forEach((t, i) => {
+      timeline.filter(t => t.flagged).forEach(t => {
         addCandidate(
-          t.start || (dur * 0.3 * (i + 1)),
+          t.start,
           t.indicators?.[0] || 'High-Risk Trigger Phrase',
           'BEHAVIOR',
           t.risk >= 70 ? 'CRITICAL' : 'HIGH',
@@ -400,19 +408,8 @@ export default function VoiceForensicsWorkstation({ analysis }) {
     // Curate strictly to top 2–3 high-priority flags
     const curatedFlags = uniqueThreats.slice(0, 3).sort((a, b) => a.time - b.time);
 
-    // If completely clean (0 threats), show 1 subtle acoustic confirmation flag
-    if (curatedFlags.length === 0 && energy.speech_ratio > 0) {
-      curatedFlags.push({
-        time: Number((dur * 0.3).toFixed(1)),
-        category: 'ACOUSTIC',
-        label: 'Speech Verified Authentic',
-        color: '#70c99f',
-        desc: 'Natural acoustic structure with no threat markers.'
-      });
-    }
-
     return curatedFlags;
-  }, [energy, pitch, deepfake, speaker, timeline, duration, analysis]);
+  }, [deepfake, speaker, timeline, duration, analysis]);
 
   const maxRms = Math.max(...(energy.values || [0.1]), 0.05);
 
@@ -983,29 +980,27 @@ export default function VoiceForensicsWorkstation({ analysis }) {
 
         {/* GRAPH 03: VOICE THREAT INTELLIGENCE ASSESSMENT */}
         {(() => {
-          // ── Derive 6 cybersecurity threat indicators from real forensic data ──
-          const deepfakeScore = deepfake.available ? (deepfake.score ?? deepfake.fakeProbability ?? 0) : null;
-          const speechRatio = energy.speech_ratio || (1 - (summary.silence_ratio_pct || 0) / 100);
-          const pitchStability = pitch.has_voiced_speech && pitch.median_pitch_hz && pitch.std_pitch_hz
-            ? Math.max(0, Math.min(1, 1 - (pitch.std_pitch_hz / Math.max(1, pitch.median_pitch_hz))))
-            : null;
-          const spectralFlatness = summary.spectral_flatness ?? null;
-          const harmonicRatio = zcr.mean_zcr != null ? Math.max(0, Math.min(1, 1 - (zcr.mean_zcr * 8))) : null;
-          const signalStrength = summary.peak_amplitude ?? null;
-          const centroidHz = spectral.mean_centroid_hz || 0;
-          const bandwidthHz = spectral.mean_bandwidth_hz || 0;
-          const riskScore = risk.score ?? 0;
+          // Use bounded provider/model outputs only. Missing evidence remains unavailable.
+          const subScores = risk.subScores || {};
+          const hasSubScore = key => Object.prototype.hasOwnProperty.call(subScores, key) && Number.isFinite(Number(subScores[key]));
+          const subScoreValue = key => hasSubScore(key) ? normalizeProbability(subScores[key]) : null;
+          const deepfakeScore = deepfake.available === false
+            ? null
+            : normalizeProbability(deepfake.score ?? deepfake.fakeProbability);
+          const speakerSimilarity = speaker.enrolled ? normalizeProbability(speaker.similarity) : null;
+          const fusedRisk = normalizeProbability(risk.score);
 
           // Threat indicator definitions — each maps acoustic data to a security assessment
           const threatIndicators = [
             {
               id: 'SYNTH_PROB',
               label: 'Synthetic Voice Probability',
-              desc: 'Likelihood the voice was generated by AI/TTS/vocoder synthesis',
-              value: deepfakeScore != null ? deepfakeScore : (spectralFlatness != null ? Math.min(0.95, spectralFlatness * 1.4) : 0.15),
+              desc: 'Synthetic-speech probability returned by the configured acoustic provider',
+              value: deepfakeScore,
+              providerVerdict: String(deepfake.classification || deepfake.verdict || '').toUpperCase(),
               evidence: deepfakeScore != null
-                ? `Model: ${(deepfakeScore * 100).toFixed(0)}%`
-                : `Flatness: ${(spectralFlatness || 0).toFixed(3)}`,
+                ? `${deepfake.provider || 'Acoustic model'}: ${(deepfakeScore * 100).toFixed(0)}%`
+                : 'Acoustic model result unavailable',
               icon: (
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 2v20M17 5v14M7 9v6M22 10v4M2 11v2"/>
@@ -1013,18 +1008,13 @@ export default function VoiceForensicsWorkstation({ analysis }) {
               )
             },
             {
-              id: 'MANIP_IDX',
-              label: 'Voice Manipulation Index',
-              desc: 'Indicators of pitch shifting, time-stretching, or splicing artifacts',
-              value: (() => {
-                let score = 0;
-                if (spectralFlatness != null && spectralFlatness > 0.4) score += 0.3;
-                if (pitchStability != null && pitchStability < 0.5) score += 0.25;
-                if (harmonicRatio != null && harmonicRatio < 0.3) score += 0.25;
-                if (centroidHz > 2800) score += 0.2;
-                return Math.min(1, score);
-              })(),
-              evidence: `Harmonicity: ${(harmonicRatio || 0).toFixed(2)} · Centroid: ${Math.round(centroidHz)} Hz`,
+              id: 'IDENTITY_UNCERTAINTY',
+              label: 'Speaker Identity Uncertainty',
+              desc: 'Distance from an enrolled-speaker comparison',
+              value: speakerSimilarity != null ? 1 - speakerSimilarity : null,
+              evidence: speakerSimilarity != null
+                ? `Measured similarity: ${(speakerSimilarity * 100).toFixed(0)}%`
+                : 'No enrolled-speaker comparison available',
               icon: (
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"/>
@@ -1034,21 +1024,11 @@ export default function VoiceForensicsWorkstation({ analysis }) {
               )
             },
             {
-              id: 'SPEC_ANOM',
-              label: 'Spectral Anomaly Score',
-              desc: 'Deviation from expected human vocal frequency distribution patterns',
-              value: (() => {
-                let anomaly = 0;
-                // Natural speech centroid typically 800-2500 Hz
-                if (centroidHz < 400 || centroidHz > 3200) anomaly += 0.4;
-                else if (centroidHz < 600 || centroidHz > 2800) anomaly += 0.2;
-                // Natural bandwidth typically 400-1800 Hz
-                if (bandwidthHz < 200 || bandwidthHz > 2200) anomaly += 0.3;
-                // Spectral flatness — pure tones or white noise are suspicious
-                if (spectralFlatness != null && (spectralFlatness < 0.05 || spectralFlatness > 0.7)) anomaly += 0.3;
-                return Math.min(1, anomaly);
-              })(),
-              evidence: `Bandwidth: ${Math.round(bandwidthHz)} Hz · Flatness: ${(spectralFlatness || 0).toFixed(3)}`,
+              id: 'CONTEXT_RISK',
+              label: 'Conversation Fraud Risk',
+              desc: 'Contextual fraud risk calculated from available conversation evidence',
+              value: subScoreValue('context_fraud_risk'),
+              evidence: hasSubScore('context_fraud_risk') ? 'Risk engine context sub-score' : 'Conversation analysis unavailable',
               icon: (
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="20" x2="18" y2="10"/>
@@ -1058,25 +1038,11 @@ export default function VoiceForensicsWorkstation({ analysis }) {
               )
             },
             {
-              id: 'PROSODY',
-              label: 'Prosodic Deception Index',
-              desc: 'Abnormal pitch patterns suggesting rehearsed, scripted, or generated speech',
-              value: (() => {
-                if (!pitch.has_voiced_speech) return 0.5; // unknown = moderate concern
-                let score = 0;
-                // Very flat pitch = suspicious (TTS-like)
-                if (pitchStability != null && pitchStability > 0.95) score += 0.4;
-                // Very erratic pitch = also suspicious (manipulation artifacts)
-                if (pitchStability != null && pitchStability < 0.3) score += 0.35;
-                // Very narrow pitch range
-                if (pitch.pitch_range_hz && pitch.pitch_range_hz < 15) score += 0.25;
-                // No voiced speech at all
-                if (!pitch.has_voiced_speech) score += 0.5;
-                return Math.min(1, score);
-              })(),
-              evidence: pitch.has_voiced_speech
-                ? `F0: ${Math.round(pitch.median_pitch_hz || 0)} Hz · Stability: ${(pitchStability || 0).toFixed(2)}`
-                : 'Speech unvoiced',
+              id: 'SENSITIVE_ACTION',
+              label: 'Sensitive Action Risk',
+              desc: 'Credential, payment, or remote-access risk supported by detected evidence',
+              value: subScoreValue('sensitive_action_risk'),
+              evidence: hasSubScore('sensitive_action_risk') ? 'Risk engine sensitive-action sub-score' : 'Sensitive-action analysis unavailable',
               icon: (
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M2 12c4-8 8-8 12 0s8 8 12 0"/>
@@ -1084,30 +1050,23 @@ export default function VoiceForensicsWorkstation({ analysis }) {
               )
             },
             {
-              id: 'SIG_INT',
-              label: 'Signal Integrity',
-              desc: 'Audio quality assessment — low integrity may indicate compression, re-encoding, or injection',
-              value: Math.max(0, 1 - Math.min(1, (() => {
-                let integrity = 0;
-                if (signalStrength != null && signalStrength < 0.05) integrity += 0.4;
-                if (speechRatio < 0.15) integrity += 0.3;
-                if (energy.mean_rms && energy.mean_rms < 0.005) integrity += 0.3;
-                return integrity;
-              })())),
-              evidence: `Speech: ${(speechRatio * 100).toFixed(0)}% · RMS: ${(energy.mean_rms || 0).toFixed(3)}`,
+              id: 'COERCION_RISK',
+              label: 'Behavioral Coercion Risk',
+              desc: 'Urgency, threat, and coercion risk supported by conversation evidence',
+              value: subScoreValue('behavioral_coercion_risk'),
+              evidence: hasSubScore('behavioral_coercion_risk') ? 'Risk engine behavioral-coercion sub-score' : 'Behavioral analysis unavailable',
               icon: (
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 </svg>
-              ),
-              invert: true // higher = safer for this one
+              )
             },
             {
               id: 'BEHAV_RISK',
-              label: 'Behavioral Threat Level',
-              desc: 'Combined risk from conversation analysis, social engineering patterns, and urgency indicators',
-              value: Math.min(1, riskScore / 100),
-              evidence: `Risk Score: ${Number(riskScore).toFixed(1)}/100 · ${(risk.reasons?.[0]?.replace(/^Pattern detected:\s*/i, '').slice(0, 30)) || 'Normal baseline'}`,
+              label: 'Overall Fused Risk',
+              desc: 'Final bounded score produced by the multi-signal risk engine',
+              value: fusedRisk,
+              evidence: fusedRisk != null ? `Risk score: ${(fusedRisk * 100).toFixed(1)}/100` : 'Fused risk assessment unavailable',
               icon: (
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"/>
@@ -1122,6 +1081,9 @@ export default function VoiceForensicsWorkstation({ analysis }) {
 
           // Classification logic
           const getClassification = (val, invert = false) => {
+            if (val == null || !Number.isFinite(val)) {
+              return { label: 'INSUFFICIENT', color: '#88a395', bg: 'rgba(136,163,149,0.08)', border: 'rgba(136,163,149,0.25)' };
+            }
             const v = invert ? 1 - val : val;
             if (v >= 0.75) return { label: 'CRITICAL', color: '#ff3b5c', bg: 'rgba(255,59,92,0.12)', border: 'rgba(255,59,92,0.35)' };
             if (v >= 0.50) return { label: 'HIGH', color: '#ff8c00', bg: 'rgba(255,140,0,0.10)', border: 'rgba(255,140,0,0.30)' };
@@ -1130,12 +1092,22 @@ export default function VoiceForensicsWorkstation({ analysis }) {
             return { label: 'CLEAR', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', border: 'rgba(34,197,94,0.25)' };
           };
 
+          const getProviderClassification = (verdict, val) => {
+            if (/AUTHENTIC|REAL/.test(verdict)) return getClassification(0);
+            if (/MANIPULATED|FAKE|FRAUD/.test(verdict)) return getClassification(1);
+            if (/SUSPICIOUS/.test(verdict)) {
+              return { label: 'SUSPICIOUS', color: '#fbbf24', bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.25)' };
+            }
+            return getClassification(val);
+          };
+
           // Overall threat classification
-          const threatAvg = threatIndicators.reduce((sum, t) => sum + (t.invert ? 1 - t.value : t.value), 0) / threatIndicators.length;
-          const overallClass = getClassification(threatAvg);
+          const overallClass = getClassification(fusedRisk);
+          const availableVectorCount = threatIndicators.filter(t => t.value != null && Number.isFinite(t.value)).length;
 
           // Gauge bar color gradient based on value
           const getGaugeGradient = (val, invert = false) => {
+            if (val == null || !Number.isFinite(val)) return 'transparent';
             const v = invert ? 1 - val : val;
             if (v >= 0.75) return 'linear-gradient(90deg, #ff3b5c, #ff6b81)';
             if (v >= 0.50) return 'linear-gradient(90deg, #ff8c00, #ffad42)';
@@ -1222,9 +1194,11 @@ export default function VoiceForensicsWorkstation({ analysis }) {
                 zIndex: 1
               }}>
                 {threatIndicators.map((t, idx) => {
-                  const cls = getClassification(t.value, t.invert);
-                  const displayPct = Math.round(t.value * 100);
-                  const barVal = t.invert ? (1 - t.value) : t.value;
+                  const cls = t.providerVerdict
+                    ? getProviderClassification(t.providerVerdict, t.value)
+                    : getClassification(t.value, t.invert);
+                  const displayPct = t.value == null ? null : Math.round(t.value * 100);
+                  const barVal = t.value == null ? 0 : (t.invert ? (1 - t.value) : t.value);
                   const isHovered = hoveredVectorId === t.id;
 
                   return (
@@ -1316,7 +1290,7 @@ export default function VoiceForensicsWorkstation({ analysis }) {
                             fontFamily: 'monospace',
                             textShadow: isHovered ? `0 0 8px ${cls.color}80` : 'none'
                           }}>
-                            {displayPct}%
+                            {displayPct == null ? 'N/A' : `${displayPct}%`}
                           </span>
                         </div>
                       </div>
@@ -1374,10 +1348,10 @@ export default function VoiceForensicsWorkstation({ analysis }) {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.64rem', color: '#88a395', fontFamily: 'monospace' }}>
-                  <span style={{ color: '#00e5a3' }}>6/6 VECTORS ARMED</span>
+                  <span style={{ color: '#00e5a3' }}>{availableVectorCount}/6 VECTORS AVAILABLE</span>
                   <span>·</span>
                   <span style={{ color: overallClass.color, fontWeight: 800 }}>
-                    COMPOSITE: {(threatAvg * 100).toFixed(1)}%
+                    COMPOSITE: {fusedRisk == null ? 'N/A' : `${(fusedRisk * 100).toFixed(1)}%`}
                   </span>
                 </div>
               </div>

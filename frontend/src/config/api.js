@@ -1,4 +1,15 @@
-const configuredApiBase = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
+import { Capacitor } from '@capacitor/core';
+
+const isAndroid = Capacitor.getPlatform() === 'android';
+
+// The Android bundle cannot rely on deployment-time Vite variables, so its
+// production HTTP and WebSocket endpoints are embedded in the application.
+const configuredApiBase = isAndroid
+  ? 'https://voicesheildai-b6p4.onrender.com'
+  : String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
+const configuredWsBase = isAndroid
+  ? 'wss://voicesheildai-b6p4.onrender.com'
+  : String(import.meta.env.VITE_WS_BASE_URL || '').trim().replace(/\/$/, '');
 
 export function apiUrl(path) {
   if (!path || !configuredApiBase || !String(path).startsWith('/api')) return path;
@@ -6,7 +17,6 @@ export function apiUrl(path) {
 }
 
 export function webSocketUrl(path = '/ws/live-analysis') {
-  const configuredWsBase = String(import.meta.env.VITE_WS_BASE_URL || '').trim().replace(/\/$/, '');
   if (configuredWsBase) return `${configuredWsBase}${path}`;
 
   if (configuredApiBase) {

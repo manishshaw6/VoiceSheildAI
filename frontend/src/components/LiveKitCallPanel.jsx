@@ -107,12 +107,22 @@ export default function LiveKitCallPanel({ onAnalysisStream, criticalSignal }) {
       });
       const data = await readApiResponse(response);
 
+      // When the host opened VoiceShield through an HTTPS tunnel, always keep
+      // the guest invitation on that same secure origin. Reverse proxies can
+      // otherwise make the backend report localhost/LAN even though the public
+      // browser context is HTTPS, which blocks microphone access on phones.
+      let secureJoinUrl = data.joinUrl;
+      if (window.location.protocol === 'https:' && data.joinUrl) {
+        const generated = new URL(data.joinUrl, window.location.origin);
+        secureJoinUrl = `${window.location.origin}${generated.pathname}${generated.search}${generated.hash}`;
+      }
+
       const room = new Room({ adaptiveStream: true, dynacast: true });
       roomRef.current = room;
       hostInviteRef.current = data.hostInvite;
-      setJoinUrl(data.joinUrl);
-      setLanJoinUrl(data.lanJoinUrl || data.joinUrl);
-      setShareType(data.joinUrl?.startsWith('https://') ? 'local' : 'network');
+      setJoinUrl(secureJoinUrl);
+      setLanJoinUrl(data.lanJoinUrl || secureJoinUrl);
+      setShareType(secureJoinUrl?.startsWith('https://') ? 'local' : 'network');
 
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const audioContext = new AudioCtx();
@@ -151,7 +161,10 @@ export default function LiveKitCallPanel({ onAnalysisStream, criticalSignal }) {
     }
   };
 
-  const currentCopyLink = shareType === 'network' && lanJoinUrl ? lanJoinUrl : joinUrl;
+  const hostedOverHttps = window.location.protocol === 'https:';
+  const currentCopyLink = hostedOverHttps
+    ? joinUrl
+    : (shareType === 'network' && lanJoinUrl ? lanJoinUrl : joinUrl);
   const sharedLinkNeedsHttps = (() => {
     try {
       const url = new URL(currentCopyLink);
@@ -309,7 +322,7 @@ export default function LiveKitCallPanel({ onAnalysisStream, criticalSignal }) {
             </div>
 
             {/* Network vs Localhost switch */}
-            {lanJoinUrl && lanJoinUrl !== joinUrl && (
+            {!hostedOverHttps && lanJoinUrl && lanJoinUrl !== joinUrl && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.72rem', color: 'var(--vs-faint, #71877d)' }}>
                 <span>Link format:</span>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', color: shareType === 'network' ? '#00e5a3' : 'inherit' }}>

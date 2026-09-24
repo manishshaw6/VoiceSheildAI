@@ -8,6 +8,49 @@ export default function HomePage() {
       {/* Interactive 3D Spline Hero */}
       <section className="hero-viewport">
         <SplineHero />
+
+        {/* Mobile-only hero. The desktop Spline experience remains unchanged. */}
+        <div className="mobile-home-hero">
+          <div className="mobile-hero-badge">
+            <span></span>
+            AI voice threat protection
+          </div>
+
+          <div className="mobile-hero-visual" aria-hidden="true">
+            <div className="mobile-hero-orbit orbit-outer"></div>
+            <div className="mobile-hero-orbit orbit-inner"></div>
+            <div className="mobile-waveform">
+              {[20, 34, 52, 30, 64, 42, 72, 48, 60, 32, 45, 22].map((height, index) => (
+                <span key={index} style={{ height: `${height}px` }}></span>
+              ))}
+            </div>
+            <div className="mobile-shield-core">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3 4.5 6v5.5c0 4.7 3.2 7.8 7.5 9.5 4.3-1.7 7.5-4.8 7.5-9.5V6L12 3Z" />
+                <path d="m8.8 12.1 2 2 4.4-4.4" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="mobile-hero-copy">
+            <h1>Trust every voice.<br /><span>Stop every threat.</span></h1>
+            <p>Detect deepfakes, scam intent, and voice impersonation before sensitive information is shared.</p>
+          </div>
+
+          <div className="mobile-hero-actions">
+            <Link to="/scanner" className="mobile-hero-primary">
+              Analyze a recording
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></svg>
+            </Link>
+            <Link to="/guardian-offline" className="mobile-hero-secondary">Try offline protection</Link>
+          </div>
+
+          <div className="mobile-hero-trust">
+            <span>On-device ready</span>
+            <span>Real-time alerts</span>
+            <span>Private by design</span>
+          </div>
+        </div>
         
         {/* Floating Hero Quick Launch Bar */}
         <div className="hero-floating-controls">
