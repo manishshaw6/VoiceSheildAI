@@ -175,8 +175,14 @@ const DICTIONARIES = {
     /\b(i\s+am\s+(from\s+)?(customer\s+support|technical\s+team|support\s+executive))\b/i
   ],
   FAMILY_IDENTITY_CLAIM: [
-    /\b(it['’]?s\s+me(\s+your)?\s+(son|daughter|boss|manager|relative)|this\s+is\s+your\s+(son|daughter|friend))\b/i,
-    /\b(i\s+lost\s+my\s+phone|calling\s+from\s+a\s+friend['’]?s\s+phone|new\s+number)\b/i
+    /\b(it['’]?s\s+me(\s+your)?\s+(son|daughter|boss|manager|relative)|this\s+is\s+your\s+(son|daughter|child|kid|brother|sister|father|mother|husband|wife|friend))\b/i,
+    /\b(i\s+lost\s+my\s+phone|calling\s+from\s+a\s+friend['’]?s\s+phone|new\s+number|changed\s+my\s+number)\b/i,
+    /\b(asking\s+(about\s+)?(your\s+)?(family|parents?|mother|father|mom|dad|son|daughter|brother|sister|children|kids?))\b/i,
+    /\b(tell\s+me\s+about\s+(your\s+)?family|who\s+(is|are)\s+in\s+your\s+family|family\s+members?|is\s+your\s+family\s+(home|there|alone))\b/i,
+    /\b(call\s+your\s+family|ask\s+your\s+family\s+to|tell\s+your\s+family\s+to\s+(send|pay|transfer))\b/i,
+    /\b(your\s+(son|daughter|child|family|mother|father|brother|sister)\s+(is\s+in|has\s+been|met\s+with|got\s+into)\s+(an?\s+)?(accident|trouble|hospital|custody|jail|police|danger|kidnapp?ed))\b/i,
+    /\b(family\s+emergency|medical\s+emergency|hospital\s+emergency|accident\s+emergency|urgent\s+family\s+matter)\b/i,
+    /परिवार|घर वाले|माता-पिता|बेटा|बेटी|भाई|बहन|अस्पताल|एक्सीडेंट|హాస్పిటల్|కుటుంబం|కుటుంబ సభ్యులు|ఫ్యామిలీ|కుమారుడు|కుమార్తె|యాక్సిడెంట్|குடும்பம்|மகன்|மகள்|விபத்து|மருத்துவமனை/i
   ],
   ACCOUNT_THREATS: [
     /\b(account\s+(will\s+be|is\s+being|is)\s+(blocked|suspended|frozen|deactivated|closed|terminated))\b/i,
@@ -575,8 +581,13 @@ export function extractSemanticFraudEvents(transcriptText, { timestamp = '00:00'
         hasAuth ? SemanticEventType.AUTHORITY_IMPERSONATION :
         SemanticEventType.BANK_IMPERSONATION;
 
-      // Identity claim is an attack only if accompanied by threats, pressure, or credential/fund demands
-      const isCoerciveIdentity = hasContradictorySolicitation ||
+      // Identity claim is an attack if accompanied by threats, pressure, credential/fund demands, or family emergency/solicitation
+      const isFamilyScamAttack = hasFam && (
+        /\b(emergency|hospital|accident|police|arrest|jail|urgent|money|transfer|pay|send|help|bail|kidnap|ransom|trouble|cash|details|asking)\b/i.test(lower) ||
+        /\b(asking\s+(about\s+)?family|tell\s+me\s+about\s+family|send\s+money)\b/i.test(lower)
+      );
+
+      const isCoerciveIdentity = hasContradictorySolicitation || isFamilyScamAttack ||
         parsedClauses.some(c => c.speechAct === SpeechAct.THREAT || (c.isAttack && c.actionDirection === ActionDirection.CALLER_REQUESTS_FROM_USER));
 
       if (!isCoerciveIdentity && (hasSafetyAdvice || parsedClauses.every(c => !c.isAttack))) {

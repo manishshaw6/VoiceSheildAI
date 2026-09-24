@@ -221,24 +221,15 @@ export class GmailUserMailProvider extends UserMailProvider {
           mode: 'live_smtp_relay'
         };
       } catch (smtpErr) {
-        console.warn('[VoxShieldRelay:SMTP] Live SMTP failed, falling back to simulated relay:', smtpErr.message);
+        console.warn('[VoxShieldRelay:SMTP] Live SMTP delivery failed.');
+        throw new ApiError('SMTP_SEND_FAILED', 'Gmail SMTP could not accept the report for delivery.', 502);
       }
     }
 
-    // Check if running in simulation / developer mock mode or relay mode
+    // Development OAuth placeholders are permitted for auth-flow tests only.
+    // They must never be promoted into a successful external delivery result.
     if (!config.google.clientId || !config.google.clientSecret || accessToken.startsWith('mock_') || accessToken === 'voxshield_relay_token') {
-      const mockMsgId = `relay_msg_sim_${crypto.randomBytes(12).toString('hex')}`;
-      console.log(`[VoxShieldSecureRelay] Report sent to ${recipientEmail} (Reply-To: ${user.email}, Msg ID: ${mockMsgId})`);
-      return {
-        success: true,
-        messageId: mockMsgId,
-        threadId: `thread_${mockMsgId}`,
-        provider: 'voxshield_relay',
-        senderEmail: user.email,
-        replyToEmail: user.email,
-        recipientEmail,
-        mode: 'voxshield_secure_relay'
-      };
+      throw new ApiError('MAIL_PROVIDER_NOT_CONFIGURED', 'A real Gmail OAuth or SMTP configuration is required for delivery.', 503);
     }
 
     // Call Real Gmail API: POST https://gmail.googleapis.com/gmail/v1/users/me/messages/send

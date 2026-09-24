@@ -77,7 +77,7 @@ export default function HomePage() {
           <div className="metric-box">
             <div className="metric-val">35%</div>
             <div className="metric-name">Acoustic Deepfake Weight</div>
-            <div className="metric-sub">Reality Defender Core</div>
+            <div className="metric-sub">Neural Acoustic Engine</div>
           </div>
           <div className="metric-divider"></div>
           <div className="metric-box">
@@ -170,7 +170,7 @@ export default function HomePage() {
             <div className="scenario-pill-card">
               <div className="scenario-badge medium">SCENARIO C</div>
               <h4>AI-Generated Voice (Harmless)</h4>
-              <p>High Reality Defender synthetic score + benign topic → <strong>AUTHENTICITY WARNING</strong></p>
+              <p>High acoustic synthetic score + benign topic → <strong>AUTHENTICITY WARNING</strong></p>
             </div>
 
             <div className="scenario-pill-card critical-glow">

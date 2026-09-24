@@ -20,7 +20,7 @@ export default function AboutPage() {
             Traditional cybersecurity solutions treat deepfakes and fraud as isolated problems. VoiceShieldAI unifies four distinct layers:
           </p>
           <ul className="spec-list">
-            <li><strong>Reality Defender (35%):</strong> Analyzes acoustic anomalies, vocoder artifacts, and synthetic phase discrepancies.</li>
+            <li><strong>Neural Acoustic Engine (35%):</strong> Analyzes acoustic anomalies, vocoder artifacts, and synthetic phase discrepancies.</li>
             <li><strong>Gemini 2.5 Flash (30%):</strong> Dissects linguistic intent, coercion, authority impersonation, and social engineering context.</li>
             <li><strong>Deterministic Threat Rules (20%):</strong> Regex pattern matcher detecting high-risk terms (OTP, PIN, CVV, wire transfer, AnyDesk/TeamViewer).</li>
             <li><strong>Biometric Acoustic Identity (15%):</strong> Extracts 80-dimensional acoustic fingerprints for reference vs suspect cosine similarity.</li>
@@ -48,7 +48,7 @@ export default function AboutPage() {
             The system is designed with zero single-point-of-failure:
           </p>
           <ul className="spec-list">
-            <li>If Reality Defender is unreachable, transcription and conversational intelligence still protect against social engineering.</li>
+            <li>If cloud acoustic models are unreachable, transcription and conversational intelligence still protect against social engineering.</li>
             <li>If Gemini encounters rate limits, Groq LPU automatically intercepts fraud requests.</li>
             <li>If all external LLMs are offline, the local deterministic threat engine and local speaker verification run 100% locally with zero external network dependencies.</li>
           </ul>

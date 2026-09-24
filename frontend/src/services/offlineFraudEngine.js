@@ -53,7 +53,19 @@ const THREAT_PATTERNS = [
     ]
   },
 
-  // 4. Secrecy, Isolation & Coercion
+  // 4. Family Emergency & Distress Kidnapping Coercion
+  {
+    category: 'FAMILY_DISTRESS',
+    label: 'Family Distress & Emergency Coercion',
+    severity: 40,
+    patterns: [
+      /\b(accident|hospital|kidnap|kidnapped|bail|jail|police\s*custody|urgent\s*operation|admitted\s*in\s*hospital|hostage|save\s*your\s*son|save\s*your\s*daughter)\b/i,
+      /(hospital\s*(mein\s*hai|le\s*gaye|admit\s*hai)|accident\s*ho\s*gaya|bachao\s*mujhe|police\s*ne\s*pakad\s*liya)/i, // Hindi
+      /(hospital\s*lo\s*unnadu|accident\s*ayindi|kapadandi|urgent\s*operation|bail\s*ivvali)/i // Telugu
+    ]
+  },
+
+  // 5. Secrecy, Isolation & Coercion
   {
     category: 'SECRECY_PRESSURE',
     label: 'Isolation & Secrecy Instruction',

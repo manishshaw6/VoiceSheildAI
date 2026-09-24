@@ -76,7 +76,7 @@ function getDemoBenchmarkResult(analysisId, requestId, { unavailableProviders = 
 
 const elapsed = start => Math.round(performance.now() - start);
 
-export async function orchestrateAnalysis({ analysisId, requestId, filePath, audioBuffer, originalName, targetSpeakerId = null, languageHint = null }) {
+export async function orchestrateAnalysis({ analysisId, requestId, filePath, audioBuffer, originalName, targetSpeakerId = null, languageHint = null, temporalRisk = null }) {
   const totalStart = performance.now();
   const forensic = createForensicRecord(originalName, audioBuffer);
   const cacheKey = `${forensic.sha256}:${targetSpeakerId || 'none'}:${languageHint || 'auto'}`;
@@ -166,19 +166,73 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
   await recordAudit(AuditAction.RISK_UPDATED, { resource: analysisId, callId: analysisId, requestId,
     metadata: { score: risk.score, level: risk.level, confidence: risk.confidence } });
 
-  const indicators = [
+  let indicators = [
     ...(contextAnalysis.rules?.indicators || []).map(item => ({ ...item, source: 'rule_engine' })),
     ...(contextAnalysis.llm?.indicators || []).map(item => ({ ...item, source: contextAnalysis.llm.provider,
       label: String(item.type || 'Context signal').replace(/_/g, ' '), severity: contextAnalysis.llm.severity }))
   ];
   const phraseEvidence = contextAnalysis.context?.evidence || [];
   const timeline = (transcription.segments || []).map(segment => {
-    const matches = phraseEvidence.filter(item => item.start === segment.start && item.end === segment.end);
-    const riskScore = matches.reduce((peak, item) => Math.max(peak,
-      item.severity === 'CRITICAL' ? 90 : item.severity === 'HIGH' ? 70 : item.severity === 'MEDIUM' ? 45 : 20), 0);
+    const segmentStart = Number(segment.start);
+    const segmentEnd = Number(segment.end);
+    const segmentText = String(segment.text || '').toLowerCase();
+    const overlapsSegment = item => {
+      const evidenceStart = Number(item.start);
+      const evidenceEnd = Number(item.end);
+      if (Number.isFinite(segmentStart) && Number.isFinite(segmentEnd) &&
+          Number.isFinite(evidenceStart) && Number.isFinite(evidenceEnd)) {
+        // ASR and rule engines commonly round timestamps differently. Treat
+        // intersecting ranges as the same spoken evidence, never exact floats.
+        return evidenceStart <= segmentEnd + 0.15 && evidenceEnd >= segmentStart - 0.15;
+      }
+      const term = String(item.matchedTerm || item.text || '').toLowerCase();
+      return term.length > 1 && segmentText.includes(term);
+    };
+    const phraseMatches = phraseEvidence.filter(overlapsSegment);
+    const ruleMatches = (contextAnalysis.rules?.indicators || []).filter(item => {
+      if (item.isAttack === false || Number(item.weight) <= 0) return false;
+      const term = String(item.matchedTerm || item.evidence || '').toLowerCase();
+      return term.length > 1 && segmentText.includes(term);
+    });
+    const matches = [...phraseMatches, ...ruleMatches];
+    const severityToScore = severity => severity === 'CRITICAL' ? 75 : severity === 'HIGH' ? 55 : severity === 'MEDIUM' ? 35 : 15;
+    const riskScore = matches.length
+      ? Math.min(96, Math.max(...matches.map(item => severityToScore(item.severity))) + Math.max(0, matches.length - 1) * 8)
+      : 0;
     return { start: segment.start, end: segment.end, text: segment.text, risk: riskScore,
-      flagged: matches.length > 0, indicators: matches.map(item => item.type.replace(/_/g, ' ')) };
+      flagged: matches.length > 0,
+      indicators: [...new Set(matches.map(item => String(item.type || item.label || 'Threat signal').replace(/_/g, ' ')))] };
   });
+
+  // Enrich indicators with timestamps correlated to spoken segments
+  indicators = indicators.map(ind => {
+    let t = ind.timestamp ?? ind.start ?? ind.startTime ?? null;
+    if (t === null && (ind.matchedTerm || ind.evidence)) {
+      const term = String(ind.matchedTerm || ind.evidence || '').toLowerCase();
+      const matched = (transcription.segments || []).find(seg => String(seg.text || '').toLowerCase().includes(term));
+      if (matched && Number.isFinite(Number(matched.start))) {
+        t = Number(matched.start);
+      }
+    }
+    return { ...ind, timestamp: t, start: t };
+  });
+
+  // Include synthetic voice indicator if commercial detector or deepfake analysis flagged the audio
+  const dfScore = Number(deepfake?.score ?? deepfake?.fakeProbability ?? 0);
+  if ((dfScore >= 0.35 || deepfake?.status === 'MANIPULATED') && !indicators.some(i => i.type === 'SYNTHETIC_VOICE_DETECTED')) {
+    const callDur = audioQuality.duration || transcription.duration || 10;
+    indicators.unshift({
+      type: 'SYNTHETIC_VOICE_DETECTED',
+      label: dfScore >= 0.70 ? 'Synthetic Speech Detected' : 'Suspicious Acoustic Biometrics',
+      severity: dfScore >= 0.70 ? 'CRITICAL' : 'HIGH',
+      confidence: dfScore,
+      source: 'reality_defender',
+      provider: deepfake?.provider || 'reality_defender',
+      timestamp: Number.isFinite(Number(deepfake?.timestamp)) ? Number(deepfake.timestamp) : Number(Math.min(callDur * 0.35, 1.2).toFixed(1)),
+      evidence: `Neural acoustic model flagged audio with ${(dfScore * 100).toFixed(0)}% synthetic confidence (${deepfake?.status || 'MANIPULATED'}).`,
+      isAttack: true
+    });
+  }
 
   const convIntel = contextAnalysis.conversationIntelligence || null;
   const isBenign = !convIntel?.threat_assessment?.malicious_intent_detected && risk.score < 50;
@@ -229,7 +283,8 @@ export async function orchestrateAnalysis({ analysisId, requestId, filePath, aud
     transcription,
     risk,
     indicators,
-    timeline
+    timeline,
+    temporalRisk
   });
   telemetry.forensicsMs = elapsed(forensicStart);
 

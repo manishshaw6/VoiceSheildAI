@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { VoicePoweredOrb } from './ui/voice-powered-orb';
 import { webSocketUrl } from '../config/api.js';
+import { extractClientForensics } from '../services/clientForensics';
+
+const MAX_RISK_POINTS = 120;
 
 export default function LiveStreamMonitor({
   onSessionComplete,
@@ -20,6 +23,8 @@ export default function LiveStreamMonitor({
   const [liveTranscript, setLiveTranscript] = useState('');
   const [detectedSignals, setDetectedSignals] = useState([]);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [riskHistory, setRiskHistory] = useState([]);
+  const [droppedAudioChunks, setDroppedAudioChunks] = useState(0);
 
   // ── WebAudio Real-Time Telemetry State ──
   const [micLevelDb, setMicLevelDb] = useState(-80.0);
@@ -58,6 +63,8 @@ export default function LiveStreamMonitor({
   const criticalTriggeredRef = useRef(false);
   const lastSequenceRef = useRef(0);
   const finalizeTimeoutRef = useRef(null);
+  const recordingChunksRef = useRef([]);
+  const recordingStopResolverRef = useRef(null);
 
   useEffect(() => {
     onStreamingChange?.(isStreaming);
@@ -72,7 +79,8 @@ export default function LiveStreamMonitor({
       setSmoothScore(prev => {
         const diff = targetScore - prev;
         if (Math.abs(diff) < 0.01) return targetScore;
-        const next = prev + diff * 0.08;
+        const step = diff > 0 ? (diff > 15 ? diff * 0.45 : diff * 0.25) : diff * 0.12;
+        const next = prev + step;
         const vel = Number((next - prev).toFixed(2));
         setRiskVelocity(vel);
         if (vel > 0.1) setRiskTrend('RISING');
@@ -162,8 +170,16 @@ export default function LiveStreamMonitor({
         return { pitch: (freq >= 70 && freq <= 400) ? Math.round(freq) : null, rms };
       };
 
-      const trackAudio = () => {
+      let lastTelemetrySampleAt = 0;
+      const trackAudio = (frameTime = 0) => {
         if (!audioCtxRef.current || ctx.state === 'closed') return;
+        // Autocorrelation is O(n^2); sampling telemetry at 10 Hz keeps the
+        // display responsive without doing this work on every paint frame.
+        if (frameTime - lastTelemetrySampleAt < 100) {
+          animFrameRef.current = requestAnimationFrame(trackAudio);
+          return;
+        }
+        lastTelemetrySampleAt = frameTime;
         analyser.getFloatTimeDomainData(buffer);
         const { pitch: f0, rms } = autoCorrelate(buffer, ctx.sampleRate);
         const db = rms > 0.0001 ? Math.max(-80, 20 * Math.log10(rms)) : -80;
@@ -225,13 +241,40 @@ export default function LiveStreamMonitor({
 
           mediaRecorderRef.current = mediaRecorder;
 
+          recordingChunksRef.current = [];
           mediaRecorder.ondataavailable = (event) => {
-            if (event.data && event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+            if (event.data && event.data.size > 0) {
+              recordingChunksRef.current.push(event.data);
+              return;
+              /*
+              if (socket.bufferedAmount > WS_HIGH_WATER_MARK_BYTES) {
+                setDroppedAudioChunks(count => count + 1);
+                setWsStatus('Network congested · audio backpressure active');
+                return;
+              }
               event.data.arrayBuffer().then((buffer) => {
                 if (socket.readyState === WebSocket.OPEN) {
                   socket.send(buffer);
                 }
               });
+              */
+            }
+          };
+
+          mediaRecorder.onstop = async () => {
+            const finalRecording = new Blob(recordingChunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' });
+            try {
+              if (finalRecording.size && socket.readyState === WebSocket.OPEN) {
+                socket.send(await finalRecording.arrayBuffer());
+                const evidenceFile = new File([finalRecording], 'live_call.webm', { type: finalRecording.type });
+                const clientForensics = await extractClientForensics(evidenceFile).catch(() => null);
+                if (clientForensics && socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({ type: 'forensics_snapshot', forensics: clientForensics }));
+                }
+              }
+            } finally {
+              recordingStopResolverRef.current?.();
+              recordingStopResolverRef.current = null;
             }
           };
 
@@ -328,13 +371,28 @@ export default function LiveStreamMonitor({
             setLiveScore(newScore);
             setLiveLevel(payload.riskLevel || data.riskLevel || 'SAFE');
             setRiskTrend(payload.trend || data.trend || 'STABLE');
+            const eventTimestamp = typeof data.timestamp === 'string'
+              ? data.timestamp
+              : new Date().toISOString();
             setRiskTelemetry({
               confidence: Number(payload.confidence ?? data.confidence ?? 0),
               evidenceCoverage: Number(payload.evidenceCoverage ?? data.evidenceCoverage ?? 0),
               trustScore: Number(payload.trustScore ?? data.trustScore ?? Math.max(0, 100 - newScore)),
               subScores: payload.subScores || data.subScores || {},
               analysisStatus: payload.analysisStatus || data.analysisStatus || 'MONITORING',
-              updatedAt: new Date().toISOString()
+              updatedAt: eventTimestamp
+            });
+            setRiskHistory(previous => {
+              const rawCandidate = Number(payload.rawScore ?? data.rawScore);
+              const point = {
+                id: data.eventId || `${data.callId || 'call'}:${data.sequence || previous.length + 1}`,
+                at: eventTimestamp,
+                elapsedSeconds: Number(payload.timestamp),
+                score: newScore,
+                rawScore: Number.isFinite(rawCandidate) ? Math.max(0, Math.min(100, rawCandidate)) : null
+              };
+              if (previous.at(-1)?.id === point.id) return previous;
+              return [...previous.slice(-(MAX_RISK_POINTS - 1)), point];
             });
 
             if (payload.transcript || data.transcript) {
@@ -355,7 +413,7 @@ export default function LiveStreamMonitor({
 
             if ((newScore >= 80 || (payload.riskLevel || data.riskLevel) === 'CRITICAL') && !criticalTriggeredRef.current) {
               criticalTriggeredRef.current = true;
-              onCriticalRisk?.({ score: newScore, riskLevel: 'CRITICAL', at: new Date().toISOString() });
+              onCriticalRisk?.({ score: newScore, riskLevel: 'CRITICAL', at: eventTimestamp });
             }
           }
 
@@ -401,6 +459,15 @@ export default function LiveStreamMonitor({
         setWsStatus('Disconnected');
 
         clearInterval(timerRef.current);
+        if (mediaRecorderRef.current?.state !== 'inactive') {
+          try { mediaRecorderRef.current?.stop(); } catch (_) {}
+        }
+        if (ownsAudioStreamRef.current) {
+          mediaRecorderRef.current?.stream?.getTracks().forEach(track => track.stop());
+        }
+        if (recognitionRef.current) {
+          try { recognitionRef.current.stop(); } catch (_) {}
+        }
       };
 
       socket.onerror = (err) => {
@@ -422,7 +489,7 @@ export default function LiveStreamMonitor({
     }
   };
 
-  const stopLiveMonitor = (notifyBackend = true) => {
+  const stopLiveMonitor = async (notifyBackend = true) => {
     isStreamingRef.current = false;
     // 1. Stop local microphone hardware immediately
     if (
@@ -430,7 +497,9 @@ export default function LiveStreamMonitor({
       mediaRecorderRef.current.state !== 'inactive'
     ) {
       try {
+        const finalRecordingReady = new Promise(resolve => { recordingStopResolverRef.current = resolve; });
         mediaRecorderRef.current.stop();
+        await finalRecordingReady;
         if (ownsAudioStreamRef.current) {
           mediaRecorderRef.current.stream
             .getTracks()
@@ -493,6 +562,9 @@ export default function LiveStreamMonitor({
       ) {
         mediaRecorderRef.current.stop();
       }
+      if (ownsAudioStreamRef.current) {
+        mediaRecorderRef.current?.stream?.getTracks().forEach(track => track.stop());
+      }
 
       if (recognitionRef.current) {
         try {
@@ -506,23 +578,19 @@ export default function LiveStreamMonitor({
     };
   }, []);
 
-  const getLevelColor = (lvl) => {
-    switch (lvl) {
-      case 'CRITICAL':
-        return '#ff3b5c';
-
-      case 'HIGH':
-        return '#ff8c00';
-
-      case 'MODERATE':
-        return '#ffd700';
-
-      default:
-        return '#00e5a3';
-    }
-  };
-
-  const levelColor = getLevelColor(liveLevel);
+  const levelColor = smoothScore <= 35 ? '#22c55e' : smoothScore <= 65 ? '#facc15' : smoothScore <= 85 ? '#f97316' : '#ef4444';
+  const chartWidth = 320;
+  const chartHeight = 96;
+  const toChartPoints = key => riskHistory
+    .filter(point => Number.isFinite(point[key]))
+    .map((point, index, points) => {
+      const x = points.length <= 1 ? 0 : (index / (points.length - 1)) * chartWidth;
+      const y = chartHeight - (point[key] / 100) * chartHeight;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  const smoothedChartPoints = toChartPoints('score');
+  const rawChartPoints = toChartPoints('rawScore');
   const signalTelemetry = [
     ['Synthetic voice', riskTelemetry.subScores.authenticity_risk],
     ['Identity uncertainty', riskTelemetry.subScores.identity_uncertainty],
@@ -542,6 +610,8 @@ export default function LiveStreamMonitor({
     setLiveLevel('SAFE');
     setLiveTranscript('');
     setDetectedSignals([]);
+    setRiskHistory([]);
+    setDroppedAudioChunks(0);
     lastSequenceRef.current = 0;
     setRiskTelemetry({ confidence: 0, evidenceCoverage: 0, trustScore: 100, subScores: {}, analysisStatus: 'CONNECTING', updatedAt: null });
 
@@ -731,22 +801,53 @@ export default function LiveStreamMonitor({
           <div className="risk-telemetry-summary">
             <div>
               <span>Model confidence</span>
-              <strong>{Math.round(Math.max(0, Math.min(1, riskTelemetry.confidence)) * 100)}%</strong>
+              <strong>{(Math.max(0, Math.min(1, riskTelemetry.confidence)) * 100).toFixed(2)}%</strong>
             </div>
             <div>
               <span>Evidence coverage</span>
-              <strong>{Math.round(Math.max(0, Math.min(1, riskTelemetry.evidenceCoverage)) * 100)}%</strong>
+              <strong>{(Math.max(0, Math.min(1, riskTelemetry.evidenceCoverage)) * 100).toFixed(2)}%</strong>
             </div>
             <div>
               <span>Trust index</span>
-              <strong>{Math.round(Math.max(0, Math.min(100, riskTelemetry.trustScore)))}/100</strong>
+              <strong>{Math.max(0, Math.min(100, riskTelemetry.trustScore)).toFixed(2)}/100</strong>
             </div>
+          </div>
+
+          <div className="live-risk-history" aria-label="Live risk score history">
+            <div className="live-risk-history-header">
+              <span>Risk history</span>
+              <span><i className="risk-line-key raw" /> raw <i className="risk-line-key fused" /> fused</span>
+            </div>
+            {riskHistory.length ? (
+              <>
+                <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Raw and fused risk scores over backend event time">
+                  <line x1="0" y1="19.2" x2={chartWidth} y2="19.2" className="risk-threshold critical" />
+                  <line x1="0" y1="38.4" x2={chartWidth} y2="38.4" className="risk-threshold high" />
+                  {rawChartPoints && <polyline points={rawChartPoints} className="risk-history-line raw" />}
+                  {smoothedChartPoints && <polyline points={smoothedChartPoints} className="risk-history-line fused" />}
+                </svg>
+                <div className="live-risk-history-axis">
+                  <span>{new Date(riskHistory[0].at).toLocaleTimeString()}</span>
+                  <span>{riskHistory.length} events · max {MAX_RISK_POINTS}</span>
+                  <span>{new Date(riskHistory.at(-1).at).toLocaleTimeString()}</span>
+                </div>
+              </>
+            ) : (
+              <div className="risk-history-empty">
+                {isStreaming ? 'Awaiting sufficient transcript or acoustic evidence' : 'Awaiting audio'}
+              </div>
+            )}
+            {droppedAudioChunks > 0 && (
+              <div className="risk-backpressure-note">
+                {droppedAudioChunks} audio chunk{droppedAudioChunks === 1 ? '' : 's'} skipped during network congestion
+              </div>
+            )}
           </div>
 
           <div className="risk-signal-stack" aria-label="Risk signal breakdown">
             {signalTelemetry.map(([label, value]) => (
               <div className="risk-signal-row" key={label}>
-                <div><span>{label}</span><strong>{value.toFixed(0)}</strong></div>
+                <div><span>{label}</span><strong>{value.toFixed(2)}</strong></div>
                 <div className="risk-signal-track">
                   <span style={{ width: `${value}%`, background: value >= 70 ? '#ff3b5c' : value >= 35 ? '#f59e0b' : '#00d2ff' }} />
                 </div>
@@ -848,7 +949,6 @@ export default function LiveStreamMonitor({
         </div>
 
       </div>
-
 
       {/* TRANSCRIPT */}
 

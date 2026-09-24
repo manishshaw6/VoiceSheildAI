@@ -31,6 +31,10 @@ const VALUE_KEYS = Object.freeze({
   TRUSTED_PERSON_IMPERSONATION: 'impersonation',
   PRIZE_LOTTERY_LOAN: 'financialRequest'
 });
+const STRONG_CORROBORATING_TYPES = new Set([
+  'OTP_REQUEST', 'CREDENTIAL_REQUEST', 'BANK_DETAILS_REQUEST', 'SENSITIVE_INFO_REQUEST',
+  'REMOTE_ACCESS', 'SECRECY_REQUEST'
+]);
 
 function locateSegment(term, segments) {
   const cleanTerm = String(term || '').toLowerCase();
@@ -40,6 +44,17 @@ function locateSegment(term, segments) {
 export async function analyzeContext({ callId, text, segments = [] }) {
   const rules = analyzeThreatRules(text);
   const convIntel = await analyzeConversationIntelligence(text, { segments });
+
+  // Treat the generative model as an analyst, not as sole proof. A provider can
+  // occasionally return a confident fraud classification for ordinary speech.
+  // High-risk model output therefore needs transcript-grounded corroboration
+  // before it may drive sensitive-action evidence or a critical fused score.
+  const normalizedText = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const activeRuleIndicators = (rules.indicators || []).filter(item => item.weight > 0 && item.isAttack !== false);
+  const groundedSuspiciousStatements = (convIntel.suspicious_statements || []).filter(item => {
+    const quote = String(item.text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    return quote.length >= 8 && normalizedText.includes(quote);
+  });
 
   const values = { otpRequest: 0, financialRequest: 0, urgency: 0, impersonation: 0,
     credentialRequest: 0, secrecy: 0, remoteAccess: 0 };
@@ -62,14 +77,23 @@ export async function analyzeContext({ callId, text, segments = [] }) {
 
   // Normalized LLM structure for backward compatibility
   const isThreat = convIntel.threat_assessment?.malicious_intent_detected;
-  const threatScore = convIntel.threat_assessment?.threat_score ?? 0;
+  const modelThreatScore = convIntel.threat_assessment?.threat_score ?? 0;
+  const hasStrongRuleEvidence = activeRuleIndicators.some(item => STRONG_CORROBORATING_TYPES.has(item.type));
+  const hasCompoundRuleEvidence = activeRuleIndicators.length >= 2 && rules.score >= 35;
+  const corroborated = !isThreat || hasStrongRuleEvidence || hasCompoundRuleEvidence || groundedSuspiciousStatements.length >= 2;
+  const threatScore = isThreat && !corroborated ? Math.min(modelThreatScore, 0.35) : modelThreatScore;
   const llm = {
     available: convIntel.available,
     provider: convIntel.provider || 'conversation_intelligence',
     scamProbability: threatScore,
+    modelScamProbability: modelThreatScore,
+    corroborated,
+    calibrationNote: isThreat && !corroborated
+      ? 'Model-only fraud classification was capped pending transcript-grounded corroboration.'
+      : null,
     category: convIntel.threat_assessment?.threat_category || 'Normal Conversation',
     severity: isThreat ? (threatScore >= 0.75 ? Severity.CRITICAL : threatScore >= 0.5 ? Severity.HIGH : Severity.MEDIUM) : Severity.LOW,
-    indicators: [
+    indicators: corroborated ? [
       ...(convIntel.suspicious_statements || []).map(s => ({
         type: 'SUSPICIOUS_STATEMENT',
         confidence: s.severity === 'CRITICAL' ? 0.95 : s.severity === 'HIGH' ? 0.85 : 0.7,
@@ -79,12 +103,12 @@ export async function analyzeContext({ callId, text, segments = [] }) {
       ...(convIntel.sensitive_entities?.otp_requested ? [{ type: 'OTP_REQUEST', confidence: 0.95, evidence: 'OTP / verification code requested' }] : []),
       ...(convIntel.sensitive_entities?.passwords_requested ? [{ type: 'CREDENTIAL_REQUEST', confidence: 0.95, evidence: 'Password / security PIN requested' }] : []),
       ...(convIntel.sensitive_entities?.upi_reference ? [{ type: 'UPI_PAYMENT_SCAM', confidence: 0.90, evidence: `UPI Reference: ${convIntel.sensitive_entities.upi_reference}` }] : [])
-    ],
+    ] : [],
     summary: convIntel.summary?.short_summary || '',
     recommendedAction: convIntel.recommended_actions?.[0] || 'Exercise standard awareness.'
   };
 
-  if (convIntel.available && isThreat) {
+  if (convIntel.available && isThreat && corroborated) {
     if (convIntel.sensitive_entities?.otp_requested) {
       values.otpRequest = Math.max(values.otpRequest, 0.95);
       evidence.push({ ...createEvidence({ callId, category: EvidenceCategory.OTP_REQUEST, source: convIntel.provider,
@@ -123,6 +147,11 @@ export async function analyzeContext({ callId, text, segments = [] }) {
     evidence.push({ ...createEvidence({ callId, category: 'CONTEXT_RISK', source: convIntel.provider,
       score: threatScore, confidence: convIntel.threat_assessment.confidence || 0.8, severity: llm.severity,
       explanation: convIntel.summary.short_summary }), reliability: 0.8, weight: 0.3 });
+  } else if (convIntel.available && isThreat) {
+    evidence.push({ ...createEvidence({ callId, category: 'CONTEXT_RISK', source: convIntel.provider,
+      score: threatScore, confidence: Math.min(convIntel.threat_assessment.confidence || 0.8, 0.55), severity: Severity.MEDIUM,
+      explanation: 'Uncorroborated model-only fraud classification; additional evidence is required.' }),
+      reliability: 0.45, weight: 0.10 });
   }
 
   const ruleRisk = rules.score / 100;
@@ -132,5 +161,23 @@ export async function analyzeContext({ callId, text, segments = [] }) {
     summary: convIntel.available ? convIntel.summary.short_summary : 'Deterministic rule analysis completed; LLM analysis was unavailable.',
     provider: convIntel.available ? convIntel.provider : 'rule_engine' });
 
-  return { context, evidence, rules, llm, conversationIntelligence: convIntel };
+  const calibratedConversationIntelligence = isThreat && !corroborated
+    ? {
+        ...convIntel,
+        threat_assessment: {
+          ...convIntel.threat_assessment,
+          malicious_intent_detected: false,
+          model_malicious_intent_detected: true,
+          raw_model_threat_score: modelThreatScore,
+          threat_score: threatScore,
+          corroborated: false
+        },
+        limitations: [
+          ...(convIntel.limitations || []),
+          'The model-only fraud classification was not corroborated by transcript-grounded security evidence.'
+        ]
+      }
+    : convIntel;
+
+  return { context, evidence, rules, llm, conversationIntelligence: calibratedConversationIntelligence };
 }

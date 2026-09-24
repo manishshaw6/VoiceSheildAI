@@ -111,7 +111,7 @@ export function generateEvidenceChecklist({ callId, filename, forensic, conversa
     items.push({ item: 'Demanded Payment Amount', value: entities.payment_amounts.join(', '), status: 'FLAGGED' });
   }
   if (deepfake?.provider_request_id) {
-    items.push({ item: 'Reality Defender Analysis ID', value: deepfake.provider_request_id, status: 'VERIFIED_PROVIDER' });
+    items.push({ item: 'Acoustic Forensic Analysis ID', value: deepfake.provider_request_id, status: 'VERIFIED_PROVIDER' });
   }
 
   return items;
@@ -159,7 +159,7 @@ export function generateComplaintDraft({
     ].filter(Boolean),
     victim_exposure_summary: intel.victim_exposure?.information_shared || 'None indicated in recording',
     voice_authenticity_evidence: {
-      provider: deepfake?.provider || 'Reality Defender',
+      provider: deepfake?.provider || 'Acoustic Neural Model',
       verdict: deepfake?.provider_verdict || deepfake?.verdict || 'UNABLE TO EVALUATE',
       score: deepfake?.score != null ? `${Math.round(deepfake.score * 100)}%` : 'Not Applicable',
       request_id: deepfake?.provider_request_id || 'N/A'

@@ -270,6 +270,10 @@ function App() {
                     element={<GuardianOfflinePage />}
                   />
                   <Route
+                    path="/offline"
+                    element={<GuardianOfflinePage />}
+                  />
+                  <Route
                     path="/live"
                     element={
                       <ProtectedRoute>
@@ -287,6 +291,22 @@ function App() {
                   />
                   <Route
                     path="/history"
+                    element={
+                      <ProtectedRoute>
+                        <AuditVaultPage onExportReport={handleExportReport} />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/audit"
+                    element={
+                      <ProtectedRoute>
+                        <AuditVaultPage onExportReport={handleExportReport} />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/audit-logs"
                     element={
                       <ProtectedRoute>
                         <AuditVaultPage onExportReport={handleExportReport} />

@@ -125,3 +125,49 @@ test('high-confidence conversational scam intent is normalized without dilution'
   assert.equal(risk.level, 'CRITICAL');
 });
 
+test('uncorroborated model-only fraud classification cannot force a critical result', () => {
+  const risk = calculateFusedRisk({
+    scamResult: {
+      available: true,
+      scamProbability: 0.95,
+      category: 'Suspicious Conversation',
+      confidence: 0.95,
+      corroborated: false
+    },
+    threatRulesResult: { score: 0, totalWeight: 0, indicatorCount: 0, indicators: [] }
+  });
+
+  assert.ok(risk.score <= 35, `Uncorroborated model output should be capped at 35, got ${risk.score}`);
+  assert.ok(risk.subScores.context_fraud_risk <= 35);
+  assert.notEqual(risk.level, 'CRITICAL');
+});
+
+test('aggregate rule score is not copied into every telemetry vector', () => {
+  const risk = calculateFusedRisk({
+    threatRulesResult: {
+      score: 84,
+      totalWeight: 84,
+      indicatorCount: 3,
+      indicators: [
+        { type: 'OTP_REQUEST', label: 'OTP request', severity: 'CRITICAL', weight: 28 },
+        { type: 'PAYMENT_FRAUD', label: 'Payment request', severity: 'HIGH', weight: 23 },
+        { type: 'URGENCY_COERCION', label: 'Urgency', severity: 'HIGH', weight: 18 }
+      ]
+    }
+  });
+
+  assert.equal(risk.subScores.sensitive_action_risk, 28);
+  assert.equal(risk.subScores.behavioral_coercion_risk, 18);
+  assert.equal(risk.score, 84);
+});
+
+test('percentage-form provider values are normalized instead of clamped to 100%', () => {
+  const risk = calculateFusedRisk({
+    deepfakeResult: { available: true, score: 62, confidence: 91 }
+  });
+
+  assert.ok(risk.score >= 60 && risk.score <= 64, `Expected a 62% provider score to remain near 62, got ${risk.score}`);
+  assert.equal(risk.subScores.authenticity_risk, 62);
+  assert.ok(risk.confidence > 0.89 && risk.confidence < 0.93);
+});
+

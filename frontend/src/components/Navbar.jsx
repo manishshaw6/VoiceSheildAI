@@ -382,7 +382,7 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
 
               <div className="engine-card">
                 <div className="engine-name">
-                  Reality Defender
+                  Neural Acoustic Authenticity
                 </div>
 
                 <div className="engine-role">
@@ -399,7 +399,7 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
                 >
                   {health?.services?.realityDefender ===
                   'configured'
-                    ? '● Configured (SDK v0.1)'
+                    ? '● Active (Calibrated)'
                     : '○ Standby'}
                 </span>
               </div>
@@ -407,7 +407,7 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
 
               <div className="engine-card">
                 <div className="engine-name">
-                  AssemblyAI
+                  ASR Transcription Engine
                 </div>
 
                 <div className="engine-role">
@@ -424,7 +424,7 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
                 >
                   {health?.services?.assemblyAI ===
                   'configured'
-                    ? '● Configured (Universal-2)'
+                    ? '● Active (Continuous)'
                     : '○ Standby'}
                 </span>
               </div>

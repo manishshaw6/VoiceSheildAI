@@ -85,3 +85,34 @@ test('stopping a transcript-only live session persists a complete reportable dos
   await new Promise(resolve => wss.close(resolve));
   await new Promise(resolve => server.close(resolve));
 });
+
+test('live risk can fall when an interim fraud transcript is corrected', async () => {
+  const server = http.createServer();
+  const wss = new WebSocketServer({ server, path: '/ws/live-analysis' });
+  setupLiveAnalysisWebSocket(wss);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const client = new WebSocket(`ws://127.0.0.1:${server.address().port}/ws/live-analysis`);
+  await nextMessage(client);
+
+  const highPromise = waitForType(client, 'risk_update');
+  client.send(JSON.stringify({ type: 'transcript_update', text: 'Share your OTP immediately or your account will be blocked.' }));
+  const high = await highPromise;
+  assert.ok(high.rawScore >= 60, `Expected confirmed solicitation to be high risk, got ${high.rawScore}`);
+
+  const correctedPromise = waitForType(client, 'risk_update');
+  client.send(JSON.stringify({ type: 'transcript_update', text: 'Never share your OTP with anyone. The bank will never ask for it.' }));
+  const corrected = await correctedPromise;
+  assert.equal(corrected.rawScore, 0);
+  assert.ok(corrected.score < high.score, `Expected smoothed risk to fall from ${high.score}, got ${corrected.score}`);
+
+  const completePromise = waitForType(client, 'session_complete');
+  client.send(JSON.stringify({ type: 'stop' }));
+  const completed = await completePromise;
+  assert.ok(completed.finalScore < high.score, `Final corrected score should not retain historical maximum ${high.score}`);
+  assert.equal(completed.analysis.forensics.available, false);
+
+  client.close();
+  await new Promise(resolve => client.once('close', resolve));
+  await new Promise(resolve => wss.close(resolve));
+  await new Promise(resolve => server.close(resolve));
+});

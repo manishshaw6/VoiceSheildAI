@@ -120,9 +120,17 @@ function initSchema() {
         resource TEXT,
         call_id TEXT,
         request_id TEXT,
+        severity TEXT DEFAULT 'INFO',
+        prev_hash TEXT,
+        event_hash TEXT,
         metadata TEXT NOT NULL DEFAULT '{}'
       )
     `);
+    db.run('ALTER TABLE audit_events ADD COLUMN severity TEXT DEFAULT "INFO"', () => {});
+    db.run('ALTER TABLE audit_events ADD COLUMN prev_hash TEXT', () => {});
+    db.run('ALTER TABLE audit_events ADD COLUMN event_hash TEXT', () => {});
+    db.run('CREATE INDEX IF NOT EXISTS idx_audit_events_event_hash ON audit_events(event_hash)', () => {});
+
 
     // Authenticated Users
     // Merged schema:

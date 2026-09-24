@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiUrl } from '../config/api.js';
+import { generateCyberCrimePdfReport } from '../services/pdfReportGenerator';
 
 export default function IncidentReportModal({ analysis, isOpen, onClose }) {
   const { user, authenticated, openAuthModal } = useAuth();
@@ -32,6 +33,8 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
   ].filter(Boolean);
 
   const detectedBankName = detectedBankNamesList.join(' & ') || null;
+  const scoreColor = (score) => score <= 35 ? '#22c55e' : score <= 65 ? '#facc15' : score <= 85 ? '#f97316' : '#ef4444';
+  const formatScore = (score) => Number.isFinite(Number(score)) ? Number(score).toFixed(2) : 'N/A';
 
   const handleGenerateReport = useCallback(async () => {
     try {
@@ -172,8 +175,18 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
   };
 
   const handleDownloadPdf = () => {
-    if (!reportData?.reportId) return;
-    window.open(apiUrl(`/api/v1/reports/${reportData.reportId}/pdf`), '_blank');
+    try {
+      generateCyberCrimePdfReport(analysis || reportData, {
+        userName: user?.name,
+        userEmail: user?.email,
+        userPhone: user?.phone
+      });
+    } catch (err) {
+      console.warn('Client-side PDF generation failed, falling back to backend PDF endpoint:', err);
+      if (reportData?.reportId) {
+        window.open(apiUrl(`/api/v1/reports/${reportData.reportId}/pdf`), '_blank');
+      }
+    }
   };
 
   if (!isOpen) return null;
@@ -396,14 +409,14 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <span style={{
-                      background: risk.level === 'CRITICAL' ? '#ef4444' : '#f59e0b',
+                      background: scoreColor(Number(risk.score)),
                       color: '#000',
                       padding: '4px 10px',
                       borderRadius: '12px',
                       fontWeight: 900,
                       fontSize: '0.8rem'
                     }}>
-                      {risk.level} RISK ({risk.score}/100)
+                      {risk.level} RISK ({formatScore(risk.score)}/100)
                     </span>
                   </div>
                 </div>
@@ -429,10 +442,10 @@ export default function IncidentReportModal({ analysis, isOpen, onClose }) {
                 marginBottom: '18px'
               }}>
                 {[
-                  ['Synthetic voice', reportData.voiceAuthenticity?.syntheticProbability == null ? 'Not available' : `${Math.round(reportData.voiceAuthenticity.syntheticProbability * 100)}%`, reportData.voiceAuthenticity?.verdict || 'Pending'],
-                  ['Speaker similarity', reportData.speakerVerification?.similarity == null ? 'Not enrolled' : `${Math.round(reportData.speakerVerification.similarity * 100)}%`, reportData.speakerVerification?.decision || 'No comparison'],
-                  ['Fraud context', `${Math.round(reportData.riskAssessment?.subScores?.context_fraud_risk || 0)}/100`, reportData.conversationIntelligence?.attackCategory || 'Unclassified'],
-                  ['Behavioural coercion', `${Math.round(reportData.riskAssessment?.subScores?.behavioral_coercion_risk || 0)}/100`, reportData.conversationIntelligence?.techniques?.length ? `${reportData.conversationIntelligence.techniques.length} technique(s)` : 'No tactic detected']
+                  ['Synthetic voice', reportData.voiceAuthenticity?.syntheticProbability == null ? 'Not available' : `${formatScore(reportData.voiceAuthenticity.syntheticProbability * 100)}%`, reportData.voiceAuthenticity?.verdict || 'Pending'],
+                  ['Speaker similarity', reportData.speakerVerification?.similarity == null ? 'Not enrolled' : `${formatScore(reportData.speakerVerification.similarity * 100)}%`, reportData.speakerVerification?.decision || 'No comparison'],
+                  ['Fraud context', `${formatScore(reportData.riskAssessment?.subScores?.context_fraud_risk || 0)}/100`, reportData.conversationIntelligence?.attackCategory || 'Unclassified'],
+                  ['Behavioural coercion', `${formatScore(reportData.riskAssessment?.subScores?.behavioral_coercion_risk || 0)}/100`, reportData.conversationIntelligence?.techniques?.length ? `${reportData.conversationIntelligence.techniques.length} technique(s)` : 'No tactic detected']
                 ].map(([label, value, detail]) => (
                   <div key={label} style={{ background: 'linear-gradient(145deg, rgba(15,23,42,.92), rgba(2,8,23,.72))', border: '1px solid rgba(148,163,184,.16)', borderRadius: '10px', padding: '13px' }}>
                     <div style={{ color: '#7f9d94', fontSize: '.68rem', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>{label}</div>

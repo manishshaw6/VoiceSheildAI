@@ -39,20 +39,22 @@ export function createEventEnvelope(event, callId, data, { sequence = 0 } = {}) 
  * @returns {string} JSON-stringified message
  */
 export function createWSMessage(type, callId, data, sequence = 0) {
+  const occurredAt = new Date().toISOString();
   return JSON.stringify({
+    // Spread legacy fields first so envelope identity and wall-clock time cannot
+    // be overwritten by a payload's elapsed-seconds `timestamp` field.
+    ...data,
     type,  // backward compat: existing frontend reads 'type'
     event: type,
     version: EVENT_VERSION,
-    timestamp: new Date().toISOString(),
+    timestamp: occurredAt,
+    eventId: `${callId}:${sequence}`,
     callId,
     call_id: callId,
     sequence,
     data: {
       ...data
-    },
-    // Also spread data at top level for backward compatibility
-    // The existing frontend expects fields at the top level
-    ...data
+    }
   });
 }
 

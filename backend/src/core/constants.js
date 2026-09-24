@@ -214,7 +214,9 @@ export const Defaults = Object.freeze({
   RISK_WEIGHT_SPEAKER: 0.15,
 
   // EWMA
-  EWMA_ALPHA: 0.3,
+  // Conservative live smoothing: scores should move only as corroborated
+  // evidence accumulates, not jump with every partial audio window.
+  EWMA_ALPHA: 0.18,
 
   // Provider timeouts (ms)
   REALITY_DEFENDER_TIMEOUT_MS: 25000,

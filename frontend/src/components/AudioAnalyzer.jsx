@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { VoicePoweredOrb } from './ui/voice-powered-orb';
+import { extractClientForensics, hasVisualForensics } from '../services/clientForensics';
 
 export default function AudioAnalyzer({ onAnalysisComplete, onAnalysisReset, selectedSpeakerId, enrolledSpeakers }) {
   const [activeMode, setActiveMode] = useState('upload'); // 'upload' | 'mic'
@@ -150,6 +151,9 @@ export default function AudioAnalyzer({ onAnalysisComplete, onAnalysisReset, sel
 
     try {
       setCurrentStep('Transcribing speech and extracting acoustic signatures...');
+      // Decode locally as a resilient visual-evidence fallback for browser-native
+      // formats when the server host does not have an external media decoder.
+      const clientForensics = await extractClientForensics(file).catch(() => null);
       const response = await fetch('/api/audio/analyze', {
         method: 'POST',
         body: formData
@@ -162,6 +166,10 @@ export default function AudioAnalyzer({ onAnalysisComplete, onAnalysisReset, sel
 
       setCurrentStep('Fusing multi-signal evidence and computing risk score...');
       const data = await response.json();
+      if (clientForensics && !hasVisualForensics(data.forensics)) {
+        data.forensics = clientForensics;
+        data.forensicVisualizationSource = 'browser_audio_decoder';
+      }
       setRecordingState('completed');
       setCurrentStep('Analysis complete!');
       setShowMicWorkspace(false);

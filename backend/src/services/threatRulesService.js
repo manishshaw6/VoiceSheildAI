@@ -143,12 +143,20 @@ export const THREAT_RULES = [
   },
   {
     type: 'TRUSTED_PERSON_IMPERSONATION',
-    label: 'Trusted Person / Family Impersonation',
+    label: 'Family & Trusted Person Impersonation / Emergency Scam',
     severity: 'HIGH',
-    weight: 20.35,
+    weight: 24.50,
     patterns: [
-      /\b(it['’]?s\s+me|it\s+is\s+me|this\s+is\s+your)\s+(son|daughter|boss|manager|friend|relative)\b/i,
-      /\b(i\s+lost\s+my\s+phone|new\s+number|emergency.*(?:hospital|accident|police))\b/i
+      /\b(it['’]?s\s+me|it\s+is\s+me|this\s+is\s+your)\s+(son|daughter|boss|manager|friend|relative|child|kid|brother|sister|father|mother)\b/i,
+      /\b(i\s+lost\s+my\s+phone|new\s+number|changed\s+my\s+number|calling\s+from\s+a\s+friend['’]?s\s+phone)\b/i,
+      /\b(asking\s+(about\s+)?(your\s+)?(family|parents?|mother|father|mom|dad|son|daughter|brother|sister|children|kids?))\b/i,
+      /\b(tell\s+me\s+about\s+(your\s+)?family|who\s+(is|are)\s+in\s+your\s+family|family\s+members?|is\s+your\s+family\s+(home|there|alone))\b/i,
+      /\b(call\s+your\s+family|ask\s+your\s+family\s+to|tell\s+your\s+family\s+to\s+(send|pay|transfer))\b/i,
+      /\b(your\s+(son|daughter|child|family|mother|father|brother|sister)\s+(is\s+in|has\s+been|met\s+with|got\s+into)\s+(an?\s+)?(accident|trouble|hospital|custody|jail|police|danger|kidnapp?ed))\b/i,
+      /\b(family\s+emergency|medical\s+emergency|hospital\s+emergency|accident\s+emergency|urgent\s+family\s+matter)\b/i,
+      /\b(emergency.*(?:hospital|accident|police|arrest|bail|operation|doctor|icu))\b/i,
+      /\b(send\s+(money|funds?|cash|help)\s+(for|to)\s+(your\s+)?(family|son|daughter|hospital|doctor|bail))\b/i,
+      /परिवार|घर वाले|बेटा|बेटी|माता|पिता|अस्पताल|एक्सीडेंट|కుటుంబం|కుటుంబ సభ్యులు|ఫ్యామిలీ|కుమారుడు|కుమార్తె|హాస్పిటల్|యాక్సిడెంట్|குடும்பம்|மகன்|மகள்|விபத்து|மருத்துவமனை/i
     ]
   },
   {
@@ -351,6 +359,9 @@ export function analyzeThreatRules(text) {
   }
   if (activeAttackTypes.has('PAYMENT_FRAUD') && !hasActiveCred) {
     accumulatedWeight = Math.max(accumulatedWeight, 48.0);
+  }
+  if (matchedTypes.has('TRUSTED_PERSON_IMPERSONATION') && (matchedTypes.has('PAYMENT_FRAUD') || matchedTypes.has('URGENCY_COERCION') || activeAttackTypes.has('TRUSTED_PERSON_IMPERSONATION'))) {
+    accumulatedWeight = Math.max(accumulatedWeight, 60.0);
   }
 
   // Compound Fraud Synergy Bonuses

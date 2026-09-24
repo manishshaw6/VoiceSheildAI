@@ -4,6 +4,8 @@ import { ApiError } from '../schemas/errors.js';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 let sendGridClient = sgMail;
+const IS_TEST_RUNNER = Boolean(process.env.NODE_TEST_CONTEXT) ||
+    process.env.NODE_ENV === 'test' || process.execArgv.includes('--test');
 
 export function setSendGridClient(client) {
     sendGridClient = client || sgMail;
@@ -26,6 +28,33 @@ function classifyProviderError(error) {
     return 'PROVIDER_ERROR';
 }
 
+const RETRYABLE_CODES = new Set(['RATE_LIMITED', 'NETWORK_FAILURE', 'PROVIDER_ERROR']);
+
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function sendWithRetry(message) {
+    const maxAttempts = Math.max(1, Math.min(5, Number(config.retry?.maxRetries || 0) + 1));
+    const baseDelayMs = Math.max(50, Number(config.retry?.retryDelayMs || 500));
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+            return await sendGridClient.send(message);
+        } catch (error) {
+            const code = classifyProviderError(error);
+            if (!RETRYABLE_CODES.has(code) || attempt === maxAttempts) {
+                error.voxshieldDeliveryCode = code;
+                throw error;
+            }
+
+            // Bounded exponential backoff. Do not log addresses, provider bodies,
+            // credentials, or attachment content.
+            await wait(Math.min(5000, baseDelayMs * (2 ** (attempt - 1))));
+        }
+    }
+}
+
 export async function sendIncidentReportEmail({ reporter, organization, recipient, incident, pdfBuffer, subject, textBody, htmlBody }) {
     if (!reporter?.email || !EMAIL_PATTERN.test(reporter.email)) {
         throw new ApiError('EMAIL_NOT_VERIFIED', 'A verified authenticated reporter email is required.', 403);
@@ -39,7 +68,9 @@ export async function sendIncidentReportEmail({ reporter, organization, recipien
 
     const gmailPass = process.env.GMAIL_APP_PASSWORD;
     const smtpUser = process.env.GMAIL_USER || config.sendgrid.fromEmail || reporter.email;
-    if (gmailPass && process.env.NODE_ENV !== 'test') {
+    // Unit/integration tests inject the SendGrid client below. They must not
+    // attempt network SMTP delivery merely because a developer .env is loaded.
+    if (gmailPass && !IS_TEST_RUNNER) {
         try {
             const nodemailer = await import('nodemailer');
             const transporter = nodemailer.default.createTransport({
@@ -84,7 +115,7 @@ export async function sendIncidentReportEmail({ reporter, organization, recipien
     sendGridClient.setApiKey(config.sendgrid.apiKey);
 
     try {
-        const [response] = await sendGridClient.send({
+        const [response] = await sendWithRetry({
             to: recipient,
             from: { email: config.sendgrid.fromEmail, name: config.sendgrid.fromName },
             replyTo: { email: reporter.email, name: reporter.name || reporter.email },
@@ -103,25 +134,14 @@ export async function sendIncidentReportEmail({ reporter, organization, recipien
         return {
             provider: 'sendgrid',
             messageId: response?.headers?.['x-message-id'] || null,
+            deliveryStatus: 'ACCEPTED',
             senderEmail: config.sendgrid.fromEmail,
             replyToEmail: reporter.email,
             recipientEmail: recipient,
             organization
         };
     } catch (error) {
-        const code = classifyProviderError(error);
-        if (code === 'SENDER_NOT_VERIFIED') {
-            console.warn('[SendGrid] Sender identity not verified yet. Falling back to VoxShield Secure Simulated Relay.');
-            return {
-                provider: 'voxshield_relay_simulated',
-                messageId: `sim_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                senderEmail: config.sendgrid.fromEmail || reporter.email,
-                replyToEmail: reporter.email,
-                recipientEmail: recipient,
-                organization,
-                mode: 'simulated_fallback'
-            };
-        }
+        const code = error.voxshieldDeliveryCode || classifyProviderError(error);
         throw new ApiError(code, 'Report created successfully, but email delivery could not be completed.', code === 'RATE_LIMITED' ? 429 : 502);
     }
 }

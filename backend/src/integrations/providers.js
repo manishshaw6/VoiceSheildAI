@@ -88,9 +88,15 @@ const hybridDeepfakeProvider = {
     const cloudHealth = await realityDefenderAdapter.checkHealth();
     const offlineHealth = await offlineDeepfakeProvider.checkHealth();
     return {
-      available: true,
+      provider: 'hybrid_deepfake_engine',
+      configured: Boolean(config.realityDefenderApiKey),
+      // "available" here means a calibrated cloud detector is usable. The
+      // offline engine is intentionally reported separately as diagnostics.
+      available: Boolean(cloudHealth.configured && cloudHealth.available),
+      degraded: Boolean(cloudHealth.degraded),
+      latencyMs: cloudHealth.latencyMs ?? null,
       cloud: cloudHealth,
-      offline: offlineHealth
+      offline: { ...offlineHealth, advisory_only: true }
     };
   }
 };

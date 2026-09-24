@@ -62,7 +62,8 @@ export const config = {
   uploadDir: path.resolve(__dirname, '../../uploads'),
   tempDir: path.resolve(__dirname, '../../temp'),
   dataDir: path.resolve(__dirname, '../../data'),
-  dbPath: path.resolve(__dirname, '../../data/voiceshield.db'),
+  // Node's test runner must never seed the application's real local history.
+  dbPath: path.resolve(__dirname, IS_NODE_TEST_RUNNER ? '../../data/voiceshield.test.db' : '../../data/voiceshield.db'),
   databaseUrl: IS_NODE_TEST_RUNNER
     ? (process.env.TEST_DATABASE_URL || '')
     : (process.env.DATABASE_URL || ''),

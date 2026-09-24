@@ -32,7 +32,12 @@ import {
 
 import {
   getIncident,
-  getAuditTrail
+  getAuditTrail,
+  getAuditStatsController,
+  verifyAuditChainController,
+  getSessionTimelineController,
+  exportAuditTrailController,
+  streamAuditEventsController
 } from '../controllers/securityController.js';
 
 import {
@@ -71,7 +76,7 @@ import {
   getReportStatus
 } from '../controllers/reportController.js';
 
-import { requireAuth } from '../middleware/authMiddleware.js';
+import { requireAuth, optionalAuth } from '../middleware/authMiddleware.js';
 import apiKeyRoutes from './apiKeyRoutes.js';
 import offlineRoutes from './offlineRoutes.js';
 import { createLiveCall, joinLiveCall, endLiveCall } from '../controllers/livekitController.js';
@@ -171,8 +176,8 @@ router.post(
 // History & Auditing
 // =====================================================
 
-router.get('/history', requireAuth, getHistory);
-router.get('/history/:id', requireAuth, getHistoryById);
+router.get('/history', optionalAuth, getHistory);
+router.get('/history/:id', optionalAuth, getHistoryById);
 router.delete('/history/:id', requireAuth, deleteHistory);
 
 
@@ -180,10 +185,15 @@ router.delete('/history/:id', requireAuth, deleteHistory);
 // Security Reports (Legacy & Native)
 // =====================================================
 
-router.get('/analysis/:id/report', requireAuth, getSecurityReport);
-router.get('/analysis/:id/forensics', requireAuth, getAnalysisForensics);
-router.get('/incidents/:id', requireAuth, getIncident);
-router.get('/audit', requireAuth, getAuditTrail);
+router.get('/analysis/:id/report', optionalAuth, getSecurityReport);
+router.get('/analysis/:id/forensics', optionalAuth, getAnalysisForensics);
+router.get('/incidents/:id', optionalAuth, getIncident);
+router.get('/audit', optionalAuth, getAuditTrail);
+router.get('/audit/stats', optionalAuth, getAuditStatsController);
+router.get('/audit/verify', optionalAuth, verifyAuditChainController);
+router.get('/audit/timeline/:callId', optionalAuth, getSessionTimelineController);
+router.get('/audit/export', optionalAuth, exportAuditTrailController);
+router.get('/audit/stream', streamAuditEventsController);
 
 
 // =====================================================

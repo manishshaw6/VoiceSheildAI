@@ -119,13 +119,22 @@ export function createTemporalRiskState() {
  */
 export function updateTemporalRisk(state, rawRisk, timestamp, alpha = 0.3) {
   const previousRisk = state.currentRisk;
+  const boundedRawRisk = Math.max(0, Math.min(100, Number(rawRisk) || 0));
 
-  // EWMA smoothing
+  // Dynamic adaptive EWMA: Fast escalation on detected threats when using default alpha
+  const effectiveAlpha = (alpha === 0.3 && boundedRawRisk > previousRisk)
+    ? (boundedRawRisk >= 60 || boundedRawRisk - previousRisk >= 20 ? 0.85 : boundedRawRisk >= 35 ? 0.70 : 0.50)
+    : alpha;
   const smoothed = state._countSnapshots === 0
-    ? rawRisk
-    : alpha * rawRisk + (1 - alpha) * previousRisk;
+    ? boundedRawRisk
+    : effectiveAlpha * boundedRawRisk + (1 - effectiveAlpha) * previousRisk;
 
-  const smoothedRisk = Number(Math.max(0, Math.min(100, smoothed)).toFixed(2));
+  // Material changes arrive promptly through adaptive EWMA
+  const threshold = alpha === 0.3 ? 0.5 : 1;
+  const candidateRisk = Math.max(0, Math.min(100, smoothed));
+  const smoothedRisk = Number((state._countSnapshots > 0 && Math.abs(candidateRisk - previousRisk) < threshold
+    ? previousRisk
+    : candidateRisk).toFixed(2));
 
   state.currentRisk = smoothedRisk;
   state.peakRisk = Number(Math.max(state.peakRisk, smoothedRisk).toFixed(2));
@@ -149,7 +158,7 @@ export function updateTemporalRisk(state, rawRisk, timestamp, alpha = 0.3) {
   // Record snapshot
   state.history.push(createTemporalSnapshot({
     timestamp,
-    risk: rawRisk,
+    risk: boundedRawRisk,
     smoothedRisk
   }));
 

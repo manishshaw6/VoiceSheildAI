@@ -19,14 +19,42 @@ export class TranscriptionRouter {
     const detectedIndic = WHISPER_INDIC[String(whisper.language || '').toLowerCase()];
     if (detectedIndic) return this.#indic(audioInput, detectedIndic, whisper);
     if (whisper.available) return whisper;
-    return this.#indic(audioInput, 'unknown', whisper);
+    const indicResult = await this.#indic(audioInput, 'unknown', whisper);
+    if (indicResult.available) return indicResult;
+    if (this.assemblyAi && typeof this.assemblyAi.transcribe === 'function') {
+      const aai = await this.assemblyAi.transcribe(audioInput);
+      if (aai.available) return { ...aai, provider: 'assemblyai_fallback' };
+    }
+    return indicResult;
   }
-  async #english(input) { const result = await this.fasterWhisper.transcribe(input); return result.available ? result : this.#indic(input, 'en-IN', result); }
+  async #english(input) {
+    if (this.config.enableFasterWhisper) {
+      const result = await this.fasterWhisper.transcribe(input);
+      if (result.available) return result;
+    }
+    if (this.assemblyAi && typeof this.assemblyAi.transcribe === 'function') {
+      const aai = await this.assemblyAi.transcribe(input);
+      if (aai.available) return { ...aai, provider: 'assemblyai' };
+    }
+    return this.#indic(input, 'en-IN');
+  }
   async #indic(input, code, firstFailure = null) {
     const result = await this.sarvam.transcribe(input, { languageCode: code });
     if (result.available || !this.config.enableWhisperFallback) return result;
     const fallback = await this.fasterWhisper.transcribe(input);
-    return fallback.available ? { ...fallback, provider: 'faster_whisper_fallback', fallbackReason: result.reason } : { ...result, fallbackReason: firstFailure?.reason || fallback.reason };
+    if (fallback.available) return { ...fallback, provider: 'faster_whisper_fallback', fallbackReason: result.reason };
+    if (this.assemblyAi && typeof this.assemblyAi.transcribe === 'function') {
+      const aai = await this.assemblyAi.transcribe(input);
+      if (aai.available) return { ...aai, provider: 'assemblyai_fallback', fallbackReason: result.reason };
+    }
+    return { ...result, fallbackReason: firstFailure?.reason || fallback.reason };
   }
-  async checkHealth() { return { routing: 'language_aware', faster_whisper: await this.fasterWhisper.checkHealth(), sarvam: await this.sarvam.checkHealth() }; }
+  async checkHealth() {
+    return {
+      routing: 'language_aware',
+      faster_whisper: await this.fasterWhisper.checkHealth(),
+      sarvam: await this.sarvam.checkHealth(),
+      assemblyai: this.assemblyAi ? await this.assemblyAi.checkHealth() : { configured: false, available: false }
+    };
+  }
 }

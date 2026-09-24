@@ -57,6 +57,13 @@ test('offlineDeepfakeProvider operates autonomously with zero cloud dependency',
   assert.ok(result.forensics);
 });
 
+test('offline authenticity analysis never treats compressed bytes as PCM evidence', async () => {
+  const result = await offlineDeepfakeProvider.analyzeAudio(Buffer.from('not a WAV or decoded PCM recording'));
+  assert.equal(result.available, false);
+  assert.equal(result.classification, 'UNABLE_TO_EVALUATE');
+  assert.equal(result.score, null);
+});
+
 test('multilingual fraud engine extracts coercion and credential harvesting', () => {
   const englishThreat = 'This is Officer Sharma from Delhi Police Cyber Cell. You are under digital arrest. Transfer 50000 rupees via UPI immediately to avoid jail.';
   const result = extractSemanticFraudEvents(englishThreat);

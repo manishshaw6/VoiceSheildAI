@@ -529,11 +529,11 @@ body {
   margin-bottom: 0.85rem;
 }
 
-.scenario-badge.low { background: rgba(0, 229, 163, 0.15); color: #00e5a3; }
-.scenario-badge.high { background: rgba(255, 140, 0, 0.15); color: #ff8c00; }
-.scenario-badge.medium { background: rgba(255, 215, 0, 0.15); color: #ffd700; }
-.scenario-badge.critical { background: rgba(255, 59, 92, 0.25); color: #ff3b5c; }
-.scenario-badge.mismatch { background: rgba(75, 124, 255, 0.2); color: #7bc4ff; }
+.scenario-badge.low { background: rgba(51, 65, 85, 0.55); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+.scenario-badge.high { background: rgba(51, 65, 85, 0.55); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+.scenario-badge.medium { background: rgba(51, 65, 85, 0.55); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+.scenario-badge.critical { background: rgba(51, 65, 85, 0.55); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+.scenario-badge.mismatch { background: rgba(51, 65, 85, 0.55); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
 
 .scenario-pill-card h4 {
   font-size: 1.05rem;

@@ -3,13 +3,23 @@ import { createRiskAssessment } from '../schemas/risk.js';
 
 const clamp01 = value => Math.max(0, Math.min(1, Number(value) || 0));
 
+// Provider and persisted legacy payloads may express probabilities as either
+// 0..1 fractions or 0..100 percentages. Normalize at the fusion boundary so a
+// value such as 62 cannot be interpreted as 100% risk.
+const normalizeProbability = value => {
+  if (value === null || value === undefined || value === '') return 0;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return clamp01(numeric > 1 ? numeric / 100 : numeric);
+};
+
 function addSignal(signals, name, score, confidence, reliability, weight, quality = 1) {
   if (score === null || score === undefined) return;
   signals[name] = {
-    score: clamp01(score),
-    confidence: clamp01(confidence ?? 1),
-    reliability: clamp01(reliability ?? 1),
-    quality: clamp01(quality),
+    score: normalizeProbability(score),
+    confidence: normalizeProbability(confidence ?? 1),
+    reliability: normalizeProbability(reliability ?? 1),
+    quality: normalizeProbability(quality),
     weight
   };
 }
@@ -72,7 +82,11 @@ export function calculateFusedRisk({
 
   // 2. Voice Authenticity (Reality Defender)
   expectedProviders += 1;
-  const hasSyntheticInput = deepfakeResult?.available && (deepfakeResult.score ?? deepfakeResult.fakeProbability) != null;
+  // Heuristic/offline artifact telemetry is useful for diagnostics but is not
+  // calibrated authenticity evidence. Only a validated detector may influence
+  // the fraud decision or raise a synthetic-voice flag.
+  const hasSyntheticInput = deepfakeResult?.available && !deepfakeResult?.advisory &&
+    (deepfakeResult.score ?? deepfakeResult.fakeProbability) != null;
   if (!signals.VOICE_SYNTHETIC && hasSyntheticInput) {
     availableProviders += 1;
     addSignal(signals, 'VOICE_SYNTHETIC', deepfakeResult.score ?? deepfakeResult.fakeProbability,
@@ -87,7 +101,11 @@ export function calculateFusedRisk({
   expectedProviders += 1;
   if (!signals.CONTEXT_RISK && scamResult?.available && (scamResult.overallContextRisk ?? scamResult.scamProbability) != null) {
     availableProviders += 1;
-    addSignal(signals, 'CONTEXT_RISK', scamResult.overallContextRisk ?? scamResult.scamProbability,
+    const suppliedContextRisk = normalizeProbability(scamResult.overallContextRisk ?? scamResult.scamProbability);
+    const calibratedContextRisk = scamResult.corroborated === false
+      ? Math.min(0.35, suppliedContextRisk)
+      : suppliedContextRisk;
+    addSignal(signals, 'CONTEXT_RISK', calibratedContextRisk,
       scamResult.confidence ?? 0.75, scamResult.reliability ?? 0.75, config.riskWeights.scam, quality);
     if (scamResult.category && !['None', 'Normal', 'Normal Conversation'].includes(scamResult.category)) {
       reasons.push(`Fraud intent identified: ${scamResult.category}`);
@@ -104,7 +122,10 @@ export function calculateFusedRisk({
     for (const ind of threatRulesResult.indicators) {
       const cat = ind.type;
       if (!signals[cat] && ind.weight > 0) {
-        addSignal(signals, cat, ruleScoreNormalized, 0.95, 0.95, Math.max(0.20, ind.weight / 100), quality);
+        // Each telemetry vector represents its own evidence strength. Copying
+        // the aggregate rule score into every vector made one combined result
+        // appear as several independent 90-95% findings.
+        addSignal(signals, cat, ind.weight / 100, 0.95, 0.95, Math.max(0.20, ind.weight / 100), quality);
       }
     }
     if (!signals.RULE_CONTEXT && threatRulesResult.score > 0) {
@@ -125,11 +146,11 @@ export function calculateFusedRisk({
     if (speakerResult.similarity != null) {
       availableProviders += 1;
       if (!signals.SPEAKER_MISMATCH) {
-        addSignal(signals, 'SPEAKER_MISMATCH', 1 - speakerResult.similarity,
+        addSignal(signals, 'SPEAKER_MISMATCH', 1 - normalizeProbability(speakerResult.similarity),
           speakerResult.confidence ?? 0.8, 0.7, config.riskWeights.speaker, quality);
       }
       if (!signals.SPEAKER_MATCH) {
-        addSignal(signals, 'SPEAKER_MATCH', speakerResult.similarity,
+        addSignal(signals, 'SPEAKER_MATCH', normalizeProbability(speakerResult.similarity),
           speakerResult.confidence ?? 0.8, 0.85, config.riskWeights.speaker, quality);
       }
     }
@@ -182,7 +203,9 @@ export function calculateFusedRisk({
 
   // Check specific high-priority indicators
   const synthetic = signals.VOICE_SYNTHETIC?.score;
-  const similarity = speakerResult?.similarity ?? signals.SPEAKER_MATCH?.score;
+  const similarity = speakerResult?.similarity != null
+    ? normalizeProbability(speakerResult.similarity)
+    : signals.SPEAKER_MATCH?.score;
 
   let cloneSuspicion = false;
 
@@ -361,16 +384,34 @@ export function calculateFusedRisk({
     score = Math.min(96.00, Math.max(score, maxFraudComponent));
   }
 
-  // Conversational Scam Intent from context/LLM
-  const contextRisk = signals.CONTEXT_RISK?.score ?? (scamResult?.overallContextRisk ?? scamResult?.scamProbability ?? 0);
+  // Conversational Scam Intent from context/LLM or deterministic linguistic threat rules
+  const ruleContextScore = signals.RULE_CONTEXT?.score ?? 0;
+  const maxFraudSignalScore = Math.max(
+    signals.BANK_DETAILS_REQUEST?.score ?? 0,
+    signals.CREDENTIAL_REQUEST?.score ?? 0,
+    signals.OTP_REQUEST?.score ?? 0,
+    signals.PAYMENT_FRAUD?.score ?? 0,
+    signals.FINANCIAL_REQUEST?.score ?? 0,
+    signals.ACCOUNT_THREAT?.score ?? 0,
+    signals.ACCOUNT_SUSPENSION_THREAT?.score ?? 0,
+    signals.AUTHORITY_IMPERSONATION?.score ?? 0,
+    signals.TRUSTED_PERSON_IMPERSONATION?.score ?? 0,
+    signals.SENSITIVE_INFO_REQUEST?.score ?? 0
+  );
+  const derivedContextRisk = Math.max(ruleContextScore, maxFraudSignalScore);
+
+  const contextRisk = signals.CONTEXT_RISK?.score ??
+    (derivedContextRisk > 0 ? derivedContextRisk : null) ??
+    normalizeProbability(scamResult?.overallContextRisk ?? scamResult?.scamProbability ?? 0);
+
   if (contextRisk >= 0.50) {
     const rawContextScore = Math.round(contextRisk * 100);
     if (contextRisk >= 0.85) {
-      score = Math.min(96.00, Math.max(score, rawContextScore));
+      score = Math.min(92.00, Math.max(score, rawContextScore));
     } else if (contextRisk >= 0.65) {
-      score = Math.min(96.00, Math.max(score, Math.round(rawContextScore * 0.85)));
+      score = Math.min(90.00, Math.max(score, Math.round(rawContextScore * 0.85)));
     } else {
-      score = Math.min(96.00, Math.max(score, Math.round(contextRisk * 65)));
+      score = Math.min(85.00, Math.max(score, Math.round(contextRisk * 65)));
     }
   }
 
@@ -380,7 +421,7 @@ export function calculateFusedRisk({
     reasons.unshift('High-risk social engineering scam from unverified/mismatched identity.');
   }
 
-  score = Number(Math.max(0, Math.min(96.00, score)).toFixed(2));
+  score = Number(Math.max(0, Math.min(92.00, score)).toFixed(2));
   evidenceContributions.sort((a, b) => b.points - a.points);
 
   // ─── Trust Score Calculation ──────────────────────────────────────────────

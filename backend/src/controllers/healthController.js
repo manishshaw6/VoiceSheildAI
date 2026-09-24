@@ -14,8 +14,12 @@ export async function getProviderStatus(_req, res) {
   const rd = providers.deepfake;
   return res.status(200).json({
     reality_defender: {
-      configured: Boolean(config.realityDefenderApiKey), available: Boolean(rd.configured && rd.available),
-      degraded: rd.degraded, latency_ms: rd.latencyMs ?? null
+      configured: Boolean(config.realityDefenderApiKey),
+      available: Boolean(rd.available),
+      degraded: Boolean(rd.degraded),
+      latency_ms: rd.latencyMs ?? null,
+      role: 'calibrated_voice_authenticity_detector',
+      fallback: rd.offline ? { available: Boolean(rd.offline.available), advisory_only: true } : null
     },
     speech_recognition: providers.transcription?.routing === 'language_aware' ? {
       routing: 'language_aware', providers: {
@@ -28,6 +32,11 @@ export async function getProviderStatus(_req, res) {
       device: providers.transcription?.device ?? null, model: providers.transcription?.model ?? null
     },
     transcription: providers.transcription,
+    assemblyai: {
+      configured: Boolean(config.assemblyAiApiKey),
+      enabled_as_fallback: Boolean(config.mlService.enableAssemblyAiFallback),
+      role: 'speech_to_text_only_not_voice_authenticity'
+    },
     context_llm: { configured: Boolean(config.geminiApiKey || config.groqApiKey), available: Boolean(config.geminiApiKey || config.groqApiKey) },
     context_rules: providers.context,
     speaker_verification: {

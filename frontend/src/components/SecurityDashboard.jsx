@@ -110,15 +110,7 @@ export default function SecurityDashboard({ analysis, onExportReport }) {
     recommendedAction: 'No report required for benign or non-impersonation calls.'
   });
 
-  const getLevelColor = (lvl) => {
-    switch (lvl) {
-      case 'CRITICAL': return '#ff3b5c';
-      case 'HIGH': return '#ff8c00';
-      case 'SUSPICIOUS':
-      case 'MODERATE': return '#ffd700';
-      default: return '#00e5a3';
-    }
-  };
+  const getLevelColor = () => score <= 35 ? '#22c55e' : score <= 65 ? '#facc15' : score <= 85 ? '#f97316' : '#ef4444';
 
   const levelColor = getLevelColor(level);
 
@@ -508,7 +500,7 @@ Please review this draft, verify all information, and file an official complaint
           </div>
           <div className="kpi-subtext">
             {deepfake.score !== null && deepfake.score !== undefined
-              ? 'Reality Defender acoustic biometric scan'
+              ? 'Neural acoustic authenticity scan'
               : 'Calibrated DSP spectral & Mel spectrogram verification'}
           </div>
         </div>

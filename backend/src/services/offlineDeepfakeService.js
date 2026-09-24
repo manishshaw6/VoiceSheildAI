@@ -7,6 +7,7 @@
  */
 
 import { extractJsForensics } from './forensicAnalysisService.js';
+import { decodeWavBuffer } from '../audio/preprocessor.js';
 
 /**
  * Extracts 16-bit PCM samples normalized to [-1.0, 1.0] from a Buffer.
@@ -282,14 +283,36 @@ export class OfflineDeepfakeDetectionProvider {
    * @returns {Promise<object>}
    */
   async analyzeAudio(audioData, sampleRate = 16000) {
-    const samples = audioData instanceof Float32Array ? audioData : extractPcmSamples(audioData);
-    const artifacts = extractAcousticArtifacts(samples, sampleRate);
+    // Never interpret compressed container bytes (MP3, WebM, M4A, OGG) as PCM.
+    // Doing that creates arbitrary spectral "artifacts" and false synthetic flags.
+    const decoded = audioData instanceof Float32Array ? null : decodeWavBuffer(audioData);
+    if (!(audioData instanceof Float32Array) && !decoded) {
+      return {
+        available: false,
+        evidence_available: false,
+        is_offline: true,
+        score: null,
+        confidence: null,
+        classification: 'UNABLE_TO_EVALUATE',
+        verdict: 'UNABLE TO EVALUATE',
+        provider: this.name,
+        reason: 'Audio could not be decoded to PCM; no acoustic authenticity conclusion was made.'
+      };
+    }
+    const samples = audioData instanceof Float32Array ? audioData : decoded.samples;
+    const activeSampleRate = audioData instanceof Float32Array ? sampleRate : decoded.sampleRate;
+    const artifacts = extractAcousticArtifacts(samples, activeSampleRate);
 
-    const score = Math.round(artifacts.syntheticProbability * 100);
-    const classification = score >= 65 ? 'FAKE' : score >= 40 ? 'SUSPICIOUS' : 'AUTHENTIC';
+    // This lightweight local analysis is diagnostic only, not a calibrated
+    // deepfake classifier. Keep its result visible for engineering review but
+    // prevent it from escalating the fraud score or declaring a voice fake.
+    const score = Math.round(Math.min(0.49, artifacts.syntheticProbability) * 100);
+    const classification = score >= 40 ? 'SUSPICIOUS' : 'AUTHENTIC';
 
     return {
       available: true,
+      advisory: true,
+      evidence_available: false,
       is_offline: true,
       score,
       confidence: 1 - artifacts.uncertainty,
@@ -302,7 +325,7 @@ export class OfflineDeepfakeDetectionProvider {
         highFreqRatio: artifacts.highFreqRatio,
         durationSec: artifacts.durationSec
       },
-      forensics: extractJsForensics(samples, sampleRate)
+      forensics: extractJsForensics(samples, activeSampleRate)
     };
   }
 

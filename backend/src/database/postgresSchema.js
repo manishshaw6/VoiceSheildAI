@@ -50,6 +50,9 @@ const schemaStatements = [
     resource TEXT,
     call_id TEXT,
     request_id TEXT,
+    severity TEXT DEFAULT 'INFO',
+    prev_hash TEXT,
+    event_hash TEXT,
     metadata TEXT NOT NULL DEFAULT '{}'
   )`,
   `CREATE TABLE IF NOT EXISTS users (
@@ -144,7 +147,11 @@ const schemaStatements = [
   'CREATE INDEX IF NOT EXISTS idx_audit_events_call_id ON audit_events(call_id)',
   'CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)',
   'CREATE INDEX IF NOT EXISTS idx_incident_reports_user_id ON incident_reports(user_id)',
-  'CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id)'
+  'CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id)',
+  'ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS severity TEXT DEFAULT \'INFO\'',
+  'ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS prev_hash TEXT',
+  'ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS event_hash TEXT',
+  'CREATE INDEX IF NOT EXISTS idx_audit_events_event_hash ON audit_events(event_hash)'
 ];
 
 const trustedOrganizations = [

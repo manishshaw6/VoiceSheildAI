@@ -475,6 +475,7 @@ test('30. Successful authorized report dispatch via SendGrid (mocked)', async ()
   assert.equal(result.success, true);
   assert.equal(result.status, 'SENT');
   assert.ok(result.delivery.messageId);
+  assert.equal(result.delivery.status, 'ACCEPTED');
   // The mocked delivery falls back to the configured SendGrid sender when SMTP is unavailable.
   const expectedSender = config.sendgrid.fromEmail;
   assert.equal(result.delivery.sender, expectedSender);
