@@ -30,8 +30,7 @@ export const THREAT_RULES = [
       /\b(password|passcode|secret[\s-]?pin|atm[\s-]?pin|card[\s-]?pin|cvv|cvc|security[\s-]?digits|expiry[\s-]?date|net[\s-]?banking|upi[\s-]?pin)\b/i,
       /पिन|पासवर्ड|सीवीवी|పిన్|పాస్‌వర్డ్|సీవీవీ|பின்|கடவுச்சொல்|சிவிவி/i,
       /\b(credentials?|login\s+credentials?|banking\s+credentials?|user\s+credentials?|security\s+credentials?)\b/i,
-      /\b(tell|share|enter|give|provide|send|read)\s+(me\s+)?(your\s+)?(pin|cvv|password|passcode|net[\s-]?banking|upi\s*pin|credentials?)\b/i,
-      /\b(login\s+credentials?|banking\s+password|card\s+number|debit\s+card\s+number|credit\s+card\s+number)\b/i
+      /\b(tell|share|enter|give|provide|send|read)\s+(me\s+)?(your\s+)?(pin|cvv|password|passcode|net[\s-]?banking|upi\s*pin|credentials?)\b/i
     ]
   },
   {
@@ -42,9 +41,6 @@ export const THREAT_RULES = [
     patterns: [
       /\b(bank\s+details|banking\s+details|bank\s+account\s+details|account\s+details|bank\s+info|banking\s+information)\b/i,
       /\b(bank\s+account\s+number|card\s+details|debit\s+card\s+details|credit\s+card\s+details|ifsc\s+code|routing\s+number)\b/i,
-      /\b(credit\s+card\s+details|debit\s+card\s+details|credit\s+card\s+number|debit\s+card\s+number)\b/i,
-      /\b(account\s*(?:no\.?|number)|card\s*(?:no\.?|number)|debit\s+card\s*(?:no\.?|number)|credit\s+card\s*(?:no\.?|number)|bank\s+account\s*(?:no\.?|number))\b/i,
-      /\b(card\s+expiry|expiry\s+(?:date|month)|valid\s+thru|name\s+on\s+(?:the\s+)?card)\b/i,
       /\b(share|give|tell|provide|send)\s+(me\s+)?(your\s+)?(bank\s+details|account\s+details|card\s+details|account\s+number)\b/i,
       /बैंक विवरण|खाता विवरण|ఖాతా వివరాలు|வங்கி விவரங்கள்/i
     ]
@@ -87,10 +83,8 @@ export const THREAT_RULES = [
       /\b(pay\s+immediately|refund\s+processing|advance\s+fee|processing\s+charge|processing\s+fee|security\s+deposit|pay\s+now)\b/i,
       /\b(gift[\s-]?card|crypto|bitcoin|usdt)\b/i,
       /\b(send\s+(me\s+)?(money|cash|funds?)|transfer\s+(me\s+)?money)\b/i,
-      /\b((?:send|transfer|pay|give)\s+(?:me\s+)?(?:like\s+)?(?:₹|rs\.?|inr|\$)?\s*\d+\s*(?:rupees|rs|inr|cash|dollars?)?)\b/i,
-      /\b(like\s+(?:₹|rs\.?|inr|\$)?\s*\d+\s*(?:rupees|rs|inr)?)\b/i,
-      /\b(\d+\s*rupees)\b/i,
-      /\b(send\s+(rupees|inr|cash|dollars?|rs\.?|\b\d+\s*rupees))\b/i,
+      /\b((?:send|transfer)\s+(?:me\s+)?(?:like\s+)?(?:₹|rs\.?|inr|\$)?\s*\d+\s*(?:rupees|rs|inr|cash|dollars?)?)\b/i,
+      /\b(send\s+(rupees|inr|cash|dollars?|rs\.?))\b/i,
       /\b(transfer\s+\d+\s*(rupees|rs|inr|dollars?)?)\b/i
     ]
   },
@@ -180,10 +174,14 @@ export const THREAT_RULES = [
   }
 ];
 
-import { extractSemanticFraudEvents, SemanticRole } from './semanticFraudEventEngine.js';
+import {
+  extractSemanticFraudEvents,
+  SemanticRole
+} from './semanticFraudEventEngine.js';
 
 /**
  * Analyzes text against deterministic threat rules enriched with semantic role and intent intelligence.
+ *
  * @param {string} text - Transcription text
  * @returns {object} Rule engine analysis result
  */
@@ -201,45 +199,80 @@ export function analyzeThreatRules(text) {
   }
 
   const cleanText = text.trim();
+
   const semanticAnalysis = extractSemanticFraudEvents(cleanText);
-  const { events, safetyStatements, hasSafetyWarning, hasQuestionContext } = semanticAnalysis;
+
+  const {
+    events,
+    safetyStatements,
+    hasSafetyWarning,
+    hasQuestionContext
+  } = semanticAnalysis;
 
   const EVENT_TO_RULE_TYPE_MAP = {
     OTP_REQUEST: ['OTP_REQUEST'],
     PIN_REQUEST: ['CREDENTIAL_REQUEST'],
     CVV_REQUEST: ['CREDENTIAL_REQUEST'],
     PASSWORD_REQUEST: ['CREDENTIAL_REQUEST'],
-    BANK_DETAILS_REQUEST: ['BANK_DETAILS_REQUEST', 'CREDENTIAL_REQUEST'],
+
+    BANK_DETAILS_REQUEST: [
+      'BANK_DETAILS_REQUEST',
+      'CREDENTIAL_REQUEST'
+    ],
+
     MONEY_TRANSFER_REQUEST: ['PAYMENT_FRAUD'],
     UPI_PAYMENT_REQUEST: ['PAYMENT_FRAUD'],
     QR_PAYMENT_REQUEST: ['PAYMENT_FRAUD'],
-    PROCESSING_FEE_REQUEST: ['PAYMENT_FRAUD', 'PRIZE_LOTTERY_LOAN'],
+
+    PROCESSING_FEE_REQUEST: [
+      'PAYMENT_FRAUD',
+      'PRIZE_LOTTERY_LOAN'
+    ],
+
     BANK_IMPERSONATION: ['AUTHORITY_IMPERSONATION'],
     AUTHORITY_IMPERSONATION: ['AUTHORITY_IMPERSONATION'],
     SUPPORT_IMPERSONATION: ['AUTHORITY_IMPERSONATION'],
+
     FAMILY_IMPERSONATION: ['TRUSTED_PERSON_IMPERSONATION'],
+
     ACCOUNT_THREAT: ['ACCOUNT_SUSPENSION_THREAT'],
     ACCOUNT_BLOCK_THREAT: ['ACCOUNT_SUSPENSION_THREAT'],
+
     LEGAL_ARREST_THREAT: ['AUTHORITY_IMPERSONATION'],
     ARREST_THREAT: ['AUTHORITY_IMPERSONATION'],
     POLICE_THREAT: ['AUTHORITY_IMPERSONATION'],
+
     SECRECY_INSTRUCTION: ['SECRECY_REQUEST'],
     CALL_ISOLATION_DEMAND: ['SECRECY_REQUEST'],
-    DO_NOT_HANG_UP: ['URGENCY_COERCION', 'SECRECY_REQUEST'],
+
+    DO_NOT_HANG_UP: [
+      'URGENCY_COERCION',
+      'SECRECY_REQUEST'
+    ],
+
     DO_NOT_CONTACT_BANK: ['SECRECY_REQUEST'],
-    REFUND_PRETEXT: ['PRIZE_LOTTERY_LOAN', 'PAYMENT_FRAUD'],
+
+    REFUND_PRETEXT: [
+      'PRIZE_LOTTERY_LOAN',
+      'PAYMENT_FRAUD'
+    ],
+
     PRIZE_SCAM: ['PRIZE_LOTTERY_LOAN'],
     INVESTMENT_SCAM: ['PRIZE_LOTTERY_LOAN'],
     LOAN_SCAM: ['PRIZE_LOTTERY_LOAN'],
+
     PARCEL_CUSTOMS_SCAM: ['AUTHORITY_IMPERSONATION'],
     JOB_SCAM: ['PRIZE_LOTTERY_LOAN']
   };
 
-  // Track which categories have active attack events vs purely informational/negated mentions
+  // Track which categories have active attack events
+  // vs purely informational/negated mentions.
   const activeAttackTypes = new Set();
   const passiveMentionTypes = new Set();
+
   for (const ev of events) {
     const mapped = EVENT_TO_RULE_TYPE_MAP[ev.type] || [ev.type];
+
     for (const ruleType of mapped) {
       if (ev.isAttack) {
         activeAttackTypes.add(ruleType);
@@ -259,60 +292,110 @@ export function analyzeThreatRules(text) {
     let primaryTerm = '';
 
     for (const pattern of rule.patterns) {
-      const regex = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
+      const regex = new RegExp(
+        pattern.source,
+        pattern.flags.includes('g')
+          ? pattern.flags
+          : pattern.flags + 'g'
+      );
+
       let m;
+
       while ((m = regex.exec(cleanText)) !== null) {
         const start = m.index;
         const end = m.index + m[0].length;
-        const overlaps = matchedSpans.some(s => (start >= s.start && start < s.end) || (end > s.start && end <= s.end));
+
+        const overlaps = matchedSpans.some(
+          s =>
+            (start >= s.start && start < s.end) ||
+            (end > s.start && end <= s.end)
+        );
+
         if (!overlaps) {
-          matchedSpans.push({ start, end, term: m[0] });
+          matchedSpans.push({
+            start,
+            end,
+            term: m[0]
+          });
+
           if (!primaryTerm) {
             primaryTerm = m[0];
+
             const ctxStart = Math.max(0, start - 30);
-            const ctxEnd = Math.min(cleanText.length, end + 30);
-            primaryEvidence = `...${cleanText.slice(ctxStart, ctxEnd).trim()}...`;
+            const ctxEnd = Math.min(
+              cleanText.length,
+              end + 30
+            );
+
+            primaryEvidence =
+              `...${cleanText.slice(ctxStart, ctxEnd).trim()}...`;
           }
         }
       }
     }
 
     const matchCount = matchedSpans.length;
+
     if (matchCount > 0) {
       let isNegatedOrSafety = false;
       let isPassiveInformational = false;
 
       if (hasSafetyWarning) {
-        const isCoveredBySafety = safetyStatements.some(s =>
-          s.evidence_text.toLowerCase().includes(primaryTerm.toLowerCase()) ||
-          primaryTerm.toLowerCase().includes('otp') ||
-          primaryTerm.toLowerCase().includes('password') ||
-          primaryTerm.toLowerCase().includes('pin') ||
-          primaryTerm.toLowerCase().includes('cvv') ||
-          primaryTerm.toLowerCase().includes('transfer')
+        const isCoveredBySafety = safetyStatements.some(
+          s =>
+            s.evidence_text
+              .toLowerCase()
+              .includes(primaryTerm.toLowerCase()) ||
+            primaryTerm.toLowerCase().includes('otp') ||
+            primaryTerm.toLowerCase().includes('password') ||
+            primaryTerm.toLowerCase().includes('pin') ||
+            primaryTerm.toLowerCase().includes('cvv') ||
+            primaryTerm.toLowerCase().includes('transfer')
         );
-        if (isCoveredBySafety && !activeAttackTypes.has(rule.type)) {
+
+        if (
+          isCoveredBySafety &&
+          !activeAttackTypes.has(rule.type)
+        ) {
           isNegatedOrSafety = true;
         }
       }
 
-      // Also check if suppressed in clause analysis
-      if (!isNegatedOrSafety && semanticAnalysis.suppressedKeywordEvents?.some(s =>
-        s.clause.toLowerCase().includes(primaryTerm.toLowerCase()) ||
-        primaryTerm.toLowerCase().includes(s.term.toLowerCase())
-      )) {
+      // Also check if suppressed in clause analysis.
+      if (
+        !isNegatedOrSafety &&
+        semanticAnalysis.suppressedKeywordEvents?.some(
+          s =>
+            s.clause
+              .toLowerCase()
+              .includes(primaryTerm.toLowerCase()) ||
+            primaryTerm
+              .toLowerCase()
+              .includes(s.term.toLowerCase())
+        )
+      ) {
         if (!activeAttackTypes.has(rule.type)) {
           isNegatedOrSafety = true;
         }
       }
 
-      // Check if indicator occurs purely inside a question or past reported event
-      const isQuestionOrPast = semanticAnalysis.clauses?.some(c =>
-        (c.speechAct === 'QUESTION' || c.speechAct === 'REPORTED_EVENT') &&
-        c.clause.toLowerCase().includes(primaryTerm.toLowerCase())
-      );
+      // Check if indicator occurs purely inside a question
+      // or past reported event.
+      const isQuestionOrPast =
+        semanticAnalysis.clauses?.some(
+          c =>
+            (c.speechAct === 'QUESTION' ||
+              c.speechAct === 'REPORTED_EVENT') &&
+            c.clause
+              .toLowerCase()
+              .includes(primaryTerm.toLowerCase())
+        );
 
-      if (!isNegatedOrSafety && isQuestionOrPast && !activeAttackTypes.has(rule.type)) {
+      if (
+        !isNegatedOrSafety &&
+        isQuestionOrPast &&
+        !activeAttackTypes.has(rule.type)
+      ) {
         isPassiveInformational = true;
       }
 
@@ -323,27 +406,61 @@ export function analyzeThreatRules(text) {
         effectiveRuleWeight = 0;
         effectiveSeverity = 'LOW';
       } else if (isPassiveInformational) {
-        effectiveRuleWeight = Number(Math.min(10.0, rule.weight * 0.35).toFixed(2));
+        effectiveRuleWeight = Number(
+          Math.min(10.0, rule.weight * 0.35).toFixed(2)
+        );
+
         effectiveSeverity = 'LOW';
       } else {
-        const repetitionBonus = matchCount > 1 ? Number(Math.min(4.5, Math.log2(matchCount) * 1.85).toFixed(2)) : 0;
-        effectiveRuleWeight = Number((rule.weight + repetitionBonus).toFixed(2));
+        const repetitionBonus =
+          matchCount > 1
+            ? Number(
+                Math.min(
+                  4.5,
+                  Math.log2(matchCount) * 1.85
+                ).toFixed(2)
+              )
+            : 0;
+
+        effectiveRuleWeight = Number(
+          (rule.weight + repetitionBonus).toFixed(2)
+        );
       }
 
-      if (effectiveRuleWeight > 0 || isNegatedOrSafety) {
+      if (
+        effectiveRuleWeight > 0 ||
+        isNegatedOrSafety
+      ) {
         matchedTypes.add(rule.type);
+
         matchedIndicators.push({
           type: rule.type,
-          label: isNegatedOrSafety ? `${rule.label} (Educational/Safety Context)` :
-            isPassiveInformational ? `${rule.label} (Informational Mention)` : rule.label,
+
+          label: isNegatedOrSafety
+            ? `${rule.label} (Educational/Safety Context)`
+            : isPassiveInformational
+              ? `${rule.label} (Informational Mention)`
+              : rule.label,
+
           severity: effectiveSeverity,
+
           weight: effectiveRuleWeight,
+
           occurrences: matchCount,
+
           matchedTerm: primaryTerm,
+
           evidence: primaryEvidence,
-          semanticRole: isNegatedOrSafety ? SemanticRole.SAFETY_WARNING :
-            isPassiveInformational ? SemanticRole.INFORMATION : SemanticRole.COMMAND,
-          isAttack: !isNegatedOrSafety && !isPassiveInformational
+
+          semanticRole: isNegatedOrSafety
+            ? SemanticRole.SAFETY_WARNING
+            : isPassiveInformational
+              ? SemanticRole.INFORMATION
+              : SemanticRole.COMMAND,
+
+          isAttack:
+            !isNegatedOrSafety &&
+            !isPassiveInformational
         });
 
         accumulatedWeight += effectiveRuleWeight;
@@ -351,95 +468,287 @@ export function analyzeThreatRules(text) {
     }
   }
 
-  // Determine if active credentials (OTP, CVV, password) are targeted
-  const hasActiveCred = (matchedTypes.has('OTP_REQUEST') || matchedTypes.has('CREDENTIAL_REQUEST') || matchedTypes.has('BANK_DETAILS_REQUEST') || matchedTypes.has('SENSITIVE_INFO_REQUEST')) &&
-    !hasSafetyWarning && (activeAttackTypes.has('OTP_REQUEST') || activeAttackTypes.has('CREDENTIAL_REQUEST') || activeAttackTypes.has('BANK_DETAILS_REQUEST'));
-
-  // Baseline calibrations for active attacks (not educational/safety, not passive informational)
-  if (hasActiveCred) {
-    const hasCommandOrException = semanticAnalysis.clauses?.some(c =>
-      c.isAttack && (c.speechAct === 'COMMAND' || c.clause.toLowerCase().includes('except') || c.clause.toLowerCase().includes('now'))
+  // Determine if active credentials (OTP, CVV, password)
+  // are targeted.
+  const hasActiveCred =
+    (
+      matchedTypes.has('OTP_REQUEST') ||
+      matchedTypes.has('CREDENTIAL_REQUEST') ||
+      matchedTypes.has('BANK_DETAILS_REQUEST') ||
+      matchedTypes.has('SENSITIVE_INFO_REQUEST')
+    ) &&
+    !hasSafetyWarning &&
+    (
+      activeAttackTypes.has('OTP_REQUEST') ||
+      activeAttackTypes.has('CREDENTIAL_REQUEST') ||
+      activeAttackTypes.has('BANK_DETAILS_REQUEST')
     );
-    accumulatedWeight = Math.max(accumulatedWeight, hasCommandOrException ? 68.0 : 62.0);
-  }
-  if (matchedTypes.has('REMOTE_ACCESS') && (activeAttackTypes.has('REMOTE_ACCESS') || activeAttackTypes.size > 0)) {
-    accumulatedWeight = Math.max(accumulatedWeight, 70.0);
-  }
-  if (activeAttackTypes.has('PAYMENT_FRAUD') && !hasActiveCred) {
-    accumulatedWeight = Math.max(accumulatedWeight, 48.0);
+
+  // Baseline calibrations for active attacks.
+  //
+  // The score should build gradually so the warning popup
+  // has time to appear before the critical threshold.
+  //
+  // OTP/credential alone remains in the warning zone.
+  // Multiple combined indicators are needed to cross 85.
+  if (hasActiveCred) {
+    const hasCommandOrException =
+      semanticAnalysis.clauses?.some(
+        c =>
+          c.isAttack &&
+          (
+            c.speechAct === 'COMMAND' ||
+            c.clause.toLowerCase().includes('except') ||
+            c.clause.toLowerCase().includes('now')
+          )
+      );
+
+    accumulatedWeight = Math.max(
+      accumulatedWeight,
+      hasCommandOrException ? 68.0 : 62.0
+    );
   }
 
+  if (
+    matchedTypes.has('REMOTE_ACCESS') &&
+    (
+      activeAttackTypes.has('REMOTE_ACCESS') ||
+      activeAttackTypes.size > 0
+    )
+  ) {
+    accumulatedWeight = Math.max(
+      accumulatedWeight,
+      70.0
+    );
+  }
+
+  if (
+    activeAttackTypes.has('PAYMENT_FRAUD') &&
+    !hasActiveCred
+  ) {
+    accumulatedWeight = Math.max(
+      accumulatedWeight,
+      48.0
+    );
+  }
+
+  // ---------------------------------------------------------
   // Compound Fraud Synergy Bonuses
+  // ---------------------------------------------------------
+
   let synergyBonus = 0;
 
-  if (hasActiveCred && matchedTypes.has('PAYMENT_FRAUD')) {
+  if (
+    hasActiveCred &&
+    matchedTypes.has('PAYMENT_FRAUD')
+  ) {
     synergyBonus += 6.50;
   }
-  if (hasActiveCred && (matchedTypes.has('URGENCY_COERCION') || matchedTypes.has('SECRECY_REQUEST'))) {
+
+  if (
+    hasActiveCred &&
+    (
+      matchedTypes.has('URGENCY_COERCION') ||
+      matchedTypes.has('SECRECY_REQUEST')
+    )
+  ) {
     synergyBonus += 7.50;
   }
-  if (hasActiveCred && matchedTypes.has('AUTHORITY_IMPERSONATION')) {
+
+  if (
+    hasActiveCred &&
+    matchedTypes.has('AUTHORITY_IMPERSONATION')
+  ) {
     synergyBonus += 8.50;
   }
-  if (matchedTypes.has('SECRECY_REQUEST') && matchedTypes.has('PAYMENT_FRAUD')) {
+
+  if (
+    matchedTypes.has('SECRECY_REQUEST') &&
+    matchedTypes.has('PAYMENT_FRAUD')
+  ) {
     synergyBonus += 25.00;
-    accumulatedWeight = Math.max(accumulatedWeight, 76.0);
+
+    accumulatedWeight = Math.max(
+      accumulatedWeight,
+      76.0
+    );
   }
-  if (matchedTypes.has('AUTHORITY_IMPERSONATION') && matchedTypes.has('ACCOUNT_SUSPENSION_THREAT') && !hasActiveCred) {
+
+  if (
+    matchedTypes.has('AUTHORITY_IMPERSONATION') &&
+    matchedTypes.has('ACCOUNT_SUSPENSION_THREAT') &&
+    !hasActiveCred
+  ) {
     synergyBonus += 8.50;
   }
+
   if (matchedTypes.has('REMOTE_ACCESS')) {
     synergyBonus += 12.50;
   }
-  if (matchedTypes.has('PAYMENT_FRAUD') && matchedTypes.has('PRIZE_LOTTERY_LOAN')) {
+
+  if (
+    matchedTypes.has('PAYMENT_FRAUD') &&
+    matchedTypes.has('PRIZE_LOTTERY_LOAN')
+  ) {
     synergyBonus += 15.00;
   }
-  if ((matchedTypes.has('BANK_DETAILS_REQUEST') || matchedTypes.has('CREDENTIAL_REQUEST') || matchedTypes.has('OTP_REQUEST')) && matchedTypes.has('ACCOUNT_SUSPENSION_THREAT')) {
+
+  if (
+    (
+      matchedTypes.has('BANK_DETAILS_REQUEST') ||
+      matchedTypes.has('CREDENTIAL_REQUEST') ||
+      matchedTypes.has('OTP_REQUEST')
+    ) &&
+    matchedTypes.has('ACCOUNT_SUSPENSION_THREAT')
+  ) {
     synergyBonus += 8.00;
   }
-  if (matchedTypes.has('AUTHORITY_IMPERSONATION') && (cleanText.toLowerCase().includes('arrest') || cleanText.toLowerCase().includes('laundering')) && (matchedTypes.has('PAYMENT_FRAUD') || cleanText.toLowerCase().includes('transfer'))) {
+
+  if (
+    matchedTypes.has('AUTHORITY_IMPERSONATION') &&
+    (
+      cleanText.toLowerCase().includes('arrest') ||
+      cleanText.toLowerCase().includes('laundering')
+    ) &&
+    (
+      matchedTypes.has('PAYMENT_FRAUD') ||
+      cleanText.toLowerCase().includes('transfer')
+    )
+  ) {
     synergyBonus += 26.50;
   }
 
   accumulatedWeight += synergyBonus;
 
-  // Critical fraud threshold calibration:
-  // Active attacks combining credential harvesting with threats, urgency, impersonation, or payment demands,
-  // are calibrated to exceed 85 (Critical threshold for automatic cutoff).
-  // Pure digital arrest, remote access, or severe extortion can reach up to 96.
-  // Isolated single-indicator or benign mentions without strong attack intent are capped below 85.
-  const hasActiveAttackCombo = hasActiveCred && (
-    matchedTypes.has('URGENCY_COERCION') ||
-    matchedTypes.has('ACCOUNT_SUSPENSION_THREAT') ||
-    matchedTypes.has('AUTHORITY_IMPERSONATION') ||
-    matchedTypes.has('PAYMENT_FRAUD') ||
-    matchedTypes.has('SECRECY_REQUEST') ||
-    matchedIndicators.filter(i => i.isAttack).length >= 2
-  );
+  // ---------------------------------------------------------
+  // Critical / Compound Attack Calibration
+  // ---------------------------------------------------------
 
-  const isDigitalArrestOrRemote = cleanText.toLowerCase().includes('arrest') ||
+  // Critical extortion indicators remain capable of reaching
+  // the higher range.
+  const isCriticalExtortion =
+    cleanText.toLowerCase().includes('arrest') ||
     cleanText.toLowerCase().includes('laundering') ||
     matchedTypes.has('REMOTE_ACCESS');
 
-  if (!isDigitalArrestOrRemote) {
-    if (hasActiveAttackCombo && accumulatedWeight > 87.5) {
-      accumulatedWeight = 87.5;
-    } else if (!hasActiveAttackCombo && accumulatedWeight > 84.0) {
-      accumulatedWeight = 84.0;
-    }
+  // Active compound attack:
+  //
+  // Credential extraction paired with impersonation,
+  // account threat, urgency, payment fraud, secrecy,
+  // or multiple attack vectors.
+  const attackIndicators =
+    matchedIndicators.filter(i => i.isAttack);
+
+  const isCompoundAttack =
+    (
+      hasActiveCred &&
+      (
+        (
+          matchedTypes.has('AUTHORITY_IMPERSONATION') &&
+          (
+            matchedTypes.has('ACCOUNT_SUSPENSION_THREAT') ||
+            matchedTypes.has('URGENCY_COERCION')
+          )
+        ) ||
+        (
+          matchedTypes.has('ACCOUNT_SUSPENSION_THREAT') &&
+          matchedTypes.has('URGENCY_COERCION')
+        ) ||
+        (
+          matchedTypes.has('PAYMENT_FRAUD') &&
+          (
+            matchedTypes.has('SECRECY_REQUEST') ||
+            matchedTypes.has('AUTHORITY_IMPERSONATION')
+          )
+        )
+      )
+    ) ||
+    attackIndicators.length >= 3;
+
+  if (isCriticalExtortion) {
+
+    // Keep the existing upper safety boundary.
+    accumulatedWeight = Math.min(
+      96.0,
+      accumulatedWeight
+    );
+
+  } else if (isCompoundAttack) {
+
+    // Small calibration change:
+    //
+    // Genuine multi-vector attacks are allowed to cross
+    // the 85 critical threshold.
+    //
+    // We deliberately keep this range limited so that
+    // compound attacks do not automatically jump to 90+.
+    accumulatedWeight = Math.min(
+      88.0,
+      Math.max(
+        85.5,
+        accumulatedWeight
+      )
+    );
+
+  } else if (accumulatedWeight > 84.0) {
+
+    // Previously this was 82.0.
+    //
+    // This allows normal suspicious calls to build slightly
+    // higher without forcing them into the critical range.
+    accumulatedWeight = 84.0;
   }
 
-  // Normalized threat rule score smoothly calibrated to max 96.00
-  const normalizedScore = Number(Math.min(96.00, Math.max(0, accumulatedWeight > 85 ? 85 + ((accumulatedWeight - 85) * 0.75) : accumulatedWeight)).toFixed(2));
+  // ---------------------------------------------------------
+  // Normalized Threat Rule Score
+  // ---------------------------------------------------------
+
+  // Maximum displayed score remains 96.00.
+  //
+  // Values above 85 are compressed slightly so the system
+  // does not suddenly jump to extremely high values.
+  const normalizedScore = Number(
+    Math.min(
+      96.00,
+      Math.max(
+        0,
+        accumulatedWeight > 85
+          ? 85 +
+            (
+              (accumulatedWeight - 85) *
+              0.35
+            )
+          : accumulatedWeight
+      )
+    ).toFixed(2)
+  );
 
   return {
     score: normalizedScore,
-    totalWeight: Number(accumulatedWeight.toFixed(2)),
-    indicatorCount: matchedIndicators.filter(i => i.weight > 0).length,
-    indicators: matchedIndicators,
-    matchedCategories: [...new Set(matchedIndicators.map(i => i.label))],
-    semanticEvents: events,
+
+    totalWeight:
+      Number(accumulatedWeight.toFixed(2)),
+
+    indicatorCount:
+      matchedIndicators.filter(
+        i => i.weight > 0
+      ).length,
+
+    indicators:
+      matchedIndicators,
+
+    matchedCategories:
+      [
+        ...new Set(
+          matchedIndicators.map(
+            i => i.label
+          )
+        )
+      ],
+
+    semanticEvents:
+      events,
+
     hasSafetyWarning
   };
 }
-

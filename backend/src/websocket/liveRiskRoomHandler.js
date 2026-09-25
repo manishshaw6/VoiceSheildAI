@@ -55,7 +55,12 @@ async function createParticipantLiveKitToken(roomId, participantId, name = 'Part
 const CRITICAL_RISK_THRESHOLD = parseInt(process.env.CRITICAL_RISK_THRESHOLD, 10) || 85;
 const HIGH_RISK_WARNING_THRESHOLD = parseInt(process.env.HIGH_RISK_WARNING_THRESHOLD, 10) || 50;
 const ANALYSIS_INTERVAL_MS = config.ws.analysisIntervalMs || 2000;
-const MAX_RISK_RISE_PER_TICK = 14;
+// Score rises at most 7 points per 2-second tick — ensures warning popup
+// is visible for several seconds before the critical cutoff is reached.
+const MAX_RISK_RISE_PER_TICK = 7;
+// Grace period (ms) between first hitting critical threshold and actually
+// terminating the call — gives the warning popup 5-6 seconds of screen time.
+const CRITICAL_GRACE_MS = 5500;
 
 // ─── In-memory room registry ─────────────────────────────────────────────────
 /**
@@ -238,9 +243,26 @@ function roomTick(room) {
       });
     }
 
-    // ── Critical threshold (≥85): authoritative termination ─────────────────
+    // ── Critical threshold (≥85): grace-period termination ─────────────────
+    // When score first hits critical we start a 5-6 second countdown so the
+    // warning popup has time to be seen before the call is severed.
     if (risk.score >= CRITICAL_RISK_THRESHOLD && !room.criticalBroadcastSent) {
-      terminateRoom(room, risk.score, rules.indicators || []);
+      if (!room.criticalGraceStartedAt) {
+        room.criticalGraceStartedAt = Date.now();
+        // Broadcast an urgent warning (not termination yet) so clients show the popup
+        broadcastToRoom(room, 'risk:warning', {
+          roomId: room.roomId,
+          score: risk.score,
+          riskLevel: 'CRITICAL',
+          isCriticalWarning: true,
+          graceSecs: Math.round(CRITICAL_GRACE_MS / 1000),
+          message: `CRITICAL RISK — Score: ${risk.score.toFixed(0)}/100. Call will be terminated in ${Math.round(CRITICAL_GRACE_MS / 1000)} seconds.`,
+          indicators: rules.indicators || []
+        });
+      } else if (Date.now() - room.criticalGraceStartedAt >= CRITICAL_GRACE_MS) {
+        // Grace period elapsed — now terminate
+        terminateRoom(room, risk.score, rules.indicators || []);
+      }
     }
 
   } catch (err) {

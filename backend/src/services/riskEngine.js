@@ -300,7 +300,7 @@ export function calculateFusedRisk({
 
   // An active request for a one-time code plus card or account credentials is
   // a critical harvesting pattern, even without an impersonation pretext.
-  const hasDirectCredentialHarvesting = otpScore >= 0.4 &&
+  const hasDirectCredentialHarvesting = (signals.OTP_REQUEST?.score ?? 0) >= 0.4 &&
     ((components.CREDENTIAL_REQUEST || 0) >= 40 || (components.BANK_DETAILS_REQUEST || 0) >= 40);
   if (hasDirectCredentialHarvesting) {
     const credentialHarvestingFloor = 86.5;

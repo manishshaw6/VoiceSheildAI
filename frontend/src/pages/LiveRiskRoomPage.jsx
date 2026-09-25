@@ -220,6 +220,8 @@ export default function LiveRiskRoomPage() {
   const [elapsedSec, setElapsedSec] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
   const [copiedNotification, setCopiedNotification] = useState(false);
+  // Countdown shown inside the warning popup before call is severed
+  const [criticalCountdown, setCriticalCountdown] = useState(null); // null | number (5..0)
 
   // References
   const wsRef = useRef(null);
@@ -239,6 +241,7 @@ export default function LiveRiskRoomPage() {
   const criticalSentRef = useRef(false);
   const lastSequenceRef = useRef(0);
   const roomStatusRef = useRef('IDLE');
+  const criticalGraceTimerRef = useRef(null); // holds the setInterval for countdown
 
   // Check browser microphone permission state
   useEffect(() => {
@@ -266,35 +269,6 @@ export default function LiveRiskRoomPage() {
     frameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frameId);
   }, [targetScore]);
-
-  // Handle threshold triggers (Warning at >= 50, Critical Termination at >= 85)
-  useEffect(() => {
-    // Critical Cutoff (≥ 85)
-    if (smoothScore >= CRITICAL_THRESHOLD && !isTerminated) {
-      triggerLocalTermination(smoothScore);
-    }
-    // Warning with flags (≥ 50 and < 85)
-    else if (smoothScore >= WARNING_THRESHOLD && smoothScore < CRITICAL_THRESHOLD && !isTerminated) {
-      setWarningVisible(true);
-      setWarningDismissed(false);
-      setWarningMessage(`Elevated Risk Warning — Threat Score: ${Math.round(smoothScore)}/100`);
-      if (indicators.length > 0) {
-        setWarningFlags(indicators);
-      }
-    } else if (smoothScore < WARNING_THRESHOLD) {
-      setWarningVisible(false);
-    }
-  }, [smoothScore, isTerminated, indicators]);
-
-  // Elapsed call timer
-  useEffect(() => {
-    if (roomStatus === 'ACTIVE') {
-      timerRef.current = setInterval(() => setElapsedSec(t => t + 1), 1000);
-    } else {
-      clearInterval(timerRef.current);
-    }
-    return () => clearInterval(timerRef.current);
-  }, [roomStatus]);
 
   // Stop audio pipeline & tear down all Web Audio / Web Speech pipelines
   const stopAudioPipeline = useCallback(() => {
@@ -357,6 +331,70 @@ export default function LiveRiskRoomPage() {
     }
     stopAudioPipeline();
   }, [stopAudioPipeline]);
+
+  // Handle threshold triggers (Warning at >= 50, Critical countdown at >= 85)
+  useEffect(() => {
+    if (isTerminated) return;
+
+    // Critical Cutoff (>= 85): start 5-second countdown instead of immediate termination
+    if (smoothScore >= CRITICAL_THRESHOLD) {
+      // Show the warning popup urgently
+      setWarningVisible(true);
+      setWarningDismissed(false);
+      setWarningMessage(`CRITICAL RISK DETECTED — Score: ${Math.round(smoothScore)}/100`);
+      if (indicators.length > 0) setWarningFlags(indicators);
+
+      // Start countdown only if not already running
+      if (!criticalGraceTimerRef.current && !criticalSentRef.current) {
+        setCriticalCountdown(5);
+        criticalGraceTimerRef.current = setInterval(() => {
+          setCriticalCountdown(prev => {
+            if (prev <= 1) {
+              // Time's up — terminate
+              clearInterval(criticalGraceTimerRef.current);
+              criticalGraceTimerRef.current = null;
+              triggerLocalTermination(smoothScore);
+              return null;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }
+    }
+    // Warning zone (>= 50 and < 85)
+    else if (smoothScore >= WARNING_THRESHOLD && smoothScore < CRITICAL_THRESHOLD) {
+      // Cancel any running critical countdown if score dropped back below 85
+      if (criticalGraceTimerRef.current) {
+        clearInterval(criticalGraceTimerRef.current);
+        criticalGraceTimerRef.current = null;
+        setCriticalCountdown(null);
+      }
+      setWarningVisible(true);
+      setWarningDismissed(false);
+      setWarningMessage(`Elevated Risk Warning — Threat Score: ${Math.round(smoothScore)}/100`);
+      if (indicators.length > 0) setWarningFlags(indicators);
+    }
+    // Safe zone
+    else if (smoothScore < WARNING_THRESHOLD) {
+      // Cancel critical countdown if score drops
+      if (criticalGraceTimerRef.current) {
+        clearInterval(criticalGraceTimerRef.current);
+        criticalGraceTimerRef.current = null;
+        setCriticalCountdown(null);
+      }
+      setWarningVisible(false);
+    }
+  }, [smoothScore, isTerminated, indicators, triggerLocalTermination]);
+
+  // Elapsed call timer
+  useEffect(() => {
+    if (roomStatus === 'ACTIVE') {
+      timerRef.current = setInterval(() => setElapsedSec(t => t + 1), 1000);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [roomStatus]);
 
   // ─── Dual Audio Analysis Graph ──────────────────────────────────────────────
   const addTrackToAudioAnalysis = useCallback((mediaTrack) => {
@@ -624,10 +662,8 @@ export default function LiveRiskRoomPage() {
             setReasons(msg.reasons || []);
             if (msg.transcript) setTranscript(msg.transcript);
 
-            // Auto-cutoff check from incoming authoritative score
-            if (score >= CRITICAL_THRESHOLD && !criticalSentRef.current) {
-              triggerLocalTermination(score);
-            }
+            // Score is now handled by the countdown useEffect — no instant termination here.
+            // The countdown gives a 5-second visible warning before cutting the call.
             break;
           }
           case 'risk:warning':
@@ -678,6 +714,11 @@ export default function LiveRiskRoomPage() {
     setWarningDismissed(false);
     setElapsedSec(0);
     setErrorMsg('');
+    setCriticalCountdown(null);
+    if (criticalGraceTimerRef.current) {
+      clearInterval(criticalGraceTimerRef.current);
+      criticalGraceTimerRef.current = null;
+    }
   }, []);
 
   const generateRandomRoomId = () => {
@@ -794,6 +835,10 @@ export default function LiveRiskRoomPage() {
     return () => {
       stopAudioPipeline();
       clearInterval(timerRef.current);
+      if (criticalGraceTimerRef.current) {
+        clearInterval(criticalGraceTimerRef.current);
+        criticalGraceTimerRef.current = null;
+      }
       if (wsRef.current) {
         try { wsRef.current.close(); } catch (_) {}
       }
@@ -982,7 +1027,7 @@ export default function LiveRiskRoomPage() {
         </div>
       )}
 
-      {/* ─── 2. WARNING POPUP BOX (Yellow Colour Type Box with Flags when > 50) ─── */}
+      {/* ─── 2. WARNING POPUP BOX (Yellow when >50, upgrades to Red with countdown when >=85) ─── */}
       {warningVisible && !warningDismissed && !isTerminated && (
         <div style={{
           position: 'fixed',
@@ -991,69 +1036,110 @@ export default function LiveRiskRoomPage() {
           zIndex: 9999,
           maxWidth: '440px',
           width: 'calc(100vw - 48px)',
-          background: 'linear-gradient(135deg, #fef9c3 0%, #fef08a 50%, #fde047 100%)',
+          background: criticalCountdown !== null
+            ? 'linear-gradient(135deg, #fecaca 0%, #fca5a5 50%, #f87171 100%)'
+            : 'linear-gradient(135deg, #fef9c3 0%, #fef08a 50%, #fde047 100%)',
           borderRadius: '14px',
-          border: '2px solid #eab308',
-          boxShadow: '0 16px 40px rgba(234, 179, 8, 0.4), 0 0 20px rgba(250, 204, 21, 0.3)',
+          border: criticalCountdown !== null ? '2px solid #ef4444' : '2px solid #eab308',
+          boxShadow: criticalCountdown !== null
+            ? '0 16px 40px rgba(239, 68, 68, 0.5), 0 0 24px rgba(239, 68, 68, 0.4)'
+            : '0 16px 40px rgba(234, 179, 8, 0.4), 0 0 20px rgba(250, 204, 21, 0.3)',
           padding: '16px 18px',
-          color: '#713f12',
+          color: criticalCountdown !== null ? '#7f1d1d' : '#713f12',
           animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
         }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{
                 width: '32px', height: '32px', borderRadius: '50%',
-                backgroundColor: '#ca8a04', color: '#ffffff',
+                backgroundColor: criticalCountdown !== null ? '#dc2626' : '#ca8a04',
+                color: '#ffffff',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0
+                flexShrink: 0,
+                animation: criticalCountdown !== null ? 'pulse 1s infinite' : 'none'
               }}>
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
               </div>
               <div>
-                <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#713f12', letterSpacing: '-0.01em' }}>
-                  ELEVATED RISK WARNING (&gt;50)
+                <div style={{ fontSize: '0.92rem', fontWeight: 800, letterSpacing: '-0.01em' }}>
+                  {criticalCountdown !== null ? 'CRITICAL RISK — CALL WILL BE SEVERED' : 'ELEVATED RISK WARNING (>50)'}
                 </div>
-                <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#854d0e' }}>
-                  Current Score: {Math.round(smoothScore)} / 100 • Cutoff At: 85
+                <div style={{ fontSize: '0.74rem', fontWeight: 700, color: criticalCountdown !== null ? '#991b1b' : '#854d0e' }}>
+                  Current Score: {Math.round(smoothScore)} / 100 {criticalCountdown !== null ? '' : '• Cutoff At: 85'}
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => setWarningDismissed(true)}
-              style={{
-                background: 'rgba(0, 0, 0, 0.08)',
-                border: 'none',
-                borderRadius: '6px',
-                width: '24px',
-                height: '24px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                color: '#713f12',
-                fontWeight: 800,
-                fontSize: '0.85rem'
-              }}
-              title="Dismiss warning popup"
-            >
-              ✕
-            </button>
+            {/* Only allow dismiss when NOT in critical countdown */}
+            {criticalCountdown === null && (
+              <button
+                onClick={() => setWarningDismissed(true)}
+                style={{
+                  background: 'rgba(0, 0, 0, 0.08)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  width: '24px',
+                  height: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontWeight: 800,
+                  fontSize: '0.85rem'
+                }}
+                title="Dismiss warning popup"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
-          <p style={{ margin: '10px 0 10px', fontSize: '0.82rem', color: '#78350f', lineHeight: 1.45 }}>
-            {warningMessage || 'Social engineering intent or suspicious coercion indicators detected exceeding safe threshold (50). Call will be cut automatically if score reaches 85.'}
+          {/* Critical countdown timer bar */}
+          {criticalCountdown !== null && (
+            <div style={{
+              marginTop: '10px',
+              background: 'rgba(127, 29, 29, 0.3)',
+              borderRadius: '8px',
+              padding: '10px 12px',
+              border: '1px solid rgba(239, 68, 68, 0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <div style={{
+                width: '38px', height: '38px', borderRadius: '50%',
+                background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.15rem', fontWeight: 900, color: '#ffffff',
+                boxShadow: '0 0 16px rgba(220, 38, 38, 0.7)',
+                flexShrink: 0, fontFamily: 'monospace'
+              }}>
+                {criticalCountdown}
+              </div>
+              <div>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#7f1d1d' }}>
+                  Terminating in {criticalCountdown} second{criticalCountdown !== 1 ? 's' : ''}...
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#991b1b', fontWeight: 600 }}>
+                  AI deepfake voice analysis detected critical threat patterns
+                </div>
+              </div>
+            </div>
+          )}
+
+          <p style={{ margin: '10px 0 10px', fontSize: '0.82rem', color: criticalCountdown !== null ? '#7f1d1d' : '#78350f', lineHeight: 1.45 }}>
+            {warningMessage || 'Suspicious coercion indicators detected exceeding safe threshold. Call will be cut automatically if score reaches 85.'}
           </p>
 
-          {/* Flags Container inside Yellow Box */}
+          {/* Flags Container */}
           <div style={{
-            background: 'rgba(255, 255, 255, 0.45)',
+            background: criticalCountdown !== null ? 'rgba(127, 29, 29, 0.2)' : 'rgba(255, 255, 255, 0.45)',
             borderRadius: '8px',
             padding: '8px 10px',
-            border: '1px solid rgba(202, 138, 4, 0.4)',
+            border: criticalCountdown !== null ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(202, 138, 4, 0.4)',
             marginTop: '8px'
           }}>
-            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#854d0e', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="#854d0e" stroke="none"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15" stroke="#854d0e" strokeWidth="2" strokeLinecap="round"/></svg> Detected Threat Signals:
+            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: criticalCountdown !== null ? '#991b1b' : '#854d0e', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill={criticalCountdown !== null ? '#991b1b' : '#854d0e'} stroke="none"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15" stroke={criticalCountdown !== null ? '#991b1b' : '#854d0e'} strokeWidth="2" strokeLinecap="round"/></svg> Detected Threat Signals:
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
               {(warningFlags.length > 0 ? warningFlags : [{ label: 'Coercive Conversation Pattern' }, { label: 'Suspicious Intent Signal' }]).map((flag, idx) => (
@@ -1065,14 +1151,14 @@ export default function LiveRiskRoomPage() {
                     gap: '4px',
                     padding: '3px 8px',
                     borderRadius: '6px',
-                    background: '#fef08a',
-                    border: '1px solid #ca8a04',
-                    color: '#713f12',
+                    background: criticalCountdown !== null ? 'rgba(239, 68, 68, 0.25)' : '#fef08a',
+                    border: criticalCountdown !== null ? '1px solid rgba(239, 68, 68, 0.5)' : '1px solid #ca8a04',
+                    color: criticalCountdown !== null ? '#ffffff' : '#713f12',
                     fontSize: '0.72rem',
                     fontWeight: 700
                   }}
                 >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="#854d0e" stroke="none"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15" stroke="#854d0e" strokeWidth="2" strokeLinecap="round"/></svg> {flag.label || flag.type}
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill={criticalCountdown !== null ? '#fca5a5' : '#854d0e'} stroke="none"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15" stroke={criticalCountdown !== null ? '#fca5a5' : '#854d0e'} strokeWidth="2" strokeLinecap="round"/></svg> {flag.label || flag.type}
                 </span>
               ))}
             </div>
