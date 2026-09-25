@@ -136,6 +136,7 @@ const DICTIONARIES = {
   ],
   CREDENTIALS_BANK_DETAILS: [
     /\b(bank\s+account\s+number|card\s+details|debit\s+card\s+details|credit\s+card\s+details|account\s+number)\b/i,
+    /\b(credit\s+card\s+details|debit\s+card\s+details|card\s+details)\b/i,
     /\b(bank\s+details|card\s+number|expiry\s+date|ifsc\s+code)\b/i
   ],
   SOLICITATION_VERBS: [
@@ -144,6 +145,9 @@ const DICTIONARIES = {
   ],
   FINANCIAL_TRANSFER: [
     /\b(transfer\s+(the\s+)?(money|amount|funds?)|send\s+(the\s+)?(money|amount|funds?)|make\s+(a\s+|an\s+|the\s+|this\s+)?(upi\s+)?payment|pay\s+(now|immediately))\b/i,
+    /\b(send\s+(me\s+)?(money|cash|funds?)|transfer\s+(me\s+)?money)\b/i,
+    /\b(send\s+(?:me\s+)?(?:like\s+)?(?:₹|rs\.?|inr|\$)?\s*\d+\s*(?:rupees|rs|inr|cash|dollars?)?)\b/i,
+    /\b(like\s+(?:₹|rs\.?|inr|\$)?\s*\d+\s*(?:rupees|rs|inr)?|\d+\s*rupees)\b/i,
     /\b(deposit\s+(the\s+)?(amount|money)|wire\s+transfer|fund[\s-]?transfer|money[\s-]?transfer)\b/i,
     /\b(transfer\s+(₹|rs\.?|inr|\$)?\s*\d+)\b/i,
     /\b(pay|transfer|send|deposit|wire)\s+(\w+\s+){0,4}(fee|charge|deposit|money|funds?|rupees|rs|inr|cash|amount|\d+)\b/i,
@@ -179,7 +183,10 @@ const DICTIONARIES = {
     /\b(i\s+lost\s+my\s+phone|calling\s+from\s+a\s+friend['’]?s\s+phone|new\s+number)\b/i
   ],
   ACCOUNT_THREATS: [
-    /\b(account\s+(will\s+be|is\s+being|is)\s+(blocked|suspended|frozen|deactivated|closed|terminated))\b/i,
+    /\b(account\s+(will\s+be|is\s+being|is|may\s+be|might\s+be)\s+(blocked|suspended|frozen|deactivated|closed|terminated))\b/i,
+    /\b(verify\s+(your\s+)?account|account\s+verification|verify\s+(your\s+)?(identity|banking|details|profile))\b/i,
+    /\b((suspicious|unusual|unauthorized|fraudulent)\s+(activity|transaction|login|alert|issue))\b/i,
+    /\b((security\s+issue|account\s+issue|issue)\s+(with|on|in)\s+(your\s+)?(account|bank|card))\b/i,
     /\b(block\s+(your\s+)?(account|card|services?|net\s+banking|access))\b/i,
     /\b(card\s+(will\s+be|is)\s+blocked|sim\s+(will\s+be\s+)?disconnected|sim\s+deactivation)\b/i,
     /\b(kyc\s+(is\s+)?(expired|suspended|incomplete|pending\s+verification)|complete\s+kyc\s+or\s+blocked)\b/i,
@@ -193,11 +200,13 @@ const DICTIONARIES = {
   ],
   URGENCY_COERCION: [
     /\b(urgently|immediately|right\s+now|within\s+(two|three|five|10|15)\s+minutes|don['’]?t\s+delay|act\s+now|last\s+chance|hurry\s+up)\b/i,
+    /\b(urgent\s+need|in\s+urgent\s+need|emergency|medical\s+emergency|family\s+emergency)\b/i,
     /\b(do\s+not\s+hang\s+up|don['’]?t\s+hang\s+up|stay\s+on\s+(the\s+)?line|keep\s+the\s+call\s+connected|today\s+itself)\b/i,
     /तुरंत|अभी के अभी|जल्दी करो|వెంటనే|ఇప్పుడే చేయండి/i
   ],
   SECRECY_ISOLATION: [
     /\b(don['’]?t\s+tell\s+(anyone|anybody|your\s+family|your\s+friends|the\s+bank)|keep\s+this\s+confidential)\b/i,
+    /\b(do\s+not\s+call\s+back(\s+again)?|don['’]?t\s+call\s+back(\s+again)?|don['’]?t\s+call\s+again|do\s+not\s+call\s+again)\b/i,
     /\b(don['’]?t\s+(contact|call)\s+(the\s+)?bank|don['’]?t\s+call\s+customer\s+care|keep\s+this\s+a\s+secret)\b/i,
     /\b(do\s+not\s+disconnect|go\s+to\s+a\s+quiet\s+room|isolate\s+yourself)\b/i,
     /किसी को मत बताना|बैंक को मत बताना|ఎవరికీ చెప్పవద్దు/i

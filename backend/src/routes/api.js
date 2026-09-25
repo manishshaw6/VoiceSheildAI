@@ -74,7 +74,7 @@ import {
 import { requireAuth } from '../middleware/authMiddleware.js';
 import apiKeyRoutes from './apiKeyRoutes.js';
 import offlineRoutes from './offlineRoutes.js';
-import { createLiveCall, joinLiveCall, endLiveCall } from '../controllers/livekitController.js';
+import { createLiveCall, joinLiveCall, endLiveCall, getLiveRiskRoomToken } from '../controllers/livekitController.js';
 
 const router = Router();
 
@@ -84,11 +84,11 @@ router.use('/api-keys', apiKeyRoutes);
 // VoiceShield Guardian Offline Edge Subsystem
 router.use('/offline', offlineRoutes);
 
-// Two-device LiveKit calling. Guests use an expiring, unguessable invite.
-// The host control token is required to end a room.
+// LiveKit calling & Live Risk Room tokens
 router.post('/livekit/calls', createLiveCall);
 router.post('/livekit/join', joinLiveCall);
 router.post('/livekit/end', endLiveCall);
+router.post('/livekit/room-token', getLiveRiskRoomToken);
 
 // =====================================================
 // Authentication Routes

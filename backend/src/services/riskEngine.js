@@ -268,8 +268,8 @@ export function calculateFusedRisk({
 
   // Pattern A: Bank Impersonation + Credential Request + Urgency
   if (impScore >= 0.4 && otpScore >= 0.4 && urgScore >= 0.4) {
-    const patternADelta = Number(Math.min(10.0, Math.max(3.0, (88 - score) * 0.35)).toFixed(2));
-    score = Number(Math.min(86.50, Math.max(72.0, score + patternADelta)).toFixed(2));
+    const patternADelta = Number(Math.min(10.0, Math.max(2.0, (88 - score) * 0.35)).toFixed(2));
+    score = Number(Math.min(88.00, Math.max(72.0, score + patternADelta)).toFixed(2));
     interactionDeltas.push({
       pattern: 'PATTERN_A_BANK_CREDENTIAL_THEFT',
       label: 'Bank impersonation combined with credential request and urgency coercion',
@@ -289,13 +289,29 @@ export function calculateFusedRisk({
 
   // Pattern B: Account Takeover (Impersonation + Account Threat + Credential Request)
   if (impScore >= 0.4 && threatScore >= 0.4 && otpScore >= 0.4 && !interactionDeltas.some(d => d.pattern === 'PATTERN_A_BANK_CREDENTIAL_THEFT')) {
-    const patternBDelta = Number(Math.min(10.0, Math.max(3.0, (88 - score) * 0.35)).toFixed(2));
-    score = Number(Math.min(86.50, Math.max(75.0, score + patternBDelta)).toFixed(2));
+    const patternBDelta = Number(Math.min(10.0, Math.max(2.0, (88 - score) * 0.35)).toFixed(2));
+    score = Number(Math.min(88.00, Math.max(75.0, score + patternBDelta)).toFixed(2));
     interactionDeltas.push({
       pattern: 'PATTERN_B_ACCOUNT_TAKEOVER',
       label: 'Account suspension coercion with credential extraction',
       points: patternBDelta
     });
+  }
+
+  // An active request for a one-time code plus card or account credentials is
+  // a critical harvesting pattern, even without an impersonation pretext.
+  const hasDirectCredentialHarvesting = otpScore >= 0.4 &&
+    ((components.CREDENTIAL_REQUEST || 0) >= 40 || (components.BANK_DETAILS_REQUEST || 0) >= 40);
+  if (hasDirectCredentialHarvesting) {
+    const credentialHarvestingFloor = 86.5;
+    const credentialHarvestingDelta = Number(Math.max(0, credentialHarvestingFloor - score).toFixed(2));
+    score = Number(Math.min(96.00, Math.max(credentialHarvestingFloor, score)).toFixed(2));
+    interactionDeltas.push({
+      pattern: 'DIRECT_CREDENTIAL_HARVESTING',
+      label: 'One-time code requested together with bank-account or card credentials',
+      points: credentialHarvestingDelta
+    });
+    reasons.unshift('Critical threat: OTP requested together with bank account or card details.');
   }
 
   // Pattern C: Digital Arrest / Authority Coercion (Authority + Legal Threat + Secrecy + Financial)

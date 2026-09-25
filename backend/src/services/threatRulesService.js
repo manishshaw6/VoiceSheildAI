@@ -42,6 +42,9 @@ export const THREAT_RULES = [
     patterns: [
       /\b(bank\s+details|banking\s+details|bank\s+account\s+details|account\s+details|bank\s+info|banking\s+information)\b/i,
       /\b(bank\s+account\s+number|card\s+details|debit\s+card\s+details|credit\s+card\s+details|ifsc\s+code|routing\s+number)\b/i,
+      /\b(credit\s+card\s+details|debit\s+card\s+details|credit\s+card\s+number|debit\s+card\s+number)\b/i,
+      /\b(account\s*(?:no\.?|number)|card\s*(?:no\.?|number)|debit\s+card\s*(?:no\.?|number)|credit\s+card\s*(?:no\.?|number)|bank\s+account\s*(?:no\.?|number))\b/i,
+      /\b(card\s+expiry|expiry\s+(?:date|month)|valid\s+thru|name\s+on\s+(?:the\s+)?card)\b/i,
       /\b(share|give|tell|provide|send)\s+(me\s+)?(your\s+)?(bank\s+details|account\s+details|card\s+details|account\s+number)\b/i,
       /बैंक विवरण|खाता विवरण|ఖాతా వివరాలు|வங்கி விவரங்கள்/i
     ]
@@ -83,6 +86,10 @@ export const THREAT_RULES = [
       /यूपीआई|पैसे भेज|ट्रांसफर|యూపీఐ|డబ్బు పంప|బదిలీ|யுபிఐ|பணம் அனுப்பு|பரிமாற்ற/i,
       /\b(pay\s+immediately|refund\s+processing|advance\s+fee|processing\s+charge|processing\s+fee|security\s+deposit|pay\s+now)\b/i,
       /\b(gift[\s-]?card|crypto|bitcoin|usdt)\b/i,
+      /\b(send\s+(me\s+)?(money|cash|funds?)|transfer\s+(me\s+)?money)\b/i,
+      /\b((?:send|transfer|pay|give)\s+(?:me\s+)?(?:like\s+)?(?:₹|rs\.?|inr|\$)?\s*\d+\s*(?:rupees|rs|inr|cash|dollars?)?)\b/i,
+      /\b(like\s+(?:₹|rs\.?|inr|\$)?\s*\d+\s*(?:rupees|rs|inr)?)\b/i,
+      /\b(\d+\s*rupees)\b/i,
       /\b(send\s+(rupees|inr|cash|dollars?|rs\.?|\b\d+\s*rupees))\b/i,
       /\b(transfer\s+\d+\s*(rupees|rs|inr|dollars?)?)\b/i
     ]
@@ -93,7 +100,12 @@ export const THREAT_RULES = [
     severity: 'HIGH',
     weight: 22.15,
     patterns: [
-      /\b(account\s+(is\s+|will\s+be\s+)?(blocked|suspended|frozen|deactivated|terminated|flagged|locked))\b/i,
+      /\b(account\s+(is\s+|will\s+be\s+|may\s+be\s+|might\s+be\s+)?(blocked|suspended|frozen|deactivated|terminated|flagged|locked))\b/i,
+      /\b(account\s+(may\s+be|might\s+be)\s+blocked)\b/i,
+      /\b(verify\s+(your\s+)?account|account\s+verification|verify\s+(your\s+)?(identity|banking|details|profile))\b/i,
+      /\b((suspicious|unusual|unauthorized|fraudulent)\s+(activity|transaction|login|alert|issue))\b/i,
+      /\b((security\s+issue|account\s+issue|issue)\s+(with|on|in)\s+(your\s+)?(account|bank|card))\b/i,
+      /\b(there\s+is\s+(an?\s+)?issue\s+(with|on|in)\s+(your\s+)?(account|bank|card))\b/i,
       /\b(block\s+(your\s+)?(account|card|services?|sim))\b/i,
       /खाता.*(ब्लॉक|बंद)|केवाईसी.*(अपडेट|समाप्त)|ఖాతా.*(బ్లాక్|నిలిపివేయ)|కెవైసీ.*(అప్‌డేట్|గడువు)|கணக்கு.*(முடக்க|தடை)|கேஒய்சி.*(புதுப்பி|காலாவதி)/i,
       /\b(verify\s+immediately|(debit|credit\s+)?card\s+(will\s+be|is)\s+blocked|sim\s+deactivation|sim\s+block)\b/i,
@@ -107,6 +119,7 @@ export const THREAT_RULES = [
     severity: 'HIGH',
     weight: 22.65,
     patterns: [
+      /\b(sbi\s+bank|state\s+bank\s+of\s+india|hdfc\s+bank|icici\s+bank|axis\s+bank|kotak\s+bank|pnb\s+bank|punjab\s+national\s+bank)\b/i,
       /\b(police\s+(officer|department|station\s+in[\s-]?charge|inspector|branch)|calling\s+from\s+(the\s+)?police|cbi|customs|income[\s-]?tax|rbi|reserve[\s-]?bank|cyber[\s-]?crime|narcotics|interpol|crime[\s-]?branch|telecom\s+department)\b/i,
       /पुलिस|डिजिटल गिरफ्तारी|सरकारी अधिकारी|పోలీసు|డిజిటల్ అరెస్ట్|ప్రభుత్వ అధికారి|போலீஸ்|டிஜிட்டல் கைது|அரசு அதிகாரி/i,
       /\b(calling\s+from\s+(the\s+)?(bank|rbi|police|customs|tax\s+department|fedex|telecom|customer\s+care|support)|bank\s+se\s+bol\s+raha)\b/i,
@@ -123,6 +136,7 @@ export const THREAT_RULES = [
     weight: 17.85,
     patterns: [
       /\b(urgent|urgently|immediately|within\s+(5|10|15|30)\s+minutes|right\s+now|without\s+delay|hurry)\b/i,
+      /\b(urgent\s+need|in\s+urgent\s+need|emergency|medical\s+emergency|family\s+emergency|critical\s+emergency)\b/i,
       /\b(jaldi|jaldi\s+karo|turant|abhi\s+karo|chappandi\s+jaldi)\b/i,
       /तुरंत|अभी|जल्दी|तत्काल|వెంటనే|అర్జెంట్|ఇప్పుడే|உடனே|அவசரம்|இப்போதே/i,
       /\b(do\s+not\s+hang\s+up|don['’]?t\s+hang\s+up|keep\s+(this\s+)?call\s+connected|stay\s+on\s+line|stay\s+on\s+(the\s+)?call|hurry\s+up)\b/i,
@@ -136,6 +150,8 @@ export const THREAT_RULES = [
     weight: 18.75,
     patterns: [
       /\b(don['’]?t\s+call|do\s+not\s+call|never\s+call|don['’]?t\s+call\s+anyone|don['’]?t\s+call\s+(the\s+)?(police|bank|family|friends|lawyer|anyone))\b/i,
+      /\b((do\s+not|don['’]?t|never)\s+call\s+back(\s+again)?)\b/i,
+      /\b((do\s+not|don['’]?t)\s+call\s+again)\b/i,
       /\b(secret|confidential|do\s+not\s+tell\s+anyone|don['’]?t\s+tell\s+anyone|keep\s+it\s+between\s+us|don['’]?t\s+tell\s+your\s+family|room\s+alone)\b/i,
       /\b((don['’]?t|do\s+not|never)\s+tell\s+(anyone|anybody|family|friends|police|bank)(\s+about\s+(this\s+)?(call|matter|case|transaction))?)\b/i,
       /किसी को मत बताना|फोन मत काटना|ఎవరికీ చెప్పవద్దు|யாரிடமும் சொல்லாதே/i
@@ -387,18 +403,34 @@ export function analyzeThreatRules(text) {
 
   accumulatedWeight += synergyBonus;
 
-  // Calibrate standard bank phishing triad (impersonation + account threat + OTP) to High tier (65–85)
-  // so it does not collide with Critical Digital Arrest extortion (85–96)
-  const isCriticalExtortion = cleanText.toLowerCase().includes('arrest') ||
+  // Critical fraud threshold calibration:
+  // Active attacks combining credential harvesting with threats, urgency, impersonation, or payment demands,
+  // are calibrated to exceed 85 (Critical threshold for automatic cutoff).
+  // Pure digital arrest, remote access, or severe extortion can reach up to 96.
+  // Isolated single-indicator or benign mentions without strong attack intent are capped below 85.
+  const hasActiveAttackCombo = hasActiveCred && (
+    matchedTypes.has('URGENCY_COERCION') ||
+    matchedTypes.has('ACCOUNT_SUSPENSION_THREAT') ||
+    matchedTypes.has('AUTHORITY_IMPERSONATION') ||
+    matchedTypes.has('PAYMENT_FRAUD') ||
+    matchedTypes.has('SECRECY_REQUEST') ||
+    matchedIndicators.filter(i => i.isAttack).length >= 2
+  );
+
+  const isDigitalArrestOrRemote = cleanText.toLowerCase().includes('arrest') ||
     cleanText.toLowerCase().includes('laundering') ||
     matchedTypes.has('REMOTE_ACCESS');
 
-  if (!isCriticalExtortion && accumulatedWeight > 84.0) {
-    accumulatedWeight = 84.0;
+  if (!isDigitalArrestOrRemote) {
+    if (hasActiveAttackCombo && accumulatedWeight > 87.5) {
+      accumulatedWeight = 87.5;
+    } else if (!hasActiveAttackCombo && accumulatedWeight > 84.0) {
+      accumulatedWeight = 84.0;
+    }
   }
 
   // Normalized threat rule score smoothly calibrated to max 96.00
-  const normalizedScore = Number(Math.min(96.00, Math.max(0, accumulatedWeight > 85 ? 85 + ((accumulatedWeight - 85) * 0.35) : accumulatedWeight)).toFixed(2));
+  const normalizedScore = Number(Math.min(96.00, Math.max(0, accumulatedWeight > 85 ? 85 + ((accumulatedWeight - 85) * 0.75) : accumulatedWeight)).toFixed(2));
 
   return {
     score: normalizedScore,

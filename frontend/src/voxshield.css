@@ -34,8 +34,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 .page-shell-pro.no-sidebar-page {
-  background: #f8fafc;
-  color: #0f172a;
+  background: #070b14;
+  color: #f1f5f9;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 /* Workspace Layout & Sidebar */
@@ -54,7 +65,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 .app-main-viewport.call-room-viewport {
-  background: #f8fafc;
+  background: #070b14;
   width: 100%;
   max-width: 100%;
 }

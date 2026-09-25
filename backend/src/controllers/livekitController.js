@@ -161,4 +161,33 @@ export async function endLiveCall(req, res, next) {
   } catch (error) { return next(livekitServiceError(error)); }
 }
 
+export async function getLiveRiskRoomToken(req, res, next) {
+  try {
+    assertConfigured();
+    const roomId = safeName(req.body?.roomId || '').toUpperCase().trim();
+    if (!roomId) throw new ApiError('MISSING_ROOM_ID', 'Room ID is required.', 400);
+    const name = safeName(req.body?.name || req.user?.name || req.user?.fullName || 'Participant');
+    const identity = safeName(req.body?.identity || `p-${crypto.randomUUID().slice(0, 8)}`);
+
+    await roomService().createRoom({
+      name: roomId,
+      maxParticipants: config.livekit.maxParticipants || 8,
+      emptyTimeout: 300,
+      departureTimeout: 20
+    }).catch(() => {
+      // Room may already exist or will be created on connect
+    });
+
+    const token = await participantToken({ roomName: roomId, identity, name, canPublish: true });
+    return res.json({
+      success: true,
+      roomId,
+      identity,
+      name,
+      livekitUrl: config.livekit.url,
+      token
+    });
+  } catch (error) { return next(livekitServiceError(error)); }
+}
+
 export const livekitInternals = { signInvite, verifyInvite };

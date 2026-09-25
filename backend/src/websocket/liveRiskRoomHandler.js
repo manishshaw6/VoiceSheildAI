@@ -19,6 +19,7 @@
  */
 
 import crypto from 'crypto';
+import { AccessToken } from 'livekit-server-sdk';
 import { analyzeThreatRules } from '../services/threatRulesService.js';
 import { calculateFusedRisk } from '../services/riskEngine.js';
 import { evaluatePolicy } from '../policy/policyEngine.js';
@@ -28,10 +29,33 @@ import { createLogger } from '../core/logger.js';
 
 const logger = createLogger({ component: 'live_risk_room' });
 
+async function createParticipantLiveKitToken(roomId, participantId, name = 'Participant') {
+  try {
+    if (!config.livekit.apiKey || !config.livekit.apiSecret) return null;
+    const token = new AccessToken(config.livekit.apiKey, config.livekit.apiSecret, {
+      identity: participantId,
+      name: name || 'Participant',
+      ttl: config.livekit.tokenTtlSeconds || 3600
+    });
+    token.addGrant({
+      roomJoin: true,
+      room: roomId,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true
+    });
+    return await token.toJwt();
+  } catch (err) {
+    logger.warn('live_risk_room.livekit_token_failed', { error: err?.message });
+    return null;
+  }
+}
+
 // ─── Configurable threshold ──────────────────────────────────────────────────
 const CRITICAL_RISK_THRESHOLD = parseInt(process.env.CRITICAL_RISK_THRESHOLD, 10) || 85;
-const HIGH_RISK_WARNING_THRESHOLD = parseInt(process.env.HIGH_RISK_WARNING_THRESHOLD, 10) || 60;
+const HIGH_RISK_WARNING_THRESHOLD = parseInt(process.env.HIGH_RISK_WARNING_THRESHOLD, 10) || 50;
 const ANALYSIS_INTERVAL_MS = config.ws.analysisIntervalMs || 2000;
+const MAX_RISK_RISE_PER_TICK = 14;
 
 // ─── In-memory room registry ─────────────────────────────────────────────────
 /**
@@ -141,18 +165,15 @@ function computeRoomRisk(room) {
     room.confirmedFraudFloor = Math.max(room.confirmedFraudFloor || 0, risk.score);
   }
 
-  // FIX: When raw score is >= 82 (approaching threshold), bypass EWMA smoothing to avoid
-  // artificial dampening that prevents the score from crossing the 85 termination threshold.
-  if (risk.score >= 82) {
-    temporal.currentRisk = Number(Math.min(96.00, Math.max(temporal.currentRisk, risk.score)).toFixed(2));
-    temporal.peakRisk = Number(Math.min(96.00, Math.max(temporal.peakRisk, temporal.currentRisk)).toFixed(2));
-  } else if (room.confirmedFraudFloor && room.confirmedFraudFloor > 0) {
-    temporal.currentRisk = Number(Math.max(room.confirmedFraudFloor, temporal.currentRisk).toFixed(2));
-    temporal.peakRisk = Number(Math.max(temporal.peakRisk, temporal.currentRisk).toFixed(2));
-  } else if (risk.score > 0) {
-    temporal.currentRisk = Number(Math.min(96.00, Math.max(temporal.currentRisk, risk.score)).toFixed(2));
-    temporal.peakRisk = Number(Math.min(96.00, Math.max(temporal.peakRisk, temporal.currentRisk)).toFixed(2));
-  }
+  // Progress the displayed room risk in bounded steps instead of jumping to a
+  // raw score. Persistent critical evidence still crosses the cutoff quickly.
+  const riskTarget = Math.max(risk.score, room.confirmedFraudFloor || 0);
+  const currentRisk = temporal.currentRisk || 0;
+  const nextRisk = riskTarget > currentRisk
+    ? Math.min(riskTarget, currentRisk + MAX_RISK_RISE_PER_TICK)
+    : Math.max(riskTarget, currentRisk * 0.92);
+  temporal.currentRisk = Number(Math.min(96.00, nextRisk).toFixed(2));
+  temporal.peakRisk = Number(Math.max(temporal.peakRisk, temporal.currentRisk).toFixed(2));
 
   risk.score = Number(Math.min(96.00, temporal.currentRisk).toFixed(2));
   risk.level = temporal.currentRisk >= 80 ? 'CRITICAL' : temporal.currentRisk >= 60 ? 'HIGH' : temporal.currentRisk >= 30 ? 'SUSPICIOUS' : 'SAFE';
@@ -206,13 +227,13 @@ function roomTick(room) {
 
     broadcastToRoom(room, 'risk:update', riskPayload);
 
-    // ── Warning threshold (≥60) ──────────────────────────────────────────────
+    // ── Warning threshold (≥50) ──────────────────────────────────────────────
     if (risk.score >= HIGH_RISK_WARNING_THRESHOLD && risk.score < CRITICAL_RISK_THRESHOLD) {
       broadcastToRoom(room, 'risk:warning', {
         roomId: room.roomId,
         score: risk.score,
         riskLevel: risk.level,
-        message: `HIGH RISK DETECTED — Risk score: ${risk.score.toFixed(0)}`,
+        message: `ELEVATED RISK WARNING — Risk score: ${risk.score.toFixed(0)} exceeds threshold (50)`,
         indicators: rules.indicators || []
       });
     }
@@ -307,29 +328,17 @@ export function setupLiveRiskRoomWebSocket(wss) {
       message: 'VoiceShield Live Risk Room — connection established.'
     });
 
-    ws.on('message', (data, isBinary) => {
+    ws.on('message', async (data, isBinary) => {
       try {
-        // Binary = audio chunks: buffer locally AND relay to all OTHER active participants
+        // Binary = optional audio telemetry from client (stored in buffer, not relayed to avoid WS flooding)
         if (isBinary) {
           if (currentRoom && currentRoom.status === 'ACTIVE') {
             const participant = currentRoom.participants.get(participantId);
             if (participant && participant.isActive) {
               const audio = Buffer.from(data);
               participant.audioChunks.push(audio);
-              // Cap to last 50 PCM chunks (~4s at 85ms/chunk) to prevent memory growth
               if (participant.audioChunks.length > 50) {
                 participant.audioChunks.splice(0, participant.audioChunks.length - 50);
-              }
-
-              // Relay raw PCM audio to every OTHER active participant
-              for (const peer of currentRoom.participants.values()) {
-                if (peer.participantId !== participantId && peer.isActive) {
-                  try {
-                    if (peer.ws.readyState === peer.ws.OPEN) {
-                      peer.ws.send(audio);
-                    }
-                  } catch (_) { /* ignore dead socket */ }
-                }
               }
             }
           }
@@ -365,9 +374,14 @@ export function setupLiveRiskRoomWebSocket(wss) {
           };
           room.participants.set(participantId, participant);
 
+          // Generate LiveKit token for native low-latency WebRTC audio communication
+          const livekitToken = await createParticipantLiveKitToken(room.roomId, participantId, msg.name || 'Host');
+
           sendToWs(ws, 'room:created', {
             roomId: room.roomId,
             participantId,
+            livekitUrl: config.livekit.url,
+            livekitToken,
             room: buildRoomInfo(room)
           });
 
@@ -415,9 +429,14 @@ export function setupLiveRiskRoomWebSocket(wss) {
           };
           room.participants.set(participantId, participant);
 
+          // Generate LiveKit token for guest participant
+          const livekitToken = await createParticipantLiveKitToken(room.roomId, participantId, msg.name || 'Guest');
+
           sendToWs(ws, 'room:joined', {
             roomId: room.roomId,
             participantId,
+            livekitUrl: config.livekit.url,
+            livekitToken,
             room: buildRoomInfo(room)
           });
 
