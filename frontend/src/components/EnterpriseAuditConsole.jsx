@@ -33,9 +33,23 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
   const [severityFilter, setSeverityFilter] = useState('ALL');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterCallId, setFilterCallId] = useState('');
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('DESC');
+
+  // Client-side instant query caching & background revalidation
+  const eventCacheRef = useRef(new Map());
+  const timelineCacheRef = useRef(new Map());
+  const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
+
+  // Debounce search query to prevent high-frequency database querying while typing
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 260);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
   // Real-time Event Streaming
   const [streamConnected, setStreamConnected] = useState(false);
@@ -76,12 +90,26 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
     }
   }, []);
 
-  // Fetch Filtered Audit Events
-  const fetchEvents = useCallback(async (pageOverride = null) => {
-    setIsLoading(true);
+  // Fetch Filtered Audit Events with client-side caching & SWR (Stale-While-Revalidate)
+  const fetchEvents = useCallback(async (pageOverride = null, forceFresh = false) => {
+    const currentPage = pageOverride !== null ? pageOverride : pagination.page;
+    const cacheKey = `${currentPage}|${pagination.limit}|${severityFilter}|${categoryFilter}|${timeRange}|${sortBy}|${sortOrder}|${debouncedSearch.trim()}|${filterCallId.trim()}`;
+
+    // If cached data exists and fresh is not explicitly forced, render instantly (0ms transition)
+    if (!forceFresh && eventCacheRef.current.has(cacheKey)) {
+      const cached = eventCacheRef.current.get(cacheKey);
+      setEvents(cached.events || []);
+      if (cached.pagination) {
+        setPagination(cached.pagination);
+      }
+      setIsLoading(false);
+      setIsBackgroundRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
     setErrorMsg(null);
+
     try {
-      const currentPage = pageOverride !== null ? pageOverride : pagination.page;
       const params = new URLSearchParams({
         page: currentPage.toString(),
         limit: pagination.limit.toString(),
@@ -92,7 +120,7 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
         sortOrder
       });
 
-      if (searchQuery.trim()) params.set('search', searchQuery.trim());
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (filterCallId.trim()) params.set('callId', filterCallId.trim());
 
       const res = await fetch(`/api/audit?${params.toString()}`, { credentials: 'include' });
@@ -104,6 +132,15 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
         if (data.pagination) {
           setPagination(data.pagination);
         }
+        // Cache result (capped at 50 query results)
+        eventCacheRef.current.set(cacheKey, {
+          events: data.events || [],
+          pagination: data.pagination
+        });
+        if (eventCacheRef.current.size > 50) {
+          const firstKey = eventCacheRef.current.keys().next().value;
+          eventCacheRef.current.delete(firstKey);
+        }
       } else {
         throw new Error(data.error || 'Failed to query audit trail');
       }
@@ -112,10 +149,11 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
       setErrorMsg(err.message);
     } finally {
       setIsLoading(false);
+      setIsBackgroundRefreshing(false);
     }
-  }, [pagination.page, pagination.limit, severityFilter, categoryFilter, timeRange, searchQuery, filterCallId, sortBy, sortOrder]);
+  }, [pagination.page, pagination.limit, severityFilter, categoryFilter, timeRange, debouncedSearch, filterCallId, sortBy, sortOrder]);
 
-  // Fetch Historical Voice Scans (Preserving existing functionality)
+  // Fetch Historical Voice Scans (Lazy loaded on tab activation)
   const fetchHistory = useCallback(async () => {
     setIsLoadingHistory(true);
     try {
@@ -133,12 +171,30 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
     }
   }, []);
 
-  // Initialize Data
+  // 1. Initial Stats Load and Periodic Refresh (25s background poll)
   useEffect(() => {
     fetchStats();
+    const interval = setInterval(fetchStats, 25000);
+    return () => clearInterval(interval);
+  }, [fetchStats]);
+
+  // 2. Fetch events on filter or debounced search change (resetting to Page 1)
+  useEffect(() => {
     fetchEvents(1);
-    fetchHistory();
-  }, [fetchStats, fetchEvents, fetchHistory]);
+  }, [severityFilter, categoryFilter, timeRange, debouncedSearch, filterCallId, sortBy, sortOrder]);
+
+  // 3. Lazy-fetch historical scans only when the tab is visited
+  useEffect(() => {
+    if (activeTab === 'analyses' && historicalAnalyses.length === 0) {
+      fetchHistory();
+    }
+  }, [activeTab, historicalAnalyses.length, fetchHistory]);
+
+  // Handle instant page navigation
+  const handlePageChange = (newPage) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
+    fetchEvents(newPage);
+  };
 
   // Real-Time Event Stream Connection (SSE)
   useEffect(() => {
@@ -195,19 +251,27 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
     };
   }, [pagination.limit, fetchStats]);
 
-  // Open Event Inspector Drawer
+  // Open Event Inspector Drawer with timeline memoization
   const handleInspectEvent = async (event) => {
     setInspectedEvent(event);
     setIsInspectorOpen(true);
 
     if (event.callId) {
+      // Check timeline cache for instant 0ms opening
+      if (timelineCacheRef.current.has(event.callId)) {
+        setInspectedSessionTimeline(timelineCacheRef.current.get(event.callId));
+        return;
+      }
+
       setIsLoadingTimeline(true);
       try {
         const res = await fetch(`/api/audit/timeline/${encodeURIComponent(event.callId)}`);
         if (res.ok) {
           const data = await res.json();
           if (data.success) {
-            setInspectedSessionTimeline(data.timeline || []);
+            const tl = data.timeline || [];
+            timelineCacheRef.current.set(event.callId, tl);
+            setInspectedSessionTimeline(tl);
           }
         }
       } catch (err) {
@@ -313,64 +377,67 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
 
   return (
     <div className="siem-audit-console">
-      {/* ─── Top Enterprise SOC Header ────────────────────────────────────────── */}
+      {/* ─── Top Executive Header ────────────────────────────────────────── */}
       <header className="siem-header">
         <div className="siem-header-left">
-          <div className="siem-breadcrumb">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: '#38bdf8' }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-            <span className="siem-platform-title">VOICESHIELD AI · ENTERPRISE SOC</span>
-            <span className="siem-divider">/</span>
-            <span>FORENSIC AUDIT LEDGER</span>
-            <span className="siem-divider">/</span>
-            <span className="siem-sub-breadcrumb">SIEM · TAMPER-EVIDENT CHAIN</span>
+          <div className="siem-tag-pill">
+            <span className="siem-pulse-dot" />
+            <span>IMMUTABLE AUDIT VAULT</span>
           </div>
-          <h1 className="siem-title">Security Event Audit &amp; Investigation Console</h1>
+          <h1 className="siem-title">Security &amp; Forensic Audit Trail</h1>
           <p className="siem-subtitle">
-            Cryptographically chained append-only forensic event ledger · SHA-256 hash provenance · Conformant with <strong style={{ color: '#94a3b8', fontWeight: 600 }}>Section 63 BSA</strong> / <strong style={{ color: '#94a3b8', fontWeight: 600 }}>Section 65B IEA</strong> evidentiary standards
+            Chronological cryptographic ledger of all voice biometric verifications, acoustic risk scans, and compliance incident events.
           </p>
         </div>
 
         <div className="siem-header-actions">
-          {/* Real-time Stream Status Pill */}
-          <div className={`siem-stream-pill ${streamConnected ? 'connected' : 'offline'}`} title="Real-time Server-Sent Event (SSE) ingestion stream">
-            <span className="siem-live-dot"></span>
-            <span className="siem-stream-text">
-              {streamConnected ? 'LIVE INGESTION' : 'RECONNECTING'}
-            </span>
-            {streamEventCount > 0 && <span className="siem-stream-count">+{streamEventCount} new</span>}
+          {/* Real-time Stream Status Badge */}
+          <div className={`siem-status-badge ${streamConnected ? 'online' : 'offline'}`} title="Real-time Server-Sent Event (SSE) ingestion stream">
+            <span className="siem-status-dot" />
+            <span>{streamConnected ? 'Live Ingestion Active' : 'Connecting Stream...'}</span>
+            {streamEventCount > 0 && <span className="siem-counter-pill">+{streamEventCount}</span>}
           </div>
 
           <button
             onClick={handleVerifyChain}
-            className="siem-btn siem-btn-verify"
+            className="siem-btn-verify-clean"
             title="Perform mathematical SHA-256 chain verification across all stored audit blocks"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               <path d="M9 12l2 2 4-4" />
             </svg>
-            Verify Chain
+            Verify Ledger Integrity
           </button>
 
-          <button onClick={() => handleExport('csv')} className="siem-btn siem-btn-secondary" title="Export audit trail as RFC 4180 CSV">
+          <button onClick={() => handleExport('csv')} className="siem-btn-action" title="Export audit trail as RFC 4180 CSV">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            CSV
+            Export CSV
           </button>
 
-          <button onClick={() => handleExport('json')} className="siem-btn siem-btn-secondary" title="Export full structured JSON log dossier">
-            JSON
+          <button onClick={() => handleExport('json')} className="siem-btn-action" title="Export full structured JSON log dossier">
+            Export JSON
           </button>
 
-          <button onClick={() => { fetchStats(); fetchEvents(); }} className="siem-btn siem-btn-secondary" disabled={isLoading} title="Reload records">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <button
+            onClick={() => {
+              eventCacheRef.current.clear();
+              fetchStats();
+              fetchEvents(pagination.page, true);
+            }}
+            className="siem-btn-action"
+            disabled={isLoading || isBackgroundRefreshing}
+            title="Reload records and clear query cache"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={isLoading || isBackgroundRefreshing ? 'animate-spin' : ''}>
               <polyline points="23 4 23 10 17 10" />
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
             </svg>
-            {isLoading ? '...' : 'Refresh'}
+            {isLoading || isBackgroundRefreshing ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
       </header>
@@ -378,79 +445,53 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
       {/* ─── Operational Overview KPI Dashboard ─────────────────────────────── */}
       <section className="siem-kpi-grid">
         <div className="siem-kpi-card">
-          <div className="siem-kpi-label">TOTAL AUDIT EVENTS</div>
-          <div className="siem-kpi-value">{stats.totalEvents.toLocaleString()}</div>
-          <div className="siem-kpi-meta">
-            <span className="siem-meta-highlight">+{stats.eventsLast24h}</span> in last 24h
+          <div className="siem-kpi-top">
+            <span className="siem-kpi-label">TOTAL AUDIT EVENTS</span>
+            <span className="siem-kpi-badge">+{stats.eventsLast24h} in 24h</span>
           </div>
+          <div className="siem-kpi-value">{stats.totalEvents.toLocaleString()}</div>
+          <div className="siem-kpi-meta">Immutable records in ledger</div>
         </div>
 
         <div className="siem-kpi-card">
-          <div className="siem-kpi-label">CRITICAL & HIGH INCIDENTS</div>
-          <div className="siem-kpi-value text-critical">
+          <div className="siem-kpi-top">
+            <span className="siem-kpi-label">HIGH &amp; CRITICAL INCIDENTS</span>
+            <span className={`siem-kpi-badge ${(stats.severityDistribution?.CRITICAL || 0) + (stats.severityDistribution?.HIGH || 0) > 0 ? 'alert' : 'neutral'}`}>
+              {stats.verifiedIncidents} dossiers
+            </span>
+          </div>
+          <div className={`siem-kpi-value ${(stats.severityDistribution?.CRITICAL || 0) + (stats.severityDistribution?.HIGH || 0) > 0 ? 'text-amber' : ''}`}>
             {((stats.severityDistribution?.CRITICAL || 0) + (stats.severityDistribution?.HIGH || 0)).toLocaleString()}
           </div>
-          <div className="siem-kpi-meta">
-            <span>{stats.verifiedIncidents}</span> verified forensic dossiers
+          <div className="siem-kpi-meta">Flagged for forensic investigation</div>
+        </div>
+
+        <div className="siem-kpi-card">
+          <div className="siem-kpi-top">
+            <span className="siem-kpi-label">MONITORED SESSIONS</span>
+            <span className="siem-kpi-badge neutral">Active</span>
           </div>
-        </div>
-
-        <div className="siem-kpi-card">
-          <div className="siem-kpi-label">DISTINCT SESSIONS AUDITED</div>
           <div className="siem-kpi-value">{stats.distinctSessions.toLocaleString()}</div>
-          <div className="siem-kpi-meta">Across live streams & recorded scans</div>
+          <div className="siem-kpi-meta">Live calls &amp; audio analyses</div>
         </div>
 
         <div className="siem-kpi-card">
-          <div className="siem-kpi-label">CRYPTOGRAPHIC PROVENANCE</div>
-          <div className="siem-kpi-value text-verified">SHA-256 CHAIN</div>
+          <div className="siem-kpi-top">
+            <span className="siem-kpi-label">LEDGER INTEGRITY</span>
+            <span className="siem-kpi-badge success">SHA-256</span>
+          </div>
+          <div className="siem-kpi-value text-safe">VERIFIED</div>
           <div className="siem-kpi-meta">
-            <span className="siem-hash-preview" title={stats.pipelineStatus?.latestEventHash || ''}>
-              HEAD: {stats.pipelineStatus?.latestEventHash ? stats.pipelineStatus.latestEventHash.slice(0, 16) + '...' : 'INITIALIZED'}
+            <span
+              className="siem-hash-snippet"
+              onClick={(e) => handleCopyHash(stats.pipelineStatus?.latestEventHash, e)}
+              title="Click to copy latest block hash"
+            >
+              {stats.pipelineStatus?.latestEventHash ? `HEAD: ${stats.pipelineStatus.latestEventHash.slice(0, 14)}...` : 'HEAD: INITIALIZED'}
             </span>
           </div>
         </div>
       </section>
-
-      {/* ─── Severity Distribution & System Pipeline Telemetry ──────────────── */}
-      <div className="siem-telemetry-strip">
-        <div className="siem-dist-section">
-          <span className="siem-dist-title">SEVERITY DISTRIBUTION:</span>
-          <div className="siem-dist-bar">
-            <div className="siem-bar-segment critical" style={{ width: `${severityPercentages.CRITICAL}%` }} title={`Critical: ${stats.severityDistribution?.CRITICAL || 0}`}></div>
-            <div className="siem-bar-segment high" style={{ width: `${severityPercentages.HIGH}%` }} title={`High: ${stats.severityDistribution?.HIGH || 0}`}></div>
-            <div className="siem-bar-segment moderate" style={{ width: `${severityPercentages.MODERATE}%` }} title={`Moderate: ${stats.severityDistribution?.MODERATE || 0}`}></div>
-            <div className="siem-bar-segment low" style={{ width: `${severityPercentages.LOW}%` }} title={`Low: ${stats.severityDistribution?.LOW || 0}`}></div>
-            <div className="siem-bar-segment info" style={{ width: `${severityPercentages.INFO}%` }} title={`Info: ${stats.severityDistribution?.INFO || 0}`}></div>
-          </div>
-          <div className="siem-dist-legend">
-            {(stats.severityDistribution?.CRITICAL || 0) > 0 && <span className="legend-tag critical">CRIT {stats.severityDistribution.CRITICAL}</span>}
-            {(stats.severityDistribution?.HIGH || 0) > 0 && <span className="legend-tag high">HIGH {stats.severityDistribution.HIGH}</span>}
-            {(stats.severityDistribution?.MODERATE || 0) > 0 && <span className="legend-tag moderate">MOD {stats.severityDistribution.MODERATE}</span>}
-            {(stats.severityDistribution?.LOW || 0) > 0 && <span className="legend-tag low">LOW {stats.severityDistribution.LOW}</span>}
-            {(stats.severityDistribution?.INFO || 0) > 0 && <span className="legend-tag info">INFO {stats.severityDistribution.INFO}</span>}
-          </div>
-        </div>
-
-        <div className="siem-pipeline-telemetry">
-          <div className="telemetry-item">
-            <span className="telemetry-label">ENGINE:</span>
-            <span className="telemetry-val">{stats.pipelineStatus?.storageEngine || 'PostgreSQL'}</span>
-          </div>
-          <div className="telemetry-item">
-            <span className="telemetry-label">CHAIN:</span>
-            <span className="telemetry-val text-verified">SHA-256 · INTACT</span>
-          </div>
-          <div className="telemetry-item">
-            <span className="telemetry-label">CLOCK:</span>
-            <span className="telemetry-val">UTC · NTP</span>
-          </div>
-          <div className="telemetry-item">
-            <span className="telemetry-label">COMPLIANCE:</span>
-            <span className="telemetry-val">65B IEA · ACTIVE</span>
-          </div>
-        </div>
-      </div>
 
       {/* ─── Mode Switcher Tabs ────────────────────────────────────────────── */}
       <div className="siem-tabs-bar">
@@ -466,7 +507,8 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
             <line x1="3" y1="12" x2="3.01" y2="12" />
             <line x1="3" y1="18" x2="3.01" y2="18" />
           </svg>
-          Security Event Log ({pagination.total})
+          Security Event Log
+          <span className="siem-tab-count">{pagination.total}</span>
         </button>
 
         <button
@@ -477,8 +519,8 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
           </svg>
-          Investigation Timeline
-          {filterCallId && <span className="siem-active-filter-tag">Scoped: {filterCallId.slice(0, 12)}...</span>}
+          Session Investigation Timeline
+          {filterCallId && <span className="siem-tab-scope-badge">{filterCallId.slice(0, 10)}...</span>}
         </button>
 
         <button
@@ -491,7 +533,8 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
             <line x1="16" y1="13" x2="8" y2="13" />
             <line x1="16" y1="17" x2="8" y2="17" />
           </svg>
-          Forensic Voice Scans & Reports ({historicalAnalyses.length})
+          Voice Scans &amp; Reports
+          <span className="siem-tab-count">{historicalAnalyses.length}</span>
         </button>
       </div>
 
@@ -500,58 +543,7 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
         <div className="siem-table-view-container">
           {/* Filter & Search Toolbar */}
           <div className="siem-toolbar">
-            <div className="siem-toolbar-row">
-              {/* Time Range */}
-              <div className="siem-control-group">
-                <label>TIME RANGE:</label>
-                <select
-                  value={timeRange}
-                  onChange={(e) => { setTimeRange(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
-                  className="siem-select"
-                >
-                  <option value="15m">Last 15 Minutes</option>
-                  <option value="1h">Last 1 Hour</option>
-                  <option value="24h">Last 24 Hours</option>
-                  <option value="7d">Last 7 Days</option>
-                  <option value="30d">Last 30 Days</option>
-                  <option value="ALL">All Available Time</option>
-                </select>
-              </div>
-
-              {/* Severity Filter Pills */}
-              <div className="siem-control-group">
-                <label>SEVERITY:</label>
-                <div className="siem-pill-group">
-                  {['ALL', 'CRITICAL', 'HIGH', 'MODERATE', 'LOW', 'INFO'].map(sev => (
-                    <button
-                      key={sev}
-                      onClick={() => { setSeverityFilter(sev); setPagination(p => ({ ...p, page: 1 })); }}
-                      className={`siem-filter-pill ${severityFilter === sev ? 'active' : ''} ${sev.toLowerCase()}`}
-                    >
-                      {sev}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Event Category */}
-              <div className="siem-control-group">
-                <label>CATEGORY:</label>
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => { setCategoryFilter(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
-                  className="siem-select"
-                >
-                  <option value="ALL">All Event Categories</option>
-                  <option value="THREAT">Threat Detection & DSP</option>
-                  <option value="INCIDENT">Incident Escalation</option>
-                  <option value="COMPLIANCE">Compliance & Legal Reports</option>
-                  <option value="ACCESS">Authentication & User Access</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="siem-toolbar-row search-row">
+            <div className="siem-toolbar-main">
               {/* Full Text Search */}
               <div className="siem-search-box">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -562,40 +554,99 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter by action, actor, resource hash, or metadata keywords..."
+                  placeholder="Filter by action, actor, session ID, or hash..."
                   className="siem-search-input"
                 />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="siem-clear-btn" title="Clear search">✕</button>
-                )}
+                {searchQuery !== debouncedSearch ? (
+                  <span className="siem-search-indicator" title="Filtering...">●</span>
+                ) : searchQuery ? (
+                  <button onClick={() => setSearchQuery('')} className="siem-search-clear" title="Clear search">✕</button>
+                ) : null}
               </div>
 
-              {/* Scoped Call/Session Indicator */}
-              {filterCallId && (
-                <div className="siem-active-session-filter">
-                  <span>Scoped to Session: <code>{filterCallId}</code></span>
-                  <button onClick={handleClearSessionFilter} className="siem-clear-session-btn" title="Clear session filter">
-                    ✕ Clear Scope
-                  </button>
+              {/* Filters Cluster */}
+              <div className="siem-filters-cluster">
+                {/* Severity Dropdown */}
+                <div className="siem-control-pill">
+                  <label htmlFor="sev-filter">Severity:</label>
+                  <select
+                    id="sev-filter"
+                    value={severityFilter}
+                    onChange={(e) => { setSeverityFilter(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+                    className="siem-select-clean"
+                  >
+                    <option value="ALL">All Severities</option>
+                    <option value="CRITICAL">Critical</option>
+                    <option value="HIGH">High</option>
+                    <option value="MODERATE">Moderate</option>
+                    <option value="LOW">Low</option>
+                    <option value="INFO">Info</option>
+                  </select>
                 </div>
-              )}
 
-              {/* Page Size Selector */}
-              <div className="siem-pagination-size">
-                <span>Show:</span>
-                <select
-                  value={pagination.limit}
-                  onChange={(e) => setPagination(p => ({ ...p, limit: Number(e.target.value), page: 1 }))}
-                  className="siem-select-small"
-                >
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-                <span>per page</span>
+                {/* Category Dropdown */}
+                <div className="siem-control-pill">
+                  <label htmlFor="cat-filter">Category:</label>
+                  <select
+                    id="cat-filter"
+                    value={categoryFilter}
+                    onChange={(e) => { setCategoryFilter(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+                    className="siem-select-clean"
+                  >
+                    <option value="ALL">All Categories</option>
+                    <option value="THREAT">Threat Detection</option>
+                    <option value="INCIDENT">Incident Alerts</option>
+                    <option value="COMPLIANCE">Compliance</option>
+                    <option value="ACCESS">Authentication</option>
+                  </select>
+                </div>
+
+                {/* Time Range Dropdown */}
+                <div className="siem-control-pill">
+                  <label htmlFor="time-filter">Period:</label>
+                  <select
+                    id="time-filter"
+                    value={timeRange}
+                    onChange={(e) => { setTimeRange(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+                    className="siem-select-clean"
+                  >
+                    <option value="15m">Last 15m</option>
+                    <option value="1h">Last 1h</option>
+                    <option value="24h">Last 24h</option>
+                    <option value="7d">Last 7d</option>
+                    <option value="30d">Last 30d</option>
+                    <option value="ALL">All Time</option>
+                  </select>
+                </div>
+
+                {/* Page Size Selector */}
+                <div className="siem-control-pill">
+                  <label htmlFor="limit-select">Show:</label>
+                  <select
+                    id="limit-select"
+                    value={pagination.limit}
+                    onChange={(e) => setPagination(p => ({ ...p, limit: Number(e.target.value), page: 1 }))}
+                    className="siem-select-clean"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
               </div>
             </div>
+
+            {/* Scoped Call/Session Indicator */}
+            {filterCallId && (
+              <div className="siem-scope-banner">
+                <span className="siem-scope-label">Filtered by Session:</span>
+                <code className="siem-scope-code">{filterCallId}</code>
+                <button onClick={handleClearSessionFilter} className="siem-scope-clear" title="Clear session filter">
+                  ✕ Clear Scope
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Error Banner */}
@@ -763,7 +814,7 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
             <div className="siem-pagination-controls">
               <button
                 disabled={pagination.page <= 1 || isLoading}
-                onClick={() => fetchEvents(1)}
+                onClick={() => handlePageChange(1)}
                 className="siem-page-btn"
                 title="First Page"
               >
@@ -771,7 +822,7 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
               </button>
               <button
                 disabled={pagination.page <= 1 || isLoading}
-                onClick={() => fetchEvents(pagination.page - 1)}
+                onClick={() => handlePageChange(pagination.page - 1)}
                 className="siem-page-btn"
                 title="Previous Page"
               >
@@ -782,7 +833,7 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
 
               <button
                 disabled={pagination.page >= pagination.totalPages || isLoading}
-                onClick={() => fetchEvents(pagination.page + 1)}
+                onClick={() => handlePageChange(pagination.page + 1)}
                 className="siem-page-btn"
                 title="Next Page"
               >
@@ -790,7 +841,7 @@ export default function EnterpriseAuditConsole({ onExportReport }) {
               </button>
               <button
                 disabled={pagination.page >= pagination.totalPages || isLoading}
-                onClick={() => fetchEvents(pagination.totalPages)}
+                onClick={() => handlePageChange(pagination.totalPages)}
                 className="siem-page-btn"
                 title="Last Page"
               >

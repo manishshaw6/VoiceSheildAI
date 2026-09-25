@@ -41,6 +41,14 @@ export default function LiveStreamMonitor({
     updatedAt: null
   });
 
+  const [smoothSignals, setSmoothSignals] = useState({
+    'Synthetic voice': 0,
+    'Identity uncertainty': 0,
+    'Fraud context': 0,
+    'Sensitive action': 0,
+    'Behavioural coercion': 0
+  });
+
   const [recommendedAction, setRecommendedAction] = useState(
     'Monitoring audio stream in real-time...'
   );
@@ -71,28 +79,65 @@ export default function LiveStreamMonitor({
   }, [isStreaming, onStreamingChange]);
 
   // ═══════════════════════════════════════════════════════════════════════
-  // ANIMATION: Smooth EWMA lerp for score display (e.g. 45.34 / 100)
+  // ANIMATION: Smooth, rate-controlled cinematic score progression
   // ═══════════════════════════════════════════════════════════════════════
   useEffect(() => {
     let frameId;
     const animateScore = () => {
       setSmoothScore(prev => {
         const diff = targetScore - prev;
-        if (Math.abs(diff) < 0.01) return targetScore;
-        const step = diff > 0 ? (diff > 15 ? diff * 0.45 : diff * 0.25) : diff * 0.12;
-        const next = prev + step;
+        if (Math.abs(diff) < 0.02) return targetScore;
+
+        // Controlled, smooth, cinematic rate of progression:
+        // Climbs steadily at ~20-25 points per second (0.35 max per frame at 60fps)
+        // Decays slowly and conservatively (max 0.12 points per frame)
+        const maxStepUp = 0.35;
+        const maxStepDown = 0.12;
+
+        const step = diff > 0
+          ? Math.min(diff * 0.15 + 0.05, maxStepUp)
+          : Math.max(diff * 0.08 - 0.02, -maxStepDown);
+
+        const next = Math.max(0, Math.min(100, prev + step));
         const vel = Number((next - prev).toFixed(2));
         setRiskVelocity(vel);
-        if (vel > 0.1) setRiskTrend('RISING');
-        else if (vel < -0.1) setRiskTrend('FALLING');
+        if (vel > 0.05) setRiskTrend('RISING');
+        else if (vel < -0.05) setRiskTrend('FALLING');
         else setRiskTrend('STABLE');
         return Number(next.toFixed(2));
       });
+
+      // Simultaneously interpolate all telemetry signals (Synthetic voice, Fraud context, etc.)
+      setSmoothSignals(prev => {
+        const sub = riskTelemetry.subScores || {};
+        const targets = {
+          'Synthetic voice': Number(sub.authenticity_risk || 0),
+          'Identity uncertainty': Number(sub.identity_uncertainty || 0),
+          'Fraud context': Number(sub.context_fraud_risk || 0),
+          'Sensitive action': Number(sub.sensitive_action_risk || 0),
+          'Behavioural coercion': Number(sub.behavioral_coercion_risk || 0)
+        };
+        const next = { ...prev };
+        let hasChanges = false;
+        for (const key of Object.keys(targets)) {
+          const diff = targets[key] - (prev[key] || 0);
+          if (Math.abs(diff) > 0.05) {
+            const step = diff > 0 ? Math.min(diff * 0.15 + 0.05, 0.35) : Math.max(diff * 0.08 - 0.02, -0.12);
+            next[key] = Math.max(0, Math.min(100, Number(((prev[key] || 0) + step).toFixed(2))));
+            hasChanges = true;
+          } else if (prev[key] !== targets[key]) {
+            next[key] = targets[key];
+            hasChanges = true;
+          }
+        }
+        return hasChanges ? next : prev;
+      });
+
       frameId = requestAnimationFrame(animateScore);
     };
     frameId = requestAnimationFrame(animateScore);
     return () => cancelAnimationFrame(frameId);
-  }, [targetScore]);
+  }, [targetScore, riskTelemetry.subScores]);
 
   // ═══════════════════════════════════════════════════════════════════════
   // WEBAUDIO REAL-TIME TELEMETRY TRACKER (Pitch, RMS, VAD)
@@ -293,21 +338,21 @@ export default function LiveStreamMonitor({
             let currentSessionFinal = '';
 
             recognition.onresult = (event) => {
-              currentSessionFinal = '';
               let sessionInterim = '';
 
-              for (let i = 0; i < event.results.length; i++) {
+              for (let i = event.resultIndex; i < event.results.length; i++) {
                 const item = event.results[i];
                 if (item.isFinal) {
-                  currentSessionFinal += item[0].transcript + ' ';
+                  const finalPhrase = item[0].transcript.trim();
+                  if (finalPhrase && !accumulatedTranscriptRef.current.endsWith(finalPhrase)) {
+                    accumulatedTranscriptRef.current = `${accumulatedTranscriptRef.current} ${finalPhrase}`.trim();
+                  }
                 } else {
-                  sessionInterim += item[0].transcript;
+                  sessionInterim += item[0].transcript + ' ';
                 }
               }
 
-              const combined = (accumulatedTranscriptRef.current + ' ' + currentSessionFinal + ' ' + sessionInterim)
-                .replace(/\s+/g, ' ')
-                .trim();
+              const combined = `${accumulatedTranscriptRef.current} ${sessionInterim}`.replace(/\s+/g, ' ').trim();
 
               if (combined) {
                 setLiveTranscript(combined);
@@ -327,12 +372,6 @@ export default function LiveStreamMonitor({
             };
 
             recognition.onend = () => {
-              if (currentSessionFinal.trim()) {
-                accumulatedTranscriptRef.current = (accumulatedTranscriptRef.current + ' ' + currentSessionFinal)
-                  .replace(/\s+/g, ' ')
-                  .trim();
-                currentSessionFinal = '';
-              }
               if (recognitionRef.current && isStreamingRef.current) {
                 try {
                   recognition.start();
@@ -592,11 +631,11 @@ export default function LiveStreamMonitor({
   const smoothedChartPoints = toChartPoints('score');
   const rawChartPoints = toChartPoints('rawScore');
   const signalTelemetry = [
-    ['Synthetic voice', riskTelemetry.subScores.authenticity_risk],
-    ['Identity uncertainty', riskTelemetry.subScores.identity_uncertainty],
-    ['Fraud context', riskTelemetry.subScores.context_fraud_risk],
-    ['Sensitive action', riskTelemetry.subScores.sensitive_action_risk],
-    ['Behavioural coercion', riskTelemetry.subScores.behavioral_coercion_risk]
+    ['Synthetic voice', smoothSignals['Synthetic voice']],
+    ['Identity uncertainty', smoothSignals['Identity uncertainty']],
+    ['Fraud context', smoothSignals['Fraud context']],
+    ['Sensitive action', smoothSignals['Sensitive action']],
+    ['Behavioural coercion', smoothSignals['Behavioural coercion']]
   ].map(([label, value]) => [label, Math.max(0, Math.min(100, Number(value) || 0))]);
 
   const launchLiveWorkspace = () => {
@@ -607,6 +646,13 @@ export default function LiveStreamMonitor({
     setLiveScore(0);
     setTargetScore(0);
     setSmoothScore(0);
+    setSmoothSignals({
+      'Synthetic voice': 0,
+      'Identity uncertainty': 0,
+      'Fraud context': 0,
+      'Sensitive action': 0,
+      'Behavioural coercion': 0
+    });
     setLiveLevel('SAFE');
     setLiveTranscript('');
     setDetectedSignals([]);
@@ -1130,11 +1176,19 @@ export default function LiveStreamMonitor({
                     color: levelColor
                   }}
                 >
-
                   {liveLevel} RISK
-
                 </span>
 
+                {/* Social Engineering Telemetry in Modal */}
+                <div style={{ marginTop: '0.85rem', marginBottom: '0.85rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#88a395', marginBottom: '3px' }}>
+                    <span>Social Engineering Intent</span>
+                    <strong style={{ color: '#ff3b5c' }}>{smoothSignals['Fraud context'].toFixed(1)}%</strong>
+                  </div>
+                  <div style={{ width: '100%', height: '5px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ width: `${smoothSignals['Fraud context']}%`, height: '100%', background: '#ff3b5c', borderRadius: '3px' }} />
+                  </div>
+                </div>
 
                 <p>
                   {recommendedAction}

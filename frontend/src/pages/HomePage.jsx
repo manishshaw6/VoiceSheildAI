@@ -176,7 +176,7 @@ export default function HomePage() {
             <div className="scenario-pill-card critical-glow">
               <div className="scenario-badge critical">SCENARIO D</div>
               <h4>AI-Cloned Voice Banking Fraud</h4>
-              <p>High Speaker Similarity (&gt;70%) + High Deepfake (&gt;65%) + OTP Theft → <strong>CRITICAL RISK (85–100%)</strong></p>
+              <p>High Speaker Similarity (&gt;89%) + High Deepfake (&gt;65%) + OTP Theft → <strong>CRITICAL RISK (85–100%)</strong></p>
             </div>
 
             <div className="scenario-pill-card">

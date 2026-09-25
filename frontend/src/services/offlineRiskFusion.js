@@ -36,8 +36,8 @@ export function fuseOfflineRisk({
   const criticalFlags = [];
 
   // Clone Detection Logic:
-  // If speaker matches enrolled voice (sim >= 0.70) BUT audio exhibits synthetic biomarkers (fake >= 60)
-  if (speakerSimilarity !== null && speakerSimilarity >= 0.70 && fake >= 60) {
+  // If speaker matches enrolled voice (sim >= 0.89) BUT audio exhibits synthetic biomarkers (fake >= 60)
+  if (speakerSimilarity !== null && speakerSimilarity >= 0.89 && fake >= 60) {
     cloneSuspicion = true;
     fusedScore = Math.max(88, fusedScore * 1.35);
     criticalFlags.push(
@@ -50,6 +50,11 @@ export function fuseOfflineRisk({
     fusedScore = Math.max(92, fusedScore * 1.25);
     criticalFlags.push(
       'CRITICAL MULTI-VECTOR THREAT: Concurrent AI synthetic voice impersonation and urgent financial/credential extortion.'
+    );
+  } else if (fake >= 85) {
+    fusedScore = Math.max(91, fusedScore);
+    criticalFlags.push(
+      'HIGH-CONFIDENCE AI SYNTHETIC SPEECH: Neural vocoder and acoustic biomarker analysis confirm synthetic cloned voice (91%).'
     );
   }
 

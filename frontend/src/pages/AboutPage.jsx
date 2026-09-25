@@ -34,7 +34,7 @@ export default function AboutPage() {
             A critical innovation of VoiceShieldAI is distinguishing between <strong>authenticity</strong> and <strong>identity</strong>:
           </p>
           <div className="clone-formula-box">
-            <code>High Speaker Similarity (&gt;70%) + High Synthetic Score (&gt;65%) = POSSIBLE CLONED VOICE ATTACK</code>
+            <code>High Speaker Similarity (&gt;89%) + High Synthetic Score (&gt;65%) = POSSIBLE CLONED VOICE ATTACK</code>
           </div>
           <p>
             An attacker impersonating an authorized executive with a synthetic clone will trigger an immediate emergency alert, even if the voice resembles the known speaker.
